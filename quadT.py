@@ -276,9 +276,10 @@ class QuadTree():
             for child in self.children:
                 all_points.extend(child.all_points())
         return all_points
-    
+
     def copy(self):
-        qt = QuadTree(self.boundary.center, self.boundary.half_width, self.boundary.half_height, self.capacity)
+        qt = QuadTree(self.boundary.center, self.boundary.half_width,
+                      self.boundary.half_height, self.capacity)
         qt.points = self.points.copy()
         qt.divided = self.divided
         if self.divided:

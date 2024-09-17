@@ -21,6 +21,9 @@ def setup():
     boundary_scale = 0.8
     frame = 0
 
+    pygame.init()
+    pygame.font.init()
+
     screen = pygame.display.set_mode(
         (screen_width, screen_height))
     fps = 60

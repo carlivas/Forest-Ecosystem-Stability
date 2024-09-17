@@ -11,13 +11,15 @@ class Plant:
         self.r_start = kwargs.get('r_start', 0)
         self.r_max = kwargs.get('r_max', 0.05)
         self.r = kwargs.get('r', self.r_start)
+        self.d = 2*self.r
+        self.A = np.pi*self.r**2
 
         self.growth_rate = kwargs.get('growth_rate', 0.0001)
         self.age_max = (self.r_max - self.r_start)/self.growth_rate
 
         self.reproduction_chance = kwargs.get('reproduction_chance', 0.001)
         self.reproduction_range = kwargs.get(
-            'reproduction_range', 10*self.r_max)
+            'reproduction_range', self.r)
 
         self.young_color = (69, 194, 51)
         self.old_color = (163, 194, 122)
@@ -50,11 +52,8 @@ class Plant:
         self.is_dead = True
 
     def reproduce(self, simulation):
-        # Generate a random angle and distance for the new plant's position
-        angle = np.random.uniform(0, 2 * np.pi)
-        distance = np.random.uniform(self.r, self.reproduction_range)
-        new_pos = self.pos + \
-            np.array([np.cos(angle), np.sin(angle)]) * distance
+        new_pos = self.pos + np.random.uniform(-self.reproduction_range,
+                                               self.reproduction_range, 2)
 
         # Determine if reproduction is successful based on chance and site quality
         p = self.reproduction_chance * simulation.site_quality(new_pos)

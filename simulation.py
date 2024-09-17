@@ -22,19 +22,22 @@ class Simulation:
         self.qt_new.insert(quadT.Point(plant.pos, data=plant))
 
     def site_quality(self, pos):
+        land_quality = 0.1
         bb_half_width = self.r_max_global
         max_plant_area = np.pi*self.r_max_global**2
-        bb = quadT.BoundingBox(pos, bb_half_width)
+        bb = quadT.BoundingCircle(pos, bb_half_width)
         plants_nearby = [point.data for point in self.qt.query(bb)]
         if len(plants_nearby) == 0:
             return 0
         density_nearby = sum(
-            plant.r**2*np.pi for plant in plants_nearby)/(len(plants_nearby)*max_plant_area)
-        return density_nearby
+            plant.A for plant in plants_nearby)/(len(plants_nearby)*max_plant_area)
+        return density_nearby + land_quality
 
     def get_collisions(self, plant, r_max_global):
         collisions = []
-        bb = quadT.BoundingCircle(plant.pos, 2*(plant.r + r_max_global))
+        if plant.is_dead:
+            return collisions
+        bb = quadT.BoundingCircle(plant.pos, plant.d)
         for point in self.qt.query(bb):
             other_plant = point.data
             if other_plant != plant:
