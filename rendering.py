@@ -33,8 +33,8 @@ def screen_to_pos(screen: pygame.Surface, screen_pos: np.ndarray, boundary_scale
     return screen_to_pos_jit(screen_width, screen_height, screen_pos, boundary_scale)
 
 
-def r_to_screen(r, boundary_scale):
-    return int(r * boundary_scale)
+def r_to_screen(screen: pygame.Surface, r: float, boundary_scale: float):
+    return int(r * screen.get_width() * boundary_scale)
 
 
 def color_to_rgb(color):

@@ -44,7 +44,7 @@ class Container(quadT.QuadTree):
         bb = quadT.BoundingBox(plant.pos, 2*(plant.r + r_max_global))
         for point in self.query(bb):
             other_plant = point.data
-            if other_plant is not plant:
+            if other_plant != plant:
                 if check_collision(plant, other_plant):
                     collisions.append(other_plant)
         return collisions

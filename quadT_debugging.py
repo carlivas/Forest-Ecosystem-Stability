@@ -5,15 +5,15 @@ import pygame
 from pygame import gfxdraw
 import pickle
 
-from quadT import Point, BoundingBox, QuadTree
+import quadT
 from rendering import pos_to_screen, screen_to_pos, color_to_rgb
 
 
-qt = QuadTree(np.array([0, 0]), 0.5, 0.5, 4)
+qt = quadT.QuadTree(np.array([0, 0]), 0.5, 0.5, 4)
 
-for i in range(200):
+for i in range(1000):
     pos = np.random.rand(2) - 0.5
-    qt.insert(Point(pos))
+    qt.insert(quadT.Point(pos))
 
 
 def setup():
@@ -32,24 +32,42 @@ def setup():
 
 
 def draw():
+    global qt
     # Draw the background as a light grey with a yelowish tint
     background = (255, 255, 255)
     screen.fill(background)
 
     # Draw the quad tree
-    show_kwargs = {
-        'color': (255, 0, 0),
+    qt_show_kwargs = {
+        'color': (0, 0, 0),
+        'color_point': (255, 0, 0),
         'boundary_scale': boundary_scale,
         'line_width': 1,
-        'show_center': False
+        'point_size': 2,
+        'center_size': 2,
+        'show_center': True
     }
-    qt.show(screen, **show_kwargs)
 
+    qt_new = quadT.QuadTree(np.array([0, 0]), 0.5, 0.5, 4)
+    for point in qt.all_points():
+        point.x += np.random.uniform(-1, 1)*0.002
+        point.y += np.random.uniform(-1, 1)*0.002
+        qt_new.insert(point)
+    qt = qt_new
+    qt.show(screen, **qt_show_kwargs)
+
+    bb_show_kwargs = {
+        'color': (0, 255, 0),
+        'show_center': True,
+        'boundary_scale': boundary_scale,
+        'line_width': 1
+    }
     if pygame.mouse.get_pos() is not None:
         # Draw a boundary box around the mouse cursor
         mouse_pos_screen = np.array(pygame.mouse.get_pos())
         mouse_pos = screen_to_pos(screen, mouse_pos_screen, boundary_scale)
-        mouse_bb = BoundingBox(mouse_pos, 0.1, 0.1)
+        # mouse_bb = quadT.BoundingBox(mouse_pos, 0.1, 0.1)
+        mouse_bb = quadT.BoundingCircle(mouse_pos, 0.1)
         points_in_mouse_bb = qt.query(mouse_bb, [])
         for point in points_in_mouse_bb:
             point_screen = pos_to_screen(
@@ -58,8 +76,7 @@ def draw():
                 screen, point_screen[0], point_screen[1], 5, (0, 255, 0))
             gfxdraw.filled_circle(
                 screen, point_screen[0], point_screen[1], 5, (0, 255, 0))
-        mouse_bb.show(screen, color=(0, 255, 0),
-                      boundary_scale=boundary_scale, line_width=1)
+        mouse_bb.show(screen, **bb_show_kwargs)
 
 
 # Main loop
