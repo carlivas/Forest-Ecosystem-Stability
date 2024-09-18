@@ -16,32 +16,34 @@ class Simulation:
         self.qt_new = qt
         self.states = []
 
+        self.land_quality = kwargs.get('land_quality', 0.1)
+
         self.r_max_global = kwargs.get('r_max_global', None)
+        self.max_plant_area = np.pi*self.r_max_global**2
 
     def add_plant(self, plant):
         self.qt_new.insert(quadT.Point(plant.pos, data=plant))
 
     def site_quality(self, pos):
-        land_quality = 0.1
         bb_half_width = self.r_max_global
-        max_plant_area = np.pi*self.r_max_global**2
+
         bb = quadT.BoundingCircle(pos, bb_half_width)
         plants_nearby = [point.data for point in self.qt.query(bb)]
         if len(plants_nearby) == 0:
             return 0
         density_nearby = sum(
-            plant.A for plant in plants_nearby)/(len(plants_nearby)*max_plant_area)
-        return density_nearby + land_quality
+            plant.A for plant in plants_nearby)/(len(plants_nearby)*self.max_plant_area)
+        return density_nearby
 
-    def get_collisions(self, plant, r_max_global):
+    def get_collisions(self, plant):
         collisions = []
-        if plant.is_dead:
-            return collisions
         bb = quadT.BoundingCircle(plant.pos, plant.d)
         for point in self.qt.query(bb):
             other_plant = point.data
             if other_plant != plant:
                 if check_collision(plant, other_plant):
+                    plant.is_colliding = True
+                    other_plant.is_colliding = True
                     collisions.append(other_plant)
         return collisions
 
@@ -50,12 +52,12 @@ class Simulation:
                                      half_height=self.qt.boundary.half_height, capacity=self.qt.capacity)
 
         for point in self.qt.all_points():
-            plant = point.data.copy()
-            collisions = self.get_collisions(plant, self.r_max_global)
+            plant = point.data
+            collisions = self.get_collisions(plant)
             plant.update(self, collisions)
 
-            if not plant.is_dead:
-                self.add_plant(plant)
+            if plant.is_dead == False:
+                self.add_plant(plant.copy())
 
         self.qt = self.qt_new
         self.states.append(self.qt)

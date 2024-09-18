@@ -81,6 +81,8 @@ class BoundingBox:
 
     def show(self, screen: pygame.Surface, **kwargs):
         boundary_scale = kwargs.get('boundary_scale', 1.0)
+        x_offset = kwargs.get('x_offset', 0)
+        y_offset = kwargs.get('y_offset', 0)
         line_width = kwargs.get('line_width', 1)
         point_size = kwargs.get('point_size', 1)
         center_size = kwargs.get('center_size', 1)
@@ -92,12 +94,12 @@ class BoundingBox:
 
         # Get the screen coordinates of the center
         screen_center = rendering.pos_to_screen(
-            screen, self.center, boundary_scale)
+            screen, self.center, boundary_scale, x_offset, y_offset)
 
         bb_top_left = np.array([self.center[0] - self.half_width,
                                 self.center[1] + self.half_height])
         screen_top_left = rendering.pos_to_screen(
-            screen, bb_top_left, boundary_scale)
+            screen, bb_top_left, boundary_scale, x_offset, y_offset)
 
         # Get the screen dimensions of the bounding box
         width = 2 * self.half_width * screen.get_width() * boundary_scale

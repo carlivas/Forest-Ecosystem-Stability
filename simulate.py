@@ -43,26 +43,29 @@ render = True
 seed = 0
 np.random.seed(seed)
 
-num_plants = 10000
-n_iter = 100000
+num_plants = 200
+n_iter = 1000
 
 half_width = half_height = 0.5
-A_bound = 2 * half_width * 2 * half_height  # ms2
+A_bound = 2 * half_width * 2 * half_height
 
 m2pp = m2_per_plant = 1000  # m2/plant
-_m = meter_to_dimless = np.sqrt(A_bound/(m2pp*num_plants))  # ms/m
+_m = np.sqrt(A_bound/(m2pp*num_plants))
 print(f'1 m = {_m} units')
 r_start = 0.01 * _m  # m
 r_max = 30 * _m  # m
 growth_rate = 0.1 * _m  # m horizontal growth per year
-r_chance = 1  # probability of reproduction (besides site quality)
+# probability of reproduction (will be multiplied by site quality)
+r_chance = 0.1
+land_quality = 0.0
 # Initialize simulation
 
 plant_kwargs = {'r_start': r_start,
                 'r_max': r_max,
                 'growth_rate': growth_rate,
                 'reproduction_chance': r_chance}
-simulation_kwargs = {'r_max_global': plant_kwargs['r_max']}
+simulation_kwargs = {'r_max_global': plant_kwargs['r_max'],
+                     'land_quality': land_quality}
 
 metadata = {
     'num_plants': num_plants,
@@ -119,6 +122,6 @@ if save_file:
 if render:
     print('Rendering results...')
     # Run the rendering.py file
-    subprocess.run(['python', 'render_chunks.py'])
+    subprocess.run(['python', 'render.py'])
 
 print('\nDone!')
