@@ -2,6 +2,10 @@ import numpy as np
 import quadT
 
 
+def check_collision(p1, p2):
+    return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
+
+
 class Plant:
     def __init__(self, pos: np.ndarray, **kwargs):
         self.pos = pos
@@ -28,8 +32,13 @@ class Plant:
         self.is_colliding = kwargs.get('is_colliding', False)
         self.generation = kwargs.get('generation', 0)
 
-    def __eq__(self, other):
-        return np.all(self.pos == other.pos) and self.r == other.r
+        self.id = kwargs.get('id', None)
+
+    def __str__(self):
+        if self.id is not None:
+            return f"Plant {self.id}"
+        else:
+            return f"Plant at {self.pos:.5f}"
 
     def set_color(self, color):
         self.color = color
@@ -47,6 +56,12 @@ class Plant:
         if self.r > self.r_max:
             self.die()
 
+    # def mortality(self):
+    #     p = np.exp((self.r/self.r_max)**2) - 1
+    #     p /= np.exp(1) - 1
+    #     if np.random.rand() < p:
+    #         self.die()
+
     def copy(self):
         return Plant(**self.__dict__)
 
@@ -61,7 +76,7 @@ class Plant:
 
         # Determine if reproduction is successful based on chance and site quality
         p = self.reproduction_chance * \
-            simulation.site_quality(new_pos) + simulation.land_quality
+            simulation.site_quality(new_pos)
         if np.random.rand() < p:
 
             new_plant_kwargs = self.kwargs.copy()
@@ -74,36 +89,40 @@ class Plant:
             simulation.add_plant(Plant(new_pos, **new_plant_kwargs))
 
     def compete(self, other):
-        if self.r < other.r:
+        # p = 0.5
+        p = np.random.rand()
+        if p > self.r / (self.r + other.r):
             self.die()
         else:
             other.die()
 
-    # def compete(self, other):
-    #     if self.r != other.r:
-    #         if self.r < other.r:
-    #             self.die()
-    #         else:
-    #             other.die()
-    #     else:
-    #         if np.random.rand() > 0.5:
-    #             self.die()
-    #         else:
-    #             other.die()
+    def get_collisions(self, simulation):
+        self.is_colliding = False
+        collisions = []
+        bb = quadT.BoundingCircle(self.pos, self.d)
+        for point in simulation.qt.query(bb):
+            other_plant = point.data
+            if other_plant != self:
+                if check_collision(self, other_plant):
+                    self.is_colliding = True
+                    other_plant.is_colliding = True
+                    collisions.append(other_plant)
+        return collisions
 
-    # def compete(self, other):
-    #     if np.random.rand() > self.r / (self.r + other.r):
-    #         self.die()
-    #     else:
-    #         other.die()
+    # def resolve_collisions(self, collisions):
+    #     for other in collisions:
+    #         self.compete(other)
+    #     self.is_colliding = False
 
-    def resolve_collisions(self, collisions):
+    def resolve_collisions(self, simulation):
+        collisions = self.get_collisions(simulation)
         for other in collisions:
             self.compete(other)
-        self.is_colliding = False
 
-    def update(self, simulation, collisions):
-        self.resolve_collisions(collisions)
+    # def update(self, simulation, collisions):
+    def update(self, simulation):
+        # self.resolve_collisions(collisions)
+        self.resolve_collisions(simulation)
         self.mortality()
         self.grow()
         self.reproduce(simulation)

@@ -12,7 +12,7 @@ from rendering import pos_to_screen, screen_to_pos, color_to_rgb
 qt = quadT.QuadTree(np.array([0, 0]), 0.5, 0.5, 4)
 
 for i in range(1000):
-    pos = np.random.rand(2) - 0.5
+    pos = np.random.uniform(-0.5, 0.5, 2)
     qt.insert(quadT.Point(pos))
 
 

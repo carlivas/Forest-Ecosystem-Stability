@@ -1,13 +1,12 @@
 import numpy as np
 import quadT
 
+# def dist_sq(p1, p2):
+#     return np.sum((p1.pos - p2.pos) ** 2)
 
-def dist_sq(p1, p2):
-    return np.sum((p1.pos - p2.pos) ** 2)
 
-
-def check_collision(p1, p2):
-    return dist_sq(p1, p2) < (p1.r + p2.r) ** 2
+# def check_collision(p1, p2):
+#     return dist_sq(p1, p2) < (p1.r + p2.r) ** 2
 
 
 class Simulation:
@@ -33,31 +32,23 @@ class Simulation:
             return 0
         density_nearby = sum(
             plant.A for plant in plants_nearby)/(len(plants_nearby)*self.max_plant_area)
-        return density_nearby
-
-    def get_collisions(self, plant):
-        collisions = []
-        bb = quadT.BoundingCircle(plant.pos, plant.d)
-        for point in self.qt.query(bb):
-            other_plant = point.data
-            if other_plant != plant:
-                if check_collision(plant, other_plant):
-                    plant.is_colliding = True
-                    other_plant.is_colliding = True
-                    collisions.append(other_plant)
-        return collisions
+        return density_nearby + self.land_quality
 
     def step(self):
         self.qt_new = quadT.QuadTree(center=self.qt.boundary.center, half_width=self.qt.boundary.half_width,
                                      half_height=self.qt.boundary.half_height, capacity=self.qt.capacity)
 
-        for point in self.qt.all_points():
-            plant = point.data
-            collisions = self.get_collisions(plant)
-            plant.update(self, collisions)
+        plants = [point.data for point in self.qt.all_points()]
 
-            if plant.is_dead == False:
+        # First Phase: Update all plants
+        for plant in plants:
+            plant.update(self)
+
+        # Second Phase: Collect non-dead plants and add them to the new state
+        for plant in plants:
+            if not plant.is_dead:
                 self.add_plant(plant.copy())
+                del plant
 
         self.qt = self.qt_new
         self.states.append(self.qt)

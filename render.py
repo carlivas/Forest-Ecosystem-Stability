@@ -39,8 +39,8 @@ def setup():
     fps_max = 240
     fps_divisor = 6
 
-    show_collisions = True
-    show_generation = True
+    show_collisions = False
+    show_generation = False
 
     pygame.init()
     pygame.font.init()
@@ -97,16 +97,28 @@ def draw_buttons():
     stop_text = font.render('||', True, (0, 0, 0))
     speed_up_text = font.render('+', True, (0, 0, 0))
     slow_down_text = font.render('-', True, (0, 0, 0))
+    forward_text = font.render('>>', True, (0, 0, 0))
+    backward_text = font.render('<<', True, (0, 0, 0))
+    reset_text = font.render('0 <-', True, (0, 0, 0))
 
     width_screen, height_screen = screen.get_width(), screen.get_height()
     width_button, height_button = 50, 25
+    margin = 10
 
+    h = height_screen - height_button - margin
     start_stop_button = pygame.Rect(
-        width_screen/2 - width_button/2, height_screen - 1.5*height_button, width_button, height_button)
+        width_screen/2 - 0.5*width_button, h, width_button, height_button)
     slow_down_button = pygame.Rect(
-        width_screen/2 - 1.5*width_button, height_screen - 1.5*height_button, width_button, height_button)
+        width_screen/2 - 1.5*width_button, h, width_button, height_button)
     speed_up_button = pygame.Rect(
-        width_screen/2 + 0.5*width_button, height_screen - 1.5*height_button, width_button, height_button)
+        width_screen/2 + 0.5*width_button, h, width_button, height_button)
+    forward_button = pygame.Rect(
+        width_screen/2 + 1.5*width_button, h, width_button, height_button)
+    backward_button = pygame.Rect(
+        width_screen/2 - 2.5*width_button, h, width_button, height_button)
+    reset_button = pygame.Rect(
+        width_screen - width_button - margin, margin, width_button, height_button)
+
     if animating == False:
         pygame.draw.rect(screen, (220, 255, 220), start_stop_button)
         start_text_rect = start_text.get_rect(center=start_stop_button.center)
@@ -125,7 +137,19 @@ def draw_buttons():
         center=slow_down_button.center)
     screen.blit(slow_down_text, slow_down_text_rect)
 
-    return start_stop_button, speed_up_button, slow_down_button
+    pygame.draw.rect(screen, (255, 255, 255), forward_button)
+    forward_text_rect = forward_text.get_rect(center=forward_button.center)
+    screen.blit(forward_text, forward_text_rect)
+
+    pygame.draw.rect(screen, (255, 255, 255), backward_button)
+    backward_text_rect = backward_text.get_rect(center=backward_button.center)
+    screen.blit(backward_text, backward_text_rect)
+
+    pygame.draw.rect(screen, (255, 255, 255), reset_button)
+    reset_text_rect = reset_text.get_rect(center=reset_button.center)
+    screen.blit(reset_text, reset_text_rect)
+
+    return start_stop_button, speed_up_button, slow_down_button, forward_button, backward_button, reset_button
 
 
 def draw_simulation():
@@ -157,6 +181,9 @@ def draw_simulation():
                     str(plant.generation), True, (0, 0, 0))
                 text_rect = text.get_rect(center=p_screen)
                 screen.blit(text, text_rect)
+    font = pygame.font.Font(None, 24)
+    text = font.render(f't = {frame_dummy}', True, (0, 0, 0))
+    screen.blit(text, (10, 10))
 
 
 surfix = 'temp'
@@ -220,8 +247,10 @@ try:
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = event.pos
+
                 if start_stop_button.collidepoint(mouse_pos):
                     animating = not animating
+
                 elif speed_up_button.collidepoint(mouse_pos):
                     fps_divisor /= 2
                     fps_divisor = max(1, fps_divisor)
@@ -230,8 +259,17 @@ try:
                     fps_divisor *= 2
                     fps_divisor = min(fps_max, fps_divisor)
 
+                elif forward_button.collidepoint(mouse_pos):
+                    frame_dummy = (frame_dummy + 1) % len(states)
+
+                elif backward_button.collidepoint(mouse_pos):
+                    frame_dummy = (frame_dummy - 1) % len(states)
+
+                elif reset_button.collidepoint(mouse_pos):
+                    frame_dummy = 0
+
         draw_simulation()
-        start_stop_button, speed_up_button, slow_down_button = draw_buttons()
+        start_stop_button, speed_up_button, slow_down_button, forward_button, backward_button, reset_button = draw_buttons()
 
         if animating and frame % fps_divisor == 0:
             frame_dummy += 1  # Update frame
