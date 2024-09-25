@@ -186,9 +186,9 @@ def draw_simulation():
     screen.blit(text, (10, 10))
 
 
-surfix = 'temp'
-file_path_metadata = f'Data\metadata_{surfix}.pkl'
-file_path_states = f'Data\states_{surfix}.pkl'
+prefix = 'sim6'
+file_path_metadata = f'Data\{prefix}_metadata.pkl'
+file_path_states = f'Data\{prefix}_states.pkl'
 
 metadata = load_metadata(file_path_metadata)
 

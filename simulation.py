@@ -1,37 +1,34 @@
 import numpy as np
 import quadT
 
-# def dist_sq(p1, p2):
-#     return np.sum((p1.pos - p2.pos) ** 2)
-
-
-# def check_collision(p1, p2):
-#     return dist_sq(p1, p2) < (p1.r + p2.r) ** 2
+from plant import Plant
 
 
 class Simulation:
-    def __init__(self, qt: quadT.QuadTree, **kwargs):
-        self.qt = qt
-        self.qt_new = qt
-        self.states = []
+    def __init__(self, **kwargs):
+        half_width = kwargs.get('half_width', 0.5)
+        half_height = kwargs.get('half_height', half_width)
+        qt_capacity = kwargs.get('qt_capacity', 4)
 
-        self.land_quality = kwargs.get('land_quality', 0.1)
+        self.land_quality = kwargs.get('land_quality', None)
+        self.density_check_range = kwargs.get('density_check_range', None)
 
-        self.r_max_global = kwargs.get('r_max_global', None)
-        self.max_plant_area = np.pi*self.r_max_global**2
+        self.qt = quadT.QuadTree(
+            (0, 0), half_width, half_height, capacity=qt_capacity)
+        self.qt_new = self.qt
 
     def add_plant(self, plant):
         self.qt_new.insert(quadT.Point(plant.pos, data=plant))
 
     def site_quality(self, pos):
-        bb_half_width = self.r_max_global
+        bb_half_width = self.density_check_range
 
         bb = quadT.BoundingCircle(pos, bb_half_width)
         plants_nearby = [point.data for point in self.qt.query(bb)]
         if len(plants_nearby) == 0:
             return 0
         density_nearby = sum(
-            plant.A for plant in plants_nearby)/(len(plants_nearby)*self.max_plant_area)
+            plant.A for plant in plants_nearby)/bb.area
         return density_nearby + self.land_quality
 
     def step(self):
@@ -51,4 +48,27 @@ class Simulation:
                 del plant
 
         self.qt = self.qt_new
-        self.states.append(self.qt)
+
+    def get_state(self):
+        return self.qt
+
+
+def initialize_random(**kwargs):
+    simulation = Simulation(**kwargs)
+    half_width = kwargs.get('half_width', 0.5)
+    half_height = kwargs.get('half_height', half_width)
+    num_plants = kwargs.get('num_plants', None)
+    i = 0
+    while i < num_plants:
+        rand_pos = np.random.uniform(-half_width,
+                                     half_width, 2)
+        this_plant_kwargs = kwargs.copy()
+        this_plant_kwargs['id'] = i
+        this_plant_kwargs['r'] = np.random.uniform(
+            kwargs.get('r_min'), kwargs.get('r_max'))
+        plant = Plant(rand_pos, **this_plant_kwargs)
+        simulation.add_plant(plant)
+        print(f'Planted {i+1}/{num_plants} plants', end='\r')
+        i += 1
+
+    return simulation

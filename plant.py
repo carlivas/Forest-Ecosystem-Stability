@@ -12,14 +12,14 @@ class Plant:
 
         self.kwargs = kwargs
 
-        self.r_start = kwargs.get('r_start', 0)
+        self.r_min = kwargs.get('r_min', 0)
         self.r_max = kwargs.get('r_max', 0.05)
-        self.r = kwargs.get('r', self.r_start)
+        self.r = kwargs.get('r', self.r_min)
         self.d = 2*self.r
         self.A = np.pi*self.r**2
 
         self.growth_rate = kwargs.get('growth_rate', 0.0001)
-        self.age_max = (self.r_max - self.r_start)/self.growth_rate
+        self.age_max = (self.r_max - self.r_min)/self.growth_rate
 
         self.reproduction_chance = kwargs.get('reproduction_chance', 0.001)
         self.reproduction_range = kwargs.get(
@@ -56,12 +56,6 @@ class Plant:
         if self.r > self.r_max:
             self.die()
 
-    # def mortality(self):
-    #     p = np.exp((self.r/self.r_max)**2) - 1
-    #     p /= np.exp(1) - 1
-    #     if np.random.rand() < p:
-    #         self.die()
-
     def copy(self):
         return Plant(**self.__dict__)
 
@@ -75,13 +69,14 @@ class Plant:
         new_pos = self.pos + new_dir * d
 
         # Determine if reproduction is successful based on chance and site quality
-        p = self.reproduction_chance * \
+        q = self.reproduction_chance * \
             simulation.site_quality(new_pos)
-        if np.random.rand() < p:
+
+        if np.random.rand() < q:
 
             new_plant_kwargs = self.kwargs.copy()
-            new_plant_kwargs['r_start'] = self.r_start
-            new_plant_kwargs['r'] = self.r_start
+            new_plant_kwargs['r_min'] = self.r_min
+            new_plant_kwargs['r'] = self.r_min
             new_plant_kwargs['is_colliding'] = False
             new_plant_kwargs['is_dead'] = False
             new_plant_kwargs['generation'] = self.generation + 1
@@ -89,8 +84,8 @@ class Plant:
             simulation.add_plant(Plant(new_pos, **new_plant_kwargs))
 
     def compete(self, other):
-        # p = 0.5
-        p = np.random.rand()
+        p = 0.5
+        # p = np.random.rand()
         if p > self.r / (self.r + other.r):
             self.die()
         else:
