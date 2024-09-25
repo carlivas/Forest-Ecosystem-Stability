@@ -9,11 +9,12 @@ import quadT
 from rendering import pos_to_screen, screen_to_pos, color_to_rgb
 
 
-qt = quadT.QuadTree(np.array([0, 0]), 0.5, 0.5, 4)
+qt = quadT.QuadTree(np.array([0, 0]), 0.5, 0.5, 1)
 
-for i in range(1000):
+for i in range(62500):
     pos = np.random.uniform(-0.5, 0.5, 2)
-    qt.insert(quadT.Point(pos))
+    data = i
+    qt.insert(quadT.Point(pos, data))
 
 
 def setup():
@@ -73,9 +74,9 @@ def draw():
             point_screen = pos_to_screen(
                 screen, point.to_array(), boundary_scale)
             gfxdraw.aacircle(
-                screen, point_screen[0], point_screen[1], 5, (0, 255, 0))
+                screen, point_screen[0], point_screen[1], 5, bb_show_kwargs['color'])
             gfxdraw.filled_circle(
-                screen, point_screen[0], point_screen[1], 5, (0, 255, 0))
+                screen, point_screen[0], point_screen[1], 5, bb_show_kwargs['color'])
         mouse_bb.show(screen, **bb_show_kwargs)
 
 

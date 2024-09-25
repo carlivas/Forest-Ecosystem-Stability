@@ -12,13 +12,13 @@ class Point:
         self.y = pos[1]
         self.data = data
 
-    def __eq__(self, other):
-        if isinstance(other, Point):
-            return self.x == other.x and self.y == other.y and self.data == other.data
-        return False
+    # def __eq__(self, other):
+    #     if isinstance(other, Point):
+    #         return self.x == other.x and self.y == other.y and self.data == other.data
+    #     return False
 
-    def __hash__(self):
-        return hash((self.x, self.y))
+    # def __hash__(self):
+    #     return hash((self.x, self.y))
 
     def to_array(self):
         return np.array([self.x, self.y])
