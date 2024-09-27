@@ -1,74 +1,63 @@
 import numpy as np
-import quadT
+from scipy.spatial import KDTree
 
-from plant import Plant
+from KDTree_plant import Plant
 
 
 class Simulation:
     def __init__(self, **kwargs):
-        half_width = kwargs.get('half_width', 0.5)
-        half_height = kwargs.get('half_height', half_width)
-        qt_capacity = kwargs.get('qt_capacity', 4)
+        self.plants = []
 
-        self.land_quality = kwargs.get('land_quality', None)
-        self.density_check_range = kwargs.get('density_check_range', None)
+        self.land_quality = kwargs.get('land_quality')
+        self.density_check_radius = kwargs.get('density_check_radius')
+        self.density_check_area = np.pi * self.density_check_radius**2
 
-        self.qt = quadT.QuadTree(
-            (0, 0), half_width, half_height, capacity=qt_capacity)
-        self.qt_new = self.qt
+        self.kt_leafsize = kwargs.get('kt_leafsize')
+        self.kt = None
 
-    def add_plant(self, plant):
-        self.qt_new.insert(quadT.Point(plant.pos, data=plant))
+    def add(self, plant):
+        if isinstance(plant, Plant):
+            self.plants.append(plant)
+        elif isinstance(plant, (list, np.ndarray)):
+            for p in plant:
+                if isinstance(p, Plant):
+                    self.plants.append(p)
+                else:
+                    raise ValueError(
+                        "All elements in the array must be Plant objects")
+        else:
+            raise ValueError(
+                "Input must be a Plant object or an array_like of Plant objects")
 
-    def site_quality(self, pos):
-        bb_half_width = self.density_check_range
-
-        bb = quadT.BoundingCircle(pos, bb_half_width)
-        plants_nearby = [point.data for point in self.qt.query(bb)]
-        if len(plants_nearby) == 0:
-            return 0
-        density_nearby = sum(
-            plant.A for plant in plants_nearby)/bb.area
-        return density_nearby + self.land_quality
+    def update_kdtree(self):
+        if len(self.plants) == 0:
+            self.kt = None
+        else:
+            self.kt = KDTree(
+                [plant.pos for plant in self.plants], leafsize=self.kt_leafsize)
 
     def step(self):
-        self.qt_new = quadT.QuadTree(center=self.qt.boundary.center, half_width=self.qt.boundary.half_width,
-                                     half_height=self.qt.boundary.half_height, capacity=self.qt.capacity)
-
-        plants = [point.data for point in self.qt.all_points()]
-
         # First Phase: Update all plants
-        for plant in plants:
+        for plant in self.plants:
             plant.update(self)
 
         # Second Phase: Collect non-dead plants and add them to the new state
-        for plant in plants:
+        new_plants = []
+        for plant in self.plants:
             if not plant.is_dead:
-                self.add_plant(plant.copy())
-                del plant
+                new_plants.append(plant)
+        self.plants = new_plants
 
-        self.qt = self.qt_new
+        # Update KDTree
+        self.update_kdtree()
 
-    def get_state(self):
-        return self.qt
-
-
-def initialize_random(**kwargs):
-    simulation = Simulation(**kwargs)
-    half_width = kwargs.get('half_width', 0.5)
-    half_height = kwargs.get('half_height', half_width)
-    num_plants = kwargs.get('num_plants', None)
-    i = 0
-    while i < num_plants:
-        rand_pos = np.random.uniform(-half_width,
-                                     half_width, 2)
-        this_plant_kwargs = kwargs.copy()
-        this_plant_kwargs['id'] = i
-        this_plant_kwargs['r'] = np.random.uniform(
-            kwargs.get('r_min'), kwargs.get('r_max'))
-        plant = Plant(rand_pos, **this_plant_kwargs)
-        simulation.add_plant(plant)
-        print(f'Planted {i+1}/{num_plants} plants', end='\r')
-        i += 1
-
-    return simulation
+    def site_quality(self, pos):
+        indices = self.kt.query_ball_point(
+            x=pos, r=self.density_check_radius, workers=-1)
+        plants_nearby = [self.plants[i] for i in indices]
+        if len(plants_nearby) == 0:
+            return 0
+        else:
+            plant_covered_area = sum(plant.area for plant in plants_nearby)
+            density_nearby = plant_covered_area/self.density_check_area
+            return density_nearby + self.land_quality
