@@ -1,5 +1,5 @@
 import numpy as np
-import quadT
+# import quadT
 
 
 def check_collision(p1, p2):
@@ -59,7 +59,7 @@ class Plant:
         new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
         d = np.random.uniform(self.r, self.reproduction_range)
         new_pos = self.pos + new_dir * d
-
+        
         # Determine if reproduction is successful based on chance and site quality
         q = self.reproduction_chance * \
             simulation.site_quality(new_pos)

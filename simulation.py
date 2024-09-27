@@ -1,7 +1,11 @@
 import numpy as np
 from scipy.spatial import KDTree
 
-from KDTree_plant import Plant
+from plant import Plant
+
+
+def check_pos_collision(pos, plant):
+    return np.sum((pos - plant.pos) ** 2) < plant.r ** 2
 
 
 class Simulation:
@@ -55,7 +59,11 @@ class Simulation:
         indices = self.kt.query_ball_point(
             x=pos, r=self.density_check_radius, workers=-1)
         plants_nearby = [self.plants[i] for i in indices]
+        collisions_nearby = np.array(
+            [check_pos_collision(pos, plant) for plant in plants_nearby])
         if len(plants_nearby) == 0:
+            return 0
+        elif collisions_nearby.any():
             return 0
         else:
             plant_covered_area = sum(plant.area for plant in plants_nearby)

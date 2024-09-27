@@ -8,8 +8,8 @@ import subprocess
 import sys
 import noise
 
-from KDTree_plant import Plant
-from KDTree_simulation import Simulation
+from plant import Plant
+from simulation import Simulation
 
 # Increase the recursion limit
 sys.setrecursionlimit(100000)

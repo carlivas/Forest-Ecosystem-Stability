@@ -1,16 +1,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from KDTree_plant import Plant
-from KDTree_simulation import Simulation
+from plant import Plant
+from simulation import Simulation
 
-import rendering as rendering
+# import rendering as rendering
 
 
 seed = 0
 np.random.seed(seed)
 
-num_plants = 10_000
+num_plants = 100
 n_iter = 10_000
 
 half_width = half_height = 0.5
@@ -27,7 +27,7 @@ plant_kwargs = {
     'r_max': 30 * _m,
     'growth_rate': 0.01 * _m,
     'reproduction_range': 100 * _m,
-    'reproduction_chance': 0.035,
+    'reproduction_chance': 0.025,
 }
 
 sim_kwargs = {
