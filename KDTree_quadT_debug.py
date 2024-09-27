@@ -7,59 +7,13 @@ import pickle
 
 # import quadS
 from scipy.spatial import KDTree
-from rendering import pos_to_screen, screen_to_pos, r_to_screen, color_to_rgb
-
-
-def show_points(screen: pygame.Surface, points, **kwargs):
-    boundary_scale = kwargs.get('boundary_scale', 1.0)
-    point_size = kwargs.get('point_size', 1)
-
-    show_points = kwargs.get('show_points', True)
-
-    color = kwargs.get('color', (0, 0, 0))
-    color_points = kwargs.get('color_point', color)
-
-    for point in points:
-        # Draw the points
-        p_screen = pos_to_screen(
-            screen, point, boundary_scale)
-        pygame.draw.circle(screen, color_points, p_screen, point_size)
-
-
-def show_circle(center, radius, screen: pygame.Surface, **kwargs):
-    boundary_scale = kwargs.get('boundary_scale', 1.0)
-    line_width = kwargs.get('line_width', 1)
-    point_size = kwargs.get('point_size', 1)
-    center_size = kwargs.get('center_size', 1)
-
-    show_center = kwargs.get('show_center', False)
-    color = kwargs.get('color', (0, 0, 0))
-    color_boundary = kwargs.get('color_boundary', color)
-    color_center = kwargs.get('color_center', color)
-
-    # Get the screen coordinates of the center
-    screen_center = pos_to_screen(
-        screen, center, boundary_scale)
-
-    # Get the screen radius of the circle
-    screen_radius = r_to_screen(
-        screen, radius, boundary_scale)
-
-    # Draw the bounding circle
-    pygame.draw.circle(screen, color_boundary, screen_center,
-                       screen_radius, line_width)
-
-    if show_center:
-        pygame.draw.line(
-            screen, color_center, (screen_center[0] - 2 * point_size, screen_center[1]), (screen_center[0] + 2 * point_size, screen_center[1]), line_width)
-        pygame.draw.line(
-            screen, color_center, (screen_center[0], screen_center[1] - 2 * point_size), (screen_center[0], screen_center[1] + 2 * point_size), line_width)
+from rendering import pos_to_screen, screen_to_pos, r_to_screen, color_to_rgb, show_points, show_circle
 
 
 points = []
 plants = []
 
-for i in range(62500):
+for i in range(6250):
     pos = np.random.uniform(-0.5, 0.5, 2)
     data = i
     points.append(pos)
@@ -120,7 +74,7 @@ def draw():
         mouse_pos_screen = np.array(pygame.mouse.get_pos())
         mouse_pos = screen_to_pos(screen, mouse_pos_screen, boundary_scale)
 
-        bb_r = 0.1
+        bb_r = 0.01
         bb_c = mouse_pos
         # mouse_bb = quadS.BoundingCircle(bb_c, bb_r)
         indices = qt.query_ball_point(x=bb_c, r=bb_r, workers=-1)
@@ -135,6 +89,7 @@ def draw():
                 screen, p_screen[0], p_screen[1], 5, bb_show_kwargs['color'])
         # mouse_bb.show(screen, **bb_show_kwargs)
         show_circle(bb_c, bb_r, screen, **bb_show_kwargs)
+
 
         # Main loop
 setup()

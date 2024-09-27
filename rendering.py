@@ -40,3 +40,49 @@ def r_to_screen(screen: pygame.Surface, r: float, boundary_scale: float):
 
 def color_to_rgb(color):
     return (color[0] * 255, color[1] * 255, color[2] * 255)
+
+
+def show_points(screen: pygame.Surface, points, **kwargs):
+    boundary_scale = kwargs.get('boundary_scale', 1.0)
+    point_size = kwargs.get('point_size', 1)
+
+    show_points = kwargs.get('show_points', True)
+
+    color = kwargs.get('color', (0, 0, 0))
+    color_points = kwargs.get('color_point', color)
+
+    for point in points:
+        # Draw the points
+        p_screen = pos_to_screen(
+            screen, point, boundary_scale)
+        pygame.draw.circle(screen, color_points, p_screen, point_size)
+
+
+def show_circle(center, radius, screen: pygame.Surface, **kwargs):
+    boundary_scale = kwargs.get('boundary_scale', 1.0)
+    line_width = kwargs.get('line_width', 1)
+    point_size = kwargs.get('point_size', 1)
+    center_size = kwargs.get('center_size', 1)
+
+    show_center = kwargs.get('show_center', False)
+    color = kwargs.get('color', (0, 0, 0))
+    color_boundary = kwargs.get('color_boundary', color)
+    color_center = kwargs.get('color_center', color)
+
+    # Get the screen coordinates of the center
+    screen_center = pos_to_screen(
+        screen, center, boundary_scale)
+
+    # Get the screen radius of the circle
+    screen_radius = r_to_screen(
+        screen, radius, boundary_scale)
+
+    # Draw the bounding circle
+    pygame.draw.circle(screen, color_boundary, screen_center,
+                       screen_radius, line_width)
+
+    if show_center:
+        pygame.draw.line(
+            screen, color_center, (screen_center[0] - 2 * point_size, screen_center[1]), (screen_center[0] + 2 * point_size, screen_center[1]), line_width)
+        pygame.draw.line(
+            screen, color_center, (screen_center[0], screen_center[1] - 2 * point_size), (screen_center[0], screen_center[1] + 2 * point_size), line_width)
