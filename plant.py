@@ -2,10 +2,6 @@ import numpy as np
 # import quadT
 
 
-def check_collision(p1, p2):
-    return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
-
-
 class Plant:
     def __init__(self, pos: np.ndarray, **kwargs):
         self.pos = pos
@@ -59,7 +55,7 @@ class Plant:
         new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
         d = np.random.uniform(self.r, self.reproduction_range)
         new_pos = self.pos + new_dir * d
-        
+
         # Determine if reproduction is successful based on chance and site quality
         q = self.reproduction_chance * \
             simulation.site_quality(new_pos)
@@ -83,30 +79,32 @@ class Plant:
         else:
             other_plant.die()
 
-    def get_collisions(self, simulation):
-        self.is_colliding = False
-        collisions = []
-        indices = simulation.kt.query_ball_point(
-            x=self.pos, r=self.d, workers=-1)
-        for i in indices:
-            other_plant = simulation.plants[i]
-            if other_plant != self:
-                if check_collision(self, other_plant):
-                    self.is_colliding = True
-                    other_plant.is_colliding = True
-                    collisions.append(other_plant)
-        return collisions
+    # def get_collisions(self, simulation):
+    #     self.is_colliding = False
+    #     collisions = []
+    #     indices = simulation.kt.query_ball_point(
+    #         x=self.pos, r=self.d, workers=-1)
+    #     for i in indices:
+    #         other_plant = simulation.plants[i]
+    #         if other_plant != self:
+    #             if check_collision(self, other_plant):
+    #                 self.is_colliding = True
+    #                 other_plant.is_colliding = True
+    #                 collisions.append(other_plant)
+    #     return collisions
 
     def resolve_collisions(self, collisions):
         for other_plant in collisions:
             self.compete(other_plant)
 
     def update(self, simulation):
-        collisions = self.get_collisions(simulation)
-        self.resolve_collisions(collisions)
-        self.mortality()
         self.grow()
+
+        collisions = simulation.get_collisions(self)
+        self.resolve_collisions(collisions)
+
         self.reproduce(simulation)
+        self.mortality()
         self.set_color(self.color_from_size())
         return
 

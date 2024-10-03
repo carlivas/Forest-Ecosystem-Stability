@@ -1,11 +1,16 @@
 import numpy as np
 from scipy.spatial import KDTree
+import copy
 
 from plant import Plant
 
 
 def check_pos_collision(pos, plant):
     return np.sum((pos - plant.pos) ** 2) < plant.r ** 2
+
+
+def check_collision(p1, p2):
+    return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
 
 
 class Simulation:
@@ -55,6 +60,20 @@ class Simulation:
         # Update KDTree
         self.update_kdtree()
 
+    def get_collisions(self, plant):
+        plant.is_colliding = False
+        collisions = []
+        indices = self.kt.query_ball_point(
+            x=plant.pos, r=plant.d, workers=-1)
+        for i in indices:
+            other_plant = self.plants[i]
+            if other_plant != plant:
+                if check_collision(plant, other_plant):
+                    plant.is_colliding = True
+                    other_plant.is_colliding = True
+                    collisions.append(other_plant)
+        return collisions
+
     def site_quality(self, pos):
         indices = self.kt.query_ball_point(
             x=pos, r=self.density_check_radius, workers=-1)
@@ -69,3 +88,6 @@ class Simulation:
             plant_covered_area = sum(plant.area for plant in plants_nearby)
             density_nearby = plant_covered_area/self.density_check_area
             return density_nearby + self.land_quality
+
+    def state(self):
+        return copy.deepcopy(self.plants)

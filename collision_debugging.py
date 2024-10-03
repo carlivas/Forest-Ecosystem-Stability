@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.animation import FuncAnimation
 
 from plant import Plant
 from simulation import Simulation
-
 
 seed = 0
 np.random.seed(seed)
@@ -13,9 +13,9 @@ A_bound = 2 * half_width * 2 * half_height
 
 # Initialize simulation
 plant_kwargs = {
-    'r_min': 0.001,
+    'r_min': 0.1,
     'r_max': 1,
-    'growth_rate': 0.01,
+    'growth_rate': 0.005,
     'reproduction_range': 0.1,
     'reproduction_chance': 0.025,
 }
@@ -31,36 +31,49 @@ sim_kwargs = {
 
 sim = Simulation(**sim_kwargs)
 
-
-plants = [Plant(np.array([0, 0]), **plant_kwargs),
-          Plant(np.array([0.21, 0]), **plant_kwargs)]
+plants = [Plant(np.array([0., 0.]), **plant_kwargs),
+          Plant(np.array([0.21, 0.]), **plant_kwargs)]
 
 sim.add(plants)
 sim.update_kdtree()
 
-states = [sim.plants.copy()]
-n_iter = 10
+states = [sim.state()]
+n_iter = 20
 for i in range(n_iter):
     sim.step()
-    states.append(sim.plants.copy())
+    states.append(sim.state())
 
-fig, ax = plt.subplots(1, 3, figsize=(12, 4))
-for i, state in enumerate([states[0], states[n_iter//2], states[-1]]):
-    print(i, len(state))
-    ax[i] = plt.gca()
-    ax[i].set_xlim(-half_width, half_width)
-    ax[i].set_ylim(-half_height, half_height)
-    ax[i].set_aspect('equal', 'box')
-    ax[i].set_xlabel('Width (u)')
-    ax[i].set_ylabel('Height (u)')
-    ax[i].set_title(f'Iteration {i*n_iter//2}')
-    fig.suptitle('Plant distribution')
+fig, ax = plt.subplots(figsize=(6, 6))
+ax.set_xlim(-half_width, half_width)
+ax.set_ylim(-half_height, half_height)
+ax.set_aspect('equal', 'box')
+ax.set_xlabel('Width (u)')
+ax.set_ylabel('Height (u)')
+ax.set_title('Plant distribution')
 
+circles = []
+
+
+def update(frame):
+    for circle in circles:
+        circle.remove()
+    circles.clear()
+
+    state = states[frame]
     for plant in state:
-        circle = plt.Circle(plant.pos, plant.r, color='green',
-                            fill=False, transform=ax[i].transData)
-        ax[i].add_patch(circle)
+        if plant.is_colliding:
+            c = 'red'
+        else:
+            c = 'green'
+        circle = plt.Circle(plant.pos, plant.r, color=c,
+                            fill=False, transform=ax.transData)
+        ax.add_patch(circle)
+        circles.append(circle)
+    return circles
 
+
+ani = FuncAnimation(fig, update, frames=len(states),
+                    blit=True, repeat=True, interval=100)
 
 plt.show()
 print('\nDone!')
