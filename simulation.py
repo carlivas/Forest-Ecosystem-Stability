@@ -1,8 +1,10 @@
 import numpy as np
 from scipy.spatial import KDTree
+from scipy.interpolate import RegularGridInterpolator
 import copy
 
 from plant import Plant
+from density_field import DensityField
 
 
 def check_pos_collision(pos, plant):
@@ -18,8 +20,13 @@ class Simulation:
         self.plants = []
 
         self.land_quality = kwargs.get('land_quality')
-        self.density_check_radius = kwargs.get('density_check_radius')
-        self.density_check_area = np.pi * self.density_check_radius**2
+
+        self.half_width = kwargs.get('half_width')
+        self.half_height = kwargs.get('half_height', self.half_width)
+        density_check_radius = kwargs.get('density_check_radius')
+        density_check_resolution = kwargs.get('density_check_resolution')
+        self.density_field = DensityField(
+            self.half_width, self.half_height, density_check_radius, density_check_resolution)
 
         self.kt_leafsize = kwargs.get('kt_leafsize')
         self.kt = None
@@ -45,6 +52,9 @@ class Simulation:
             self.kt = KDTree(
                 [plant.pos for plant in self.plants], leafsize=self.kt_leafsize)
 
+    def update_density_field(self):
+        self.density_field.update(self)
+
     def step(self):
         # First Phase: Update all plants
         for plant in self.plants:
@@ -57,8 +67,9 @@ class Simulation:
                 new_plants.append(plant)
         self.plants = new_plants
 
-        # Update KDTree
+        # Update KDTree and density field
         self.update_kdtree()
+        self.density_field.update(self)
 
     def get_collisions(self, plant):
         plant.is_colliding = False
@@ -75,19 +86,15 @@ class Simulation:
         return collisions
 
     def site_quality(self, pos):
-        indices = self.kt.query_ball_point(
-            x=pos, r=self.density_check_radius, workers=-1)
-        plants_nearby = [self.plants[i] for i in indices]
-        collisions_nearby = np.array(
-            [check_pos_collision(pos, plant) for plant in plants_nearby])
-        if len(plants_nearby) == 0:
-            return 0
-        elif collisions_nearby.any():
+        # if position is in bounds, return the density at that position
+        if np.abs(pos[0]) > self.half_width or np.abs(pos[1]) > self.half_height:
             return 0
         else:
-            plant_covered_area = sum(plant.area for plant in plants_nearby)
-            density_nearby = plant_covered_area/self.density_check_area
+            density_nearby = self.density_field.query(pos)
             return density_nearby + self.land_quality
 
-    def state(self):
+    def get_state(self):
         return copy.deepcopy(self.plants)
+
+    def get_density_field(self):
+        return copy.deepcopy(self.density_field)

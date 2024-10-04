@@ -57,11 +57,10 @@ class Plant:
         new_pos = self.pos + new_dir * d
 
         # Determine if reproduction is successful based on chance and site quality
-        q = self.reproduction_chance * \
-            simulation.site_quality(new_pos)
+        p = simulation.site_quality(new_pos) * self.reproduction_chance
 
-        if np.random.rand() < q:
-
+        # if self.reproduction_thresholds[0] < p and p < self.reproduction_thresholds[1]:
+        if p > np.random.rand():
             new_plant_kwargs = self.kwargs.copy()
             new_plant_kwargs['r_min'] = self.r_min
             new_plant_kwargs['r'] = self.r_min
