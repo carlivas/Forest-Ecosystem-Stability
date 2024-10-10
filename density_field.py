@@ -11,7 +11,7 @@ class DensityField():
                           int(2 * half_height / check_radius))
         else:
             self.shape = (check_resolution, check_resolution)
-        self.field = np.zeros(self.shape)
+        self.values = np.zeros(self.shape)
         self.xx = np.linspace(-half_width, half_width, self.shape[0])
         self.yy = np.linspace(-half_height, half_height, self.shape[1])
 
@@ -19,7 +19,7 @@ class DensityField():
         self.check_area = np.pi * self.check_radius**2
 
         self.interp_func = RegularGridInterpolator(
-            (self.xx, self.yy), self.field, method='linear')
+            (self.xx, self.yy), self.values, method='linear')
 
     def density_local(self, simulation, pos):
         indices = simulation.kt.query_ball_point(
@@ -36,14 +36,17 @@ class DensityField():
         return self.interp_func(pos)
 
     def update(self, simulation):
-        self.field = np.zeros_like(self.field)
+        self.values = np.zeros_like(self.values)
         if simulation.kt is not None:
             (I, J) = self.shape
             for i in range(I):
                 for j in range(J):
                     pos = np.array([self.xx[i],
                                     self.yy[j]])
-                    self.field[i, j] = self.density_local(simulation, pos)
+                    self.values[i, j] = self.density_local(simulation, pos)
 
         self.interp_func = RegularGridInterpolator(
-            (self.xx, self.yy), self.field, method='linear')
+            (self.xx, self.yy), self.values, method='linear')
+
+    def get_values(self):
+        return self.values.copy()

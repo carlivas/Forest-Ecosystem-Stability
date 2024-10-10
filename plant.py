@@ -51,24 +51,25 @@ class Plant:
         self.is_dead = True
 
     def reproduce(self, simulation):
-        rand_ang = np.random.rand() * 2 * np.pi
-        new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
-        d = np.random.uniform(self.r, self.reproduction_range)
-        new_pos = self.pos + new_dir * d
+        if self.reproduction_chance > 0:
+            rand_ang = np.random.rand() * 2 * np.pi
+            new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
+            d = np.random.uniform(self.r, self.reproduction_range)
+            new_pos = self.pos + new_dir * d
 
-        # Determine if reproduction is successful based on chance and site quality
-        p = simulation.site_quality(new_pos) * self.reproduction_chance
+            # Determine if reproduction is successful based on chance and site quality
+            p = simulation.site_quality(new_pos) * self.reproduction_chance
 
-        # if self.reproduction_thresholds[0] < p and p < self.reproduction_thresholds[1]:
-        if p > np.random.rand():
-            new_plant_kwargs = self.kwargs.copy()
-            new_plant_kwargs['r_min'] = self.r_min
-            new_plant_kwargs['r'] = self.r_min
-            new_plant_kwargs['is_colliding'] = False
-            new_plant_kwargs['is_dead'] = False
-            new_plant_kwargs['generation'] = self.generation + 1
+            # if self.reproduction_thresholds[0] < p and p < self.reproduction_thresholds[1]:
+            if p > np.random.rand():
+                new_plant_kwargs = self.kwargs.copy()
+                new_plant_kwargs['r_min'] = self.r_min
+                new_plant_kwargs['r'] = self.r_min
+                new_plant_kwargs['is_colliding'] = False
+                new_plant_kwargs['is_dead'] = False
+                new_plant_kwargs['generation'] = self.generation + 1
 
-            simulation.add(Plant(new_pos, **new_plant_kwargs))
+                simulation.add(Plant(new_pos, **new_plant_kwargs))
 
     def compete(self, other_plant):
         p = 0.5

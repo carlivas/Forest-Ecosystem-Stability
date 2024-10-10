@@ -76,7 +76,7 @@ try:
 
         if i % save_skip == 0:
             states.append(state)
-            density_field_arr.append(density_field.field)
+            density_field_arr.append(density_field.get_values())
 
         print(
             f'Iteration {i+1:^5}/{n_iter}. Plants left {len(state)}' + ' '*20, end='\r')
