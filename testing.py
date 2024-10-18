@@ -5,26 +5,8 @@ import numpy as np
 from plant import Plant
 from simulation import Simulation
 
-
-def sample_radii_uniform_area(r_min, r_max, n=1):
-    # Calculate the corresponding area range
-    A_min = np.pi * r_min**2
-    A_max = np.pi * r_max**2
-
-    # Sample uniformly in the area range
-    areas = np.random.uniform(A_min, A_max, n)
-
-    # Convert areas to radii
-    radii = np.sqrt(areas / np.pi)
-
-    if n == 1:
-        return radii[0]
-    return radii
-
-
 seed = np.random.randint(0, 1_000)
 np.random.seed(seed)
-print(f'{seed = }')
 
 num_plants = 10_000
 n_iter = 100_000
@@ -32,19 +14,23 @@ n_iter = 100_000
 half_width = half_height = 0.5
 A_bound = 2 * half_width * 2 * half_height
 
-m2pp = m2_per_plant = 500  # m2/plant
+m2pp = m2_per_plant = 250  # m2/plant
 _m = np.sqrt(A_bound/(m2pp*num_plants))
+
+print(f'{seed = }')
 print(f'1 m = {_m} u')
 print(f'1 u = {1/_m} m')
+
+sgc = 0.17 + (np.random.rand() - 0.5) * 0.1
+print(f'species_germination_chance = {sgc}')
 
 # Initialize simulation
 plant_kwargs = {
     'r_min': 0.01 * _m,
     'r_max': 30 * _m,
     'growth_rate': 0.1 * _m,
-    'reproduction_range': 100 * _m,
-    'reproduction_chance': 0.2
-    # 'reproduction_thresholds': (0.12, 0.125),
+    'dispersal_range': 100 * _m,
+    'species_germination_chance': sgc,
 }
 
 sim_kwargs = {
@@ -55,7 +41,7 @@ sim_kwargs = {
     'kt_leafsize': 10,
     'land_quality': -0.1,
     'density_check_radius': 100 * _m,
-    'density_check_resolution': 100,
+    'density_check_resolution': 25,
 }
 
 sim = Simulation(**sim_kwargs)
@@ -66,9 +52,6 @@ dist_max = plant_kwargs['r_max']**d
 plants = [
     Plant(
         pos=np.random.uniform(-half_width, half_width, 2),
-        # r=sample_radii_uniform_area(
-        #     plant_kwargs['r_min'], plant_kwargs['r_max']),
-        # r=np.random.uniform(plant_kwargs['r_min'], plant_kwargs['r_max']),
         # r=plant_kwargs['r_min'],
         r=np.random.uniform(dist_min, dist_max)**(1/d),
         **plant_kwargs
@@ -109,8 +92,8 @@ save_skip = 100
 try:
     i = 1
     while i < n_iter and l > 0:
-        Q_L = sim.land_quality + ΔQ_L
-        sim.land_quality = Q_L
+        # Q_L = sim.land_quality + ΔQ_L
+        # sim.land_quality = Q_L
         sim.step()
         state = sim.get_state()
         density_field = sim.get_density_field()
@@ -124,54 +107,56 @@ try:
         biomass_arr.append(b)
         num_arr.append(l)
 
-        land_quality_arr.append(Q_L)
+        # land_quality_arr.append(Q_L)
 
-        string = f'Iter {i+1:>5}  |  (P, B): ({l:>6}, {np.round(b, 4):>6})'
+        string = f'Iter {i+1:<5}  |  (P, B) = ({l:>6}, {np.round(b, 4):>6})'
         Δ_num = num_arr[-1] - num_arr[-2]
         Δ_bm = biomass_arr[-1] - biomass_arr[-2]
-        string += f'  |  Δ = ({Δ_num:>4}, {np.round(Δ_bm, 4):>6})'
-        print(string + f'  |  Q_L = {np.round(Q_L, 3):>6}' + ' '*20, end='\r')
+        string += f'  |  (ΔP, ΔB) = ({Δ_num:>4}, {np.round(Δ_bm, 4):>6})'
+        # string += f'  |  Q_L = {np.round(Q_L, 3):>6}'
+        print(string + ' '*20, end='\r')
         i += 1
         if l == 0:
             break
 except KeyboardInterrupt:
     print('\nInterrupted by user...')
 
-fig, ax = plt.subplots(3, 1, figsize=(6, 6), sharex=True)
+fig, ax = plt.subplots(2, 1, figsize=(6, 6), sharex=True)
 # ρ = 500  # kg/m3
 # biomass_arr = np.array(biomass_arr) * 1*_m / (ρ * _m**3)
-ax[0].plot(biomass_arr, label='Biomass', color='blue')
+ax[0].plot(biomass_arr[1:], label='Biomass', color='blue')
 # ax[0].set_title('Biomass and density over time', fontsize=10)
 # ax[0].set_xlabel('Iteration')
 # ax[0].set_ylabel('Biomass', fontsize=8)  # [$\mathrm{kg}$]
+ax[0].grid(True)
 ax[0].legend(fontsize=8)
 
 # num_arr = np.array(num_arr)/(A_bound/_m**2)
-ax[1].plot(num_arr, label='Density', color='red')
+ax[1].plot(num_arr[1:], label='Density', color='red')
 # ax[1].set_title('Density over time')
-# ax[1].set_xlabel('Iteration')
+ax[1].set_xlabel('Iteration')
 # ax[1].set_ylabel('Density', fontsize=8)  # [plants/$\mathrm{m}^2$]
+ax[1].grid(True)
 ax[1].legend(fontsize=8)
 
-ax[2].plot(land_quality_arr, label='Land quality', color='green')
-# ax[2].set_title('Land Quality over time')
-ax[2].set_xlabel('Iteration', fontsize=8)
-# ax[2].set_ylabel('Land Quality', fontsize=8)
-ax[2].legend(fontsize=8)
+# ax[2].plot(land_quality_arr[:1], label='Land quality', color='green')
+# # ax[2].set_title('Land Quality over time')
+# ax[2].set_xlabel('Iteration', fontsize=8)
+# # ax[2].set_ylabel('Land Quality', fontsize=8)
+# ax[2].legend(fontsize=8)
 
 fig.tight_layout()
 fig.subplots_adjust(hspace=0)
 plt.show()
 
-
-# plt.figure()
-# plt.title('log(Density) over log(Biomass)')
-# plt.plot(num_arr, biomass_arr)
-# plt.xscale('log')
-# plt.yscale('log')
-# plt.xlabel('Density')
-# plt.ylabel('Biomass')
-# plt.show()
+plt.figure()
+plt.title('log(Density) over log(Biomass)')
+plt.plot(num_arr, biomass_arr)
+plt.xscale('log')
+plt.yscale('log')
+plt.xlabel('Density')
+plt.ylabel('Biomass')
+plt.show()
 
 fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 Q_L = sim_kwargs['land_quality']

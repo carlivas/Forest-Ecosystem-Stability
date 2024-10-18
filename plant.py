@@ -17,9 +17,10 @@ class Plant:
         self.growth_rate = kwargs.get('growth_rate')
         self.age_max = (self.r_max - self.r_min)/self.growth_rate
 
-        self.reproduction_chance = kwargs.get('reproduction_chance')
-        self.reproduction_range = kwargs.get(
-            'reproduction_range')
+        self.species_germination_chance = kwargs.get(
+            'species_germination_chance')
+        self.dispersal_range = kwargs.get(
+            'dispersal_range')
 
         self.young_color = (69, 194, 51)
         self.old_color = (163, 194, 122)
@@ -51,17 +52,18 @@ class Plant:
         self.is_dead = True
 
     def reproduce(self, simulation):
-        if self.reproduction_chance > 0:
+        if self.species_germination_chance > 0:
             rand_ang = np.random.rand() * 2 * np.pi
             new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
-            d = np.random.uniform(self.r, self.reproduction_range)
+            d = np.random.uniform(self.r, self.dispersal_range)
             new_pos = self.pos + new_dir * d
 
             # Determine if reproduction is successful based on chance and site quality
-            p = simulation.site_quality(new_pos) * self.reproduction_chance
+            reproduction_chance = simulation.site_quality(
+                new_pos) * self.species_germination_chance
 
             # if self.reproduction_thresholds[0] < p and p < self.reproduction_thresholds[1]:
-            if p > np.random.rand():
+            if reproduction_chance > np.random.rand():
                 new_plant_kwargs = self.kwargs.copy()
                 new_plant_kwargs['r_min'] = self.r_min
                 new_plant_kwargs['r'] = self.r_min

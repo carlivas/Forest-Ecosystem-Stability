@@ -16,8 +16,8 @@ plant_kwargs = {
     'r_min': 0.1,
     'r_max': 1,
     'growth_rate': 0.005,
-    'reproduction_range': 0.1,
-    'reproduction_chance': 0.025,
+    'dispersal_range': 0.1,
+    'species_germination_chance': 0.025,
 }
 
 sim_kwargs = {
