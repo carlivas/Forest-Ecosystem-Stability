@@ -3,8 +3,9 @@ import numpy as np
 
 
 class Plant:
-    def __init__(self, pos: np.ndarray, **kwargs):
+    def __init__(self, pos: np.ndarray, id=None, **kwargs):
         self.pos = pos
+        self.id = id
 
         self.kwargs = kwargs
 
@@ -22,8 +23,8 @@ class Plant:
         self.dispersal_range = kwargs.get(
             'dispersal_range')
 
-        self.young_color = (69, 194, 51)
-        self.old_color = (163, 194, 122)
+        self.young_color = tuple(np.array([69, 194, 51]))
+        self.old_color = tuple(np.array([163, 194, 122]))
         self.color = kwargs.get('color', self.young_color)
         self.is_dead = kwargs.get('is_dead', False)
         self.is_colliding = kwargs.get('is_colliding', False)
