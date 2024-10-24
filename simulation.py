@@ -1,8 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.spatial import KDTree
 from scipy.interpolate import RegularGridInterpolator
 import copy
+import os
+import pickle
 
 from plant import Plant
 from density_field import DensityField
@@ -18,19 +21,14 @@ def check_collision(p1, p2):
 
 class Simulation:
     def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
         self.t = 0
         self.plants = []
         self.land_quality = kwargs.get('land_quality')
 
         self.half_width = kwargs.get('half_width')
         self.half_height = kwargs.get('half_height', self.half_width)
-        self.density_field = DensityField(
-            self.half_width,
-            self.half_height,
-            kwargs.get('density_check_radius'),
-            kwargs.get('density_check_resolution')
-        )
-
         self.kt_leafsize = kwargs.get('kt_leafsize')
         self.kt = None
 
@@ -42,6 +40,20 @@ class Simulation:
 
         self.data_buffer = DataBuffer(
             size=kwargs.get('n_iter'),
+        )
+
+        self.density_field = DensityField(
+            self.half_width,
+            self.half_height,
+            kwargs.get('density_check_radius'),
+            kwargs.get('density_field_resolution')
+        )
+
+        self.density_field_buffer = FieldBuffer(
+            resolution=kwargs.get('density_field_resolution'),
+            size=kwargs.get('density_field_buffer_size'),
+            skip=kwargs.get('density_field_buffer_skip', 1),
+            preset_times=kwargs.get('density_field_buffer_preset_times', None)
         )
 
     def add(self, plant):
@@ -99,6 +111,42 @@ class Simulation:
         if self.t % self.state_buffer.skip == 0 or self.t in self.state_buffer.preset_times:
             self.state_buffer.add(state=self.get_state(), t=self.t)
 
+        if self.t % self.density_field_buffer.skip == 0 or self.t in self.density_field_buffer.preset_times:
+            self.density_field_buffer.add(
+                field=self.density_field.get_field(), t=self.t)
+
+    def run(self, n_iter=None):
+        import time
+        if n_iter is None:
+            n_iter = self.kwargs.get('n_iter')
+        start_time = time.time()
+        try:
+
+            for _ in range(1, n_iter):
+
+                self.step()
+
+                # if no plants are left or if the number of plants exceeds 100 times the number of plants in the initial state, stop the simulation
+                l = len(self.plants)
+                if l == 0 or l > self.kwargs.get('num_plants') * 100:
+
+                    break
+
+                elapsed_time = time.time() - start_time
+
+                if _ % 3 == 0:
+                    dots = '.  '
+                elif _ % 3 == 1:
+                    dots = '.. '
+                else:
+                    dots = '...'
+
+                print(f'{dots} Elapsed time: {elapsed_time:.2f}s', end='\r')
+
+        except KeyboardInterrupt:
+
+            print('\nInterrupted by user...')
+
     def get_collisions(self, plant):
         plant.is_colliding = False
         collisions = []
@@ -130,8 +178,11 @@ class Simulation:
     def initiate(self):
         self.update_kdtree()
         self.update_density_field()
+        
+        self.data_buffer.analyze_and_add(state=self.get_state(), t=0)
         self.state_buffer.add(state=self.get_state(), t=0)
-        self.data_buffer.analyze_and_add(self.get_state(), t=0)
+        self.density_field_buffer.add(
+            field=self.density_field.get_field(), t=0)
 
     def initiate_uniform_lifetimes(self, n, t_min, t_max, **plant_kwargs):
         growth_rate = plant_kwargs['growth_rate']
@@ -221,74 +272,183 @@ class Simulation:
 
 
 class FieldBuffer:
-    def __init__(self, init_field, size, skip=1, preset_times=None, data=None, **sim_kwargs):
+    def __init__(self, resolution=2, size=100, skip=1, preset_times=None, data=None, **sim_kwargs):
         self.size = size    # estimated max number of fields to store
+        self.resolution = resolution
         self.skip = skip
-        self.field = np.full((size, init_field.shape), np.nan)
         self.times = []
-
-        if data is not None:
-            self.import_data(
-                data=data, plant_kwargs=plant_kwargs)
-
         self.preset_times = preset_times
 
-    # def add(self, field, t):
-    #     if len(self.fields) == 0 or field != self.fields[-1]:
-    #         self.fields.append(field)
-    #         self.times.append(t)
-    #         if len(self.fields) > self.size:
+        self.fields = np.full(
+            (self.size, self.resolution, self.resolution), np.nan)
 
-    #             for i, time in enumerate(self.times):
-    #                 if time not in self.preset_times:
-    #                     self.fields.pop(i)
-    #                     self.times.pop(i)
-    #                     break
+        if data is not None:
+            fields, times = self.import_data(
+                data=data, sim_kwargs=sim_kwargs)
+            self.fields = fields
+            self.times = times
 
-    #         print(
-    #             f'\nFieldBuffer.add(): Added field at time {t}.')
+    def add(self, field, t):
+        fields = self.get_fields()
+        if len(self.times) == self.size:
 
-    # def get(self, times=None):
-    #     if times is None:
-    #         return copy.deepcopy(self.fields)
+            for i, time in enumerate(self.times):
 
-    #     indices = []
-    #     for t in times:
-    #         if t < self.times[0] or t > self.times[-1]:
-    #             print(
-    #                 f'!Warning! FieldBuffer.get(): Time {t} is out of bounds. Start time: {self.times[0]}, End time: {self.times[-1]}')
-    #             indices.append(np.nan)
-    #         else:
-    #             indices.append(np.where(np.array(self.times) == t)[0][0])
-    #     return copy.deepcopy([self.fields[i] for i in indices if not np.isnan(i)])
+                if time not in self.preset_times:
+                    self.fields[i] = field
+                    self.times.append(t)
+                    print(f'\n    FieldBuffer.add(): Added field at time {t}.')
 
-    # def get_fields(self):
-    #     return copy.deepcopy(self.fields)
+                    self.fields = np.concatenate(
+                        (fields[:i], np.roll(fields[i:], -1, axis=0)), axis=0)
+                    self.times.pop(i)
 
-    # def get_times(self):
-    #     return copy.deepcopy(self.times)
+                    print(
+                        f'\n    FieldBuffer.add(): Removed field at time {time}.')
+                    break
+        else:
+            self.fields[len(self.times)] = field
+            self.times.append(t)
+            print(f'\n    FieldBuffer.add(): Added field at time {t}.')
+
+    def get(self, times=None):
+        if times is None:
+            return copy.deepcopy(self.fields)
+
+        indices = []
+        for t in times:
+            if t not in self.times:
+                print(
+                    f'!Warning! FieldBuffer.get(): Time {t} not in field buffer. Times: {self.times}')
+                indices.append(np.nan)
+            else:
+                indices.append(np.where(np.array(self.times) == t)[0][0])
+        return copy.deepcopy([self.fields[i] for i in indices if not np.isnan(i)])
+
+    def get_fields(self):
+        return copy.deepcopy(self.fields)
+
+    def get_times(self):
+        return copy.deepcopy(self.times)
+
+    def import_data(self, data, sim_kwargs):
+        times = data[:, 0].astype(int)
+        fields_arr = data[:, 1:]
+
+        self.resolution = int(np.sqrt(data.shape[-1]))
+        fields = fields_arr.reshape(-1, self.resolution, self.resolution)
+
+        return fields, times
+
+    # def import_data(self, data, sim_kwargs):
+    #     self.resolution = data.shape[-1]
+    #     times = np.arange(data.shape[0] // self.resolution) * self.skip
+    #     fields = data.reshape(-1, self.resolution, self.resolution)
+    #     return fields, times
+
+    def make_array(self):
+        shape = self.fields.shape
+        arr = self.get_fields().reshape(-1, shape[1]*shape[2])
+
+        # Find the first row with NaN values
+        nan_index = np.where(np.isnan(arr).any(axis=1))[0]
+        if nan_index.size > 0:
+            arr = arr[:nan_index[0]]
+
+        times = np.array(self.get_times())
+        return np.concatenate((times.reshape(-1, 1), arr), axis=1)
+
+        # return arr
 
     # def make_array(self):
-    #     columns_per_plant = 3  # x, y, r
+    #     shape = self.fields.shape
+    #     arr = self.get_fields().reshape(-1, shape[-1])
 
-    #     L = 0
+    #     # Find the first row with NaN values
+    #     nan_index = np.where(np.isnan(arr).any(axis=1))[0]
+    #     if nan_index.size > 0:
+    #         arr = arr[:nan_index[0]]
 
-    #     for field in self.fields:
-    #         for plant in field:
-    #             if plant.id > L:
-    #                 L = plant.id
+    #     return arr
 
-    #     shape = (self.times[-1] + 1, (L + 1) * columns_per_plant)
-    #     field_buffer_array = np.full(shape, np.nan)
+    def save(self, path):
+        path = path + '.csv'
 
-    #     times = [t for t in self.times if t != np.nan]
-    #     fields = self.get(times=times)
-    #     for i, t in enumerate(times):
-    #         field = fields[i]
-    #         for plant in field:
-    #             j = plant.id
-    #             field_buffer_array[t, j *
-    #                                columns_per_plant] =
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        # Save the FieldBuffer array object to the specified path as csv
+        np.savetxt(path, self.make_array(), delimiter=',')
+
+    def plot_field(self, field, time, size=6, fig=None, ax=None, vmin=0, vmax=None):
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(size, size))
+        ax.imshow(field, cmap='Greys', vmin=vmin, vmax=vmax)
+        ax.set_title(f't = {time}', fontsize=7)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return fig, ax
+
+    def plot(self, size=6, vmin=0, vmax=None, title=None):
+        fields = self.get_fields()
+        if vmax is None:
+            vmax = np.nanmax(fields)
+        times = self.get_times()
+        T = len(times)
+        print(f'FieldBuffer.plot(): {T = }')
+        if T == 1:
+            n_rows = 1
+            n_cols = 1
+        else:
+            n_rows = int(np.floor(np.sqrt(T)))
+            n_cols = (T + 1) // n_rows + (T % n_rows > 0)
+        print(f'FieldBuffer.plot(): {n_rows = }, {n_cols = }')
+
+        fig, ax = plt.subplots(
+            n_rows, n_cols, figsize=(size*n_cols*1.5, size*n_rows))
+        if not title is None:
+            fig.suptitle(title, fontsize=10)
+
+        # Adjust subplot parameters to make room for the colorbar
+        fig.subplots_adjust(left=0.1, bottom=0.1, right=0.9,
+                            top=0.9, wspace=0.1, hspace=0.1)
+
+        cax = fig.add_axes([0.05, 0.05, 0.9, 0.02])
+        norm = plt.Normalize(vmin=vmin, vmax=vmax)
+        sm = plt.cm.ScalarMappable(cmap='Greys', norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
+        cbar.ax.tick_params(labelsize=7)
+
+        fig.tight_layout()
+        if T == 1:
+            print(f'FieldBuffer.plot(): Single field, {self.resolution = }')
+            self.plot_field(fields[0], time=times[0],
+                            size=size, fig=fig, ax=ax, vmin=vmin, vmax=vmax)
+        else:
+            for i in range(T):
+                field = fields[i]
+                if n_rows == 1:
+                    k = i
+                    self.plot_field(
+                        field=field, time=times[i], size=size, fig=fig, ax=ax[k], vmin=vmin, vmax=vmax)
+                else:
+                    l = i // n_cols
+                    k = i % n_cols
+                    self.plot_field(
+                        field=field, time=times[i], size=size, fig=fig, ax=ax[l, k], vmin=vmin, vmax=vmax)
+
+            for j in range(n_rows*n_cols):
+                l = j // n_cols
+                k = j % n_cols
+
+                if j > T - 1:
+                    if n_rows == 1:
+                        ax[j].axis('off')
+                    else:
+                        ax[l, k].axis('off')
+
+        return fig, ax
 
 
 class StateBuffer:
@@ -308,16 +468,18 @@ class StateBuffer:
         if len(self.states) == 0 or state != self.states[-1]:
             self.states.append(state)
             self.times.append(t)
+            print(
+                f'\n    StateBuffer.add(): Added state at time {t}.')
+
             if len(self.states) > self.size:
 
                 for i, time in enumerate(self.times):
                     if time not in self.preset_times:
                         self.states.pop(i)
                         self.times.pop(i)
+                        print(
+                            f'\n    StateBuffer.add(): Removed state at time {time}.')
                         break
-
-            print(
-                f'\nStateBuffer.add(): Added state at time {t}.')
 
     def get(self, times=None):
         if times is None:
@@ -340,44 +502,33 @@ class StateBuffer:
         return copy.deepcopy(self.times)
 
     def make_array(self):
-        columns_per_plant = 3  # x, y, r
+        columns_per_plant = 5  # x, y, r, t, id
 
         L = 0
 
-        for state in self.states:
-            for plant in state:
-                if plant.id > L:
-                    L = plant.id
+        states = self.get_states()
+        times = self.get_times()
 
-        shape = (self.times[-1] + 1, (L + 1) * columns_per_plant)
+        for state in states:
+            L += len(state)
+
+        shape = (L, columns_per_plant)
         state_buffer_array = np.full(shape, np.nan)
 
-        times = [t for t in self.times if t != np.nan]
-        states = self.get(times=times)
-        for i, t in enumerate(times):
-            state = states[i]
-            for plant in state:
-                j = plant.id
-                state_buffer_array[t, j *
-                                   columns_per_plant] = plant.pos[0]
-                state_buffer_array[t, j *
-                                   columns_per_plant + 1] = plant.pos[1]
-                state_buffer_array[t, j*columns_per_plant + 2] = plant.r
+        i = 0
+        while i < L:
+            for t, state in zip(times, states):
+                for plant in state:
+                    state_buffer_array[i, 0] = plant.pos[0]
+                    state_buffer_array[i, 1] = plant.pos[1]
+                    state_buffer_array[i, 2] = plant.r
+                    state_buffer_array[i, 3] = t
+                    state_buffer_array[i, 4] = plant.id
 
+                    i += 1
         return state_buffer_array
 
     def save(self, path):
-        import os
-        import pickle
-        # path = path + '.pkl'
-
-        # # Create the directory if it doesn't exist
-        # os.makedirs(os.path.dirname(path), exist_ok=True)
-
-        # # Save the StateBuffer object to the specified path as pickle
-        # with open(path, 'wb') as f:
-        #     pickle.dump(self, f)
-
         path = path + '.csv'
 
         # Create the directory if it doesn't exist
@@ -391,20 +542,17 @@ class StateBuffer:
     def import_data(self, data, plant_kwargs):
         states = []
         times = []
-        for t in range(len(data)):
-            if np.isnan(data[t]).all():
+        for i in range(len(data)):
+            x, y, r, t, id = data[i]
+            if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t) or np.isnan(id):
                 continue
             else:
-                times.append(t)
-                state = []
-                for i in range(0, len(data[t]), 3):
-                    x, y, r = data[t, i:i+3]
-                    if np.isnan(x) or np.isnan(y) or np.isnan(r):
-                        continue
-                    state.append(
-                        Plant(pos=np.array([x, y]), r=r, **plant_kwargs))
+                if t not in times:
+                    states.append([])
+                    times.append(int(t))
+                states[-1].append(
+                    Plant(pos=np.array([x, y]), r=r, id=id, **plant_kwargs))
 
-                states.append(state)
         self.states = states
         self.times = times
 
@@ -431,9 +579,13 @@ class StateBuffer:
         states = self.get_states()
         times = self.get_times()
         l = len(states)
-        n_rows = int(np.floor(l / np.sqrt(l)))
-        n_cols = (l + 1) // n_rows + (l % n_rows > 0)
-        print(f'simulation: {n_rows = }, {n_cols = }')
+        if l == 1:
+            n_rows = 1
+            n_cols = 1
+        else:
+            n_rows = int(np.floor(l / np.sqrt(l)))
+            n_cols = (l + 1) // n_rows + (l % n_rows > 0)
+        print(f'StateBuffer.plot(): {n_rows = }, {n_cols = }')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
@@ -492,8 +644,8 @@ class DataBuffer:
         biomass = sum([plant.area for plant in state])
         population_size = len(state)
         data = np.array([biomass, population_size])
-        print(' '*36 +
-              f'DataBuffer.analyze_state(): {t = }     |     P = {population_size}     |     B = {np.round(biomass, 5)}', end='\r')
+        print(' '*45 +
+              f'|\tt = {t:^5}    |    P = {population_size:^6}    |    B = {np.round(biomass, 5):^5}', end='\r')
         self.add(data, t)
         return data
 
@@ -505,9 +657,13 @@ class DataBuffer:
     def finalize(self):
         self.buffer = self.buffer[:self.length-1]
 
-    def plot(self, size=6):
+    def plot(self, size=6, title=None):
         fig, ax = plt.subplots(2, 1, figsize=(
             size, size))
+
+        if title is not None:
+            fig.suptitle(title, fontsize=10)
+
         fig.tight_layout(pad=3.0)
         ax[0].plot(self.buffer[:, 0], self.buffer[:, 1],
                    label='Biomass', color='green')
@@ -528,8 +684,7 @@ class DataBuffer:
         return copy.deepcopy([self.buffer[i] for i in indices])
 
     def save(self, path):
-        import os
-        import pickle
+
         path = path + '.csv'
 
         # Create the directory if it doesn't exist
@@ -541,9 +696,6 @@ class DataBuffer:
         #     pickle.dump(self, f)
 
     # def load(self, path):
-    #     import os
-    #     import pickle
-
     #     # Create the directory if it doesn't exist
     #     os.makedirs(os.path.dirname(path), exist_ok=True)
 
