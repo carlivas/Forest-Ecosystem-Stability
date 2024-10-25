@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.colors import Normalize
 from scipy.spatial import KDTree
 from scipy.interpolate import RegularGridInterpolator
 import copy
@@ -33,7 +34,7 @@ class Simulation:
         self.kt = None
 
         self.state_buffer = StateBuffer(
-            size=kwargs.get('state_buffer_size', 100),
+            size=kwargs.get('state_buffer_size', 20),
             skip=kwargs.get('state_buffer_skip', 1),
             preset_times=kwargs.get('state_buffer_preset_times', None)
         )
@@ -178,7 +179,7 @@ class Simulation:
     def initiate(self):
         self.update_kdtree()
         self.update_density_field()
-        
+
         self.data_buffer.analyze_and_add(state=self.get_state(), t=0)
         self.state_buffer.add(state=self.get_state(), t=0)
         self.density_field_buffer.add(
@@ -198,14 +199,14 @@ class Simulation:
         self.add(plants)
         self.initiate()
 
-    def plot(self, size=6, t=None, highlight=None):
+    def plot(self, size=2, t=None, highlight=None):
         if t is None:
             t = self.t
         fig, ax = self.plot_state(
             self.get_state(), t=t, size=size, highlight=highlight)
         return fig, ax
 
-    def plot_state(self, state, t=None, size=6, fig=None, ax=None, highlight=None):
+    def plot_state(self, state, t=None, size=2, fig=None, ax=None, highlight=None):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         # ax.set_title('State')
@@ -223,14 +224,21 @@ class Simulation:
                 color = 'red'
             else:
                 color = 'green'
+            density = self.density_field.query(plant.pos)
             ax.add_artist(plt.Circle(plant.pos, plant.r,
                           color=color, fill=True, transform=ax.transData))
 
-        ax.set_xticks([])
-        ax.set_yticks([])
+            sm = plt.cm.ScalarMappable(
+                norm=Normalize(vmin=0, vmax=self.density_field.values.max()), cmap='Greys')
+            color = sm.to_rgba(density)
+            ax.add_artist(plt.Circle(plant.pos, plant.r, fill=True,
+                          color=color, alpha=1, transform=ax.transData))
+
+        # ax.set_xticks([])
+        # ax.set_yticks([])
         return fig, ax
 
-    def plot_states(self, states, times=None, size=6):
+    def plot_states(self, states, times=None, size=2):
         l = len(states)
         n_rows = int(np.floor(l / np.sqrt(l)))
         n_cols = (l + 1) // n_rows + (l % n_rows > 0)
@@ -314,16 +322,16 @@ class FieldBuffer:
     def get(self, times=None):
         if times is None:
             return copy.deepcopy(self.fields)
-
-        indices = []
-        for t in times:
-            if t not in self.times:
-                print(
-                    f'!Warning! FieldBuffer.get(): Time {t} not in field buffer. Times: {self.times}')
-                indices.append(np.nan)
-            else:
-                indices.append(np.where(np.array(self.times) == t)[0][0])
-        return copy.deepcopy([self.fields[i] for i in indices if not np.isnan(i)])
+        else:
+            indices = []
+            for t in times:
+                if t not in self.times:
+                    print(
+                        f'!Warning! FieldBuffer.get(): Time {t} not in field buffer. Times: {self.times}')
+                    indices.append(np.nan)
+                else:
+                    indices.append(np.where(np.array(self.times) == t)[0][0])
+            return copy.deepcopy([self.fields[i] for i in indices if not np.isnan(i)])
 
     def get_fields(self):
         return copy.deepcopy(self.fields)
@@ -340,12 +348,6 @@ class FieldBuffer:
 
         return fields, times
 
-    # def import_data(self, data, sim_kwargs):
-    #     self.resolution = data.shape[-1]
-    #     times = np.arange(data.shape[0] // self.resolution) * self.skip
-    #     fields = data.reshape(-1, self.resolution, self.resolution)
-    #     return fields, times
-
     def make_array(self):
         shape = self.fields.shape
         arr = self.get_fields().reshape(-1, shape[1]*shape[2])
@@ -358,19 +360,6 @@ class FieldBuffer:
         times = np.array(self.get_times())
         return np.concatenate((times.reshape(-1, 1), arr), axis=1)
 
-        # return arr
-
-    # def make_array(self):
-    #     shape = self.fields.shape
-    #     arr = self.get_fields().reshape(-1, shape[-1])
-
-    #     # Find the first row with NaN values
-    #     nan_index = np.where(np.isnan(arr).any(axis=1))[0]
-    #     if nan_index.size > 0:
-    #         arr = arr[:nan_index[0]]
-
-    #     return arr
-
     def save(self, path):
         path = path + '.csv'
 
@@ -380,29 +369,28 @@ class FieldBuffer:
         # Save the FieldBuffer array object to the specified path as csv
         np.savetxt(path, self.make_array(), delimiter=',')
 
-    def plot_field(self, field, time, size=6, fig=None, ax=None, vmin=0, vmax=None):
+    def plot_field(self, field, time, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        ax.imshow(field, cmap='Greys', vmin=vmin, vmax=vmax)
+        ax.imshow(field, origin='upper', cmap='Greys',
+                  vmin=vmin, vmax=vmax, extent=extent)
         ax.set_title(f't = {time}', fontsize=7)
-        ax.set_xticks([])
-        ax.set_yticks([])
+        # ax.set_xticks([])
+        # ax.set_yticks([])
         return fig, ax
 
-    def plot(self, size=6, vmin=0, vmax=None, title=None):
+    def plot(self, size=2, vmin=0, vmax=None, title='FieldBuffer', extent=[-0.5, 0.5, -0.5, 0.5]):
         fields = self.get_fields()
         if vmax is None:
             vmax = np.nanmax(fields)
         times = self.get_times()
         T = len(times)
-        print(f'FieldBuffer.plot(): {T = }')
         if T == 1:
             n_rows = 1
             n_cols = 1
         else:
             n_rows = int(np.floor(np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
-        print(f'FieldBuffer.plot(): {n_rows = }, {n_cols = }')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols*1.5, size*n_rows))
@@ -420,23 +408,22 @@ class FieldBuffer:
         cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
         cbar.ax.tick_params(labelsize=7)
 
-        fig.tight_layout()
+        # fig.tight_layout()
         if T == 1:
-            print(f'FieldBuffer.plot(): Single field, {self.resolution = }')
             self.plot_field(fields[0], time=times[0],
-                            size=size, fig=fig, ax=ax, vmin=vmin, vmax=vmax)
+                            size=size, fig=fig, ax=ax, vmin=vmin, vmax=vmax, extent=extent)
         else:
             for i in range(T):
                 field = fields[i]
                 if n_rows == 1:
                     k = i
                     self.plot_field(
-                        field=field, time=times[i], size=size, fig=fig, ax=ax[k], vmin=vmin, vmax=vmax)
+                        field=field, time=times[i], size=size, fig=fig, ax=ax[k], vmin=vmin, vmax=vmax, extent=extent)
                 else:
                     l = i // n_cols
                     k = i % n_cols
                     self.plot_field(
-                        field=field, time=times[i], size=size, fig=fig, ax=ax[l, k], vmin=vmin, vmax=vmax)
+                        field=field, time=times[i], size=size, fig=fig, ax=ax[l, k], vmin=vmin, vmax=vmax, extent=extent)
 
             for j in range(n_rows*n_cols):
                 l = j // n_cols
@@ -556,7 +543,7 @@ class StateBuffer:
         self.states = states
         self.times = times
 
-    def plot_state(self, state, t=None, size=6, fig=None, ax=None, half_width=0.5, half_height=0.5):
+    def plot_state(self, state, t=None, size=2, fig=None, ax=None, half_width=0.5, half_height=0.5):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         # ax.set_title('State')
@@ -575,7 +562,7 @@ class StateBuffer:
         ax.set_yticks([])
         return fig, ax
 
-    def plot(self, size=6):
+    def plot(self, size=2):
         states = self.get_states()
         times = self.get_times()
         l = len(states)
@@ -657,7 +644,7 @@ class DataBuffer:
     def finalize(self):
         self.buffer = self.buffer[:self.length-1]
 
-    def plot(self, size=6, title=None):
+    def plot(self, size=6, title='DataBuffer'):
         fig, ax = plt.subplots(2, 1, figsize=(
             size, size))
 

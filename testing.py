@@ -8,19 +8,19 @@ from simulation import Simulation
 import json
 import os
 
-num_plants = 10_000
+num_plants = 1_000
 n_iter = 10_000
-m2pp = m2_per_plant = 250  # m2/plant
+m2pp = m2_per_plant = 10_000  # m2/plant
 
 
 half_width = half_height = 0.5
 A_bound = 2 * half_width * 2 * half_height
 _m = np.sqrt(A_bound/(m2pp*num_plants))
 
-sgcs = [0.2]
-lqs = [-0.1]
+sgcs = [0.05, 0.06, 0.07, 0.08][::-1]
+lqs = [0.0, 0.0001, 0.001, 0.01][::-1]
 
-k = 10
+k = 0
 for sgc in sgcs:
     for lq in lqs:
         seed = np.random.randint(0, 1_000)
@@ -92,7 +92,7 @@ for sgc in sgcs:
             'sim_kwargs': sim_kwargs
         }
 
-        save_folder = 'Data/temp'
+        save_folder = f'Data/linear_decay_case_n{num_plants}'
         surfix = f'{k}'
 
         save_kwargs(combined_kwargs, f'{save_folder}/kwargs_{surfix}')
