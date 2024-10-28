@@ -8,6 +8,7 @@ from simulation import Simulation
 import json
 import os
 
+# Save the data in a folder with the current time as the name
 save_folder = f'Data/{time.strftime("%Y%m%d_%H%M%S")}/'
 
 num_plants = 1_00
