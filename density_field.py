@@ -102,5 +102,5 @@ class DensityField():
         # ax.set_yticks([])
         return fig, ax
 
-    def get_field(self):
+    def get_values(self):
         return copy.deepcopy(self.values)

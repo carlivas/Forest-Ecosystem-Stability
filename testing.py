@@ -8,8 +8,10 @@ from simulation import Simulation
 import json
 import os
 
-num_plants = 1_000
-n_iter = 10_000
+save_folder = f'Data/{time.strftime("%Y%m%d_%H%M%S")}/'
+
+num_plants = 1_00
+n_iter = 10_0
 m2pp = m2_per_plant = 10_000  # m2/plant
 
 
@@ -18,7 +20,7 @@ A_bound = 2 * half_width * 2 * half_height
 _m = np.sqrt(A_bound/(m2pp*num_plants))
 
 sgcs = [0.05, 0.06, 0.07, 0.08][::-1]
-lqs = [0.0, 0.0001, 0.001, 0.01][::-1]
+lqs = [0.0, 0.0001, 0.001][::-1]
 
 k = 0
 for sgc in sgcs:
@@ -41,6 +43,7 @@ for sgc in sgcs:
             'half_height': half_height,
 
             'm2_per_plant': m2_per_plant,
+            '_m': _m,
             'num_plants': num_plants,
             'land_quality': lq,
 
@@ -49,13 +52,13 @@ for sgc in sgcs:
             'density_check_radius': 100 * _m,
             'density_field_resolution': 50,
 
-            'density_field_buffer_size': 20,
-            'density_field_buffer_skip': 200,
-            'density_field_buffer_preset_times': [0, 200, 400, 600, 800, 1000],
+            'density_field_buffer_size': 15,
+            'density_field_buffer_skip': np.ceil(n_iter/15).astype(int),
+            'density_field_buffer_preset_times': [],
 
-            'state_buffer_size': 20,
-            'state_buffer_skip': 200,
-            'state_buffer_preset_times': [0, 200, 400, 600, 800, 1000],
+            'state_buffer_size': 15,
+            'state_buffer_skip': np.ceil(n_iter/15).astype(int),
+            'state_buffer_preset_times': [],
         }
 
         print(f'{seed = }')
@@ -82,17 +85,37 @@ for sgc in sgcs:
         print(f'land_quality = {sim_kwargs["land_quality"]}')
         print('\nSimulation over.' + ' '*20)
 
+        def convert_to_serializable(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, (np.integer, np.int32, np.int64)):
+                return int(obj)
+            if isinstance(obj, (np.floating, np.float32, np.float64)):
+                return float(obj)
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            if isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [convert_to_serializable(i) for i in obj]
+            return obj
+
         def save_kwargs(kwargs, path):
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path + '.json', 'w') as f:
-                json.dump(kwargs, f, indent=4)
+                serializable_kwargs = convert_to_serializable(kwargs)
+                json.dump(serializable_kwargs, f, indent=4)
+
+        # def save_kwargs(kwargs, path):
+        #     os.makedirs(os.path.dirname(path), exist_ok=True)
+        #     with open(path + '.json', 'w') as f:
+        #         json.dump(kwargs, f, indent=4)
 
         combined_kwargs = {
             'plant_kwargs': plant_kwargs,
             'sim_kwargs': sim_kwargs
         }
 
-        save_folder = f'Data/linear_decay_case_n{num_plants}'
         surfix = f'{k}'
 
         save_kwargs(combined_kwargs, f'{save_folder}/kwargs_{surfix}')

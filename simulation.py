@@ -51,6 +51,7 @@ class Simulation:
         )
 
         self.density_field_buffer = FieldBuffer(
+            sim=self,
             resolution=kwargs.get('density_field_resolution'),
             size=kwargs.get('density_field_buffer_size'),
             skip=kwargs.get('density_field_buffer_skip', 1),
@@ -114,7 +115,7 @@ class Simulation:
 
         if self.t % self.density_field_buffer.skip == 0 or self.t in self.density_field_buffer.preset_times:
             self.density_field_buffer.add(
-                field=self.density_field.get_field(), t=self.t)
+                field=self.density_field.get_values(), t=self.t)
 
     def run(self, n_iter=None):
         import time
@@ -149,6 +150,8 @@ class Simulation:
             print('\nInterrupted by user...')
 
     def get_collisions(self, plant):
+        if self.kt is None:
+            return []
         plant.is_colliding = False
         collisions = []
         indices = self.kt.query_ball_point(
@@ -183,7 +186,7 @@ class Simulation:
         self.data_buffer.analyze_and_add(state=self.get_state(), t=0)
         self.state_buffer.add(state=self.get_state(), t=0)
         self.density_field_buffer.add(
-            field=self.density_field.get_field(), t=0)
+            field=self.density_field.get_values(), t=0)
 
     def initiate_uniform_lifetimes(self, n, t_min, t_max, **plant_kwargs):
         growth_rate = plant_kwargs['growth_rate']
@@ -234,8 +237,13 @@ class Simulation:
             ax.add_artist(plt.Circle(plant.pos, plant.r, fill=True,
                           color=color, alpha=1, transform=ax.transData))
 
-        # ax.set_xticks([])
-        # ax.set_yticks([])
+        _m = self.kwargs.get('_m')
+        print(f'Simulation.plot_state(): {ax.get_xticks() = }')
+        print(f'Simulation.plot_state(): {_m = }')
+        x_ticks = ax.get_xticks() * _m
+        y_ticks = ax.get_yticks() * _m
+        ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
+        ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
         return fig, ax
 
     def plot_states(self, states, times=None, size=2):
@@ -280,12 +288,14 @@ class Simulation:
 
 
 class FieldBuffer:
-    def __init__(self, resolution=2, size=100, skip=1, preset_times=None, data=None, **sim_kwargs):
+    def __init__(self, sim=None, resolution=2, size=10, skip=1, preset_times=None, data=None, **sim_kwargs):
+        self.sim = sim
         self.size = size    # estimated max number of fields to store
         self.resolution = resolution
         self.skip = skip
         self.times = []
         self.preset_times = preset_times
+        self.sim_kwargs = sim_kwargs
 
         self.fields = np.full(
             (self.size, self.resolution, self.resolution), np.nan)
@@ -296,28 +306,50 @@ class FieldBuffer:
             self.fields = fields
             self.times = times
 
+    # def add(self, field, t):
+    #     fields = self.get_fields()
+    #     if len(self.times) == self.size:
+
+    #         for i, time in enumerate(self.times):
+
+    #             if time not in self.preset_times:
+    #                 self.fields[i] = field
+    #                 self.times.append(t)
+    #                 print(f'\n    FieldBuffer.add(): Added field at time {t}.')
+
+    #                 self.fields = np.concatenate(
+    #                     (fields[:i], np.roll(fields[i:], -1, axis=0)), axis=0)
+    #                 self.times.pop(i)
+
+    #                 print(
+    #                     f'\n    FieldBuffer.add(): Removed field at time {time}.')
+    #                 break
+    #     else:
+    #         self.fields[len(self.times)] = field
+    #         self.times.append(t)
+    #         print(f'\n    FieldBuffer.add(): Added field at time {t}.')
+
     def add(self, field, t):
-        fields = self.get_fields()
-        if len(self.times) == self.size:
+        if len(self.times) == 0 or t != self.times[-1]:
+            if len(self.times) >= self.size:
+                for i, time in enumerate(self.times):
+                    if time not in self.preset_times:
+                        fields = self.get_fields()
+                        B = np.roll(fields[i:], -1, axis=0)
+                        fields = np.concatenate(
+                            (fields[:i], B), axis=0)
+                        self.fields = fields
+                        self.times.pop(i)
+                        print(
+                            f'\n    FieldBuffer.add(): Removed field at time {time}.')
+                        break
 
-            for i, time in enumerate(self.times):
-
-                if time not in self.preset_times:
-                    self.fields[i] = field
-                    self.times.append(t)
-                    print(f'\n    FieldBuffer.add(): Added field at time {t}.')
-
-                    self.fields = np.concatenate(
-                        (fields[:i], np.roll(fields[i:], -1, axis=0)), axis=0)
-                    self.times.pop(i)
-
-                    print(
-                        f'\n    FieldBuffer.add(): Removed field at time {time}.')
-                    break
-        else:
             self.fields[len(self.times)] = field
             self.times.append(t)
-            print(f'\n    FieldBuffer.add(): Added field at time {t}.')
+            print(
+                f'\n    FieldBuffer.add(): Added field at time {t}.')
+            print(f'\n    FieldBuffer.add(): {len(self.times) = }')
+            print(f'\n    FieldBuffer.add(): {len(self.fields) = }')
 
     def get(self, times=None):
         if times is None:
@@ -372,19 +404,29 @@ class FieldBuffer:
     def plot_field(self, field, time, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        ax.imshow(field, origin='upper', cmap='Greys',
+        ax.imshow(field.T, origin='lower', cmap='Greys',
                   vmin=vmin, vmax=vmax, extent=extent)
         ax.set_title(f't = {time}', fontsize=7)
-        # ax.set_xticks([])
-        # ax.set_yticks([])
+
+        # if self.sim is not None:
+        #     _m = self.sim.kwargs.get('_m')
+        #     if _m is not None:
+        #         x_ticks = ax.get_xticks() * _m
+        #         y_ticks = ax.get_yticks() * _m
+        #         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
+        #         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
+        ax.set_xticks([])
+        ax.set_yticks([])
         return fig, ax
 
     def plot(self, size=2, vmin=0, vmax=None, title='FieldBuffer', extent=[-0.5, 0.5, -0.5, 0.5]):
         fields = self.get_fields()
+        times = self.get_times()
         if vmax is None:
             vmax = np.nanmax(fields)
-        times = self.get_times()
         T = len(times)
+        print(f'FieldBuffer.plot(): {T = }')
+
         if T == 1:
             n_rows = 1
             n_cols = 1
@@ -393,13 +435,12 @@ class FieldBuffer:
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
 
         fig, ax = plt.subplots(
-            n_rows, n_cols, figsize=(size*n_cols*1.5, size*n_rows))
-        if not title is None:
-            fig.suptitle(title, fontsize=10)
+            n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
+        fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95,
+                            top=0.95, wspace=0.05, hspace=0.05)
+        fig.tight_layout()
 
-        # Adjust subplot parameters to make room for the colorbar
-        fig.subplots_adjust(left=0.1, bottom=0.1, right=0.9,
-                            top=0.9, wspace=0.1, hspace=0.1)
+        fig.suptitle(title, fontsize=10)
 
         cax = fig.add_axes([0.05, 0.05, 0.9, 0.02])
         norm = plt.Normalize(vmin=vmin, vmax=vmax)
@@ -408,7 +449,6 @@ class FieldBuffer:
         cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
         cbar.ax.tick_params(labelsize=7)
 
-        # fig.tight_layout()
         if T == 1:
             self.plot_field(fields[0], time=times[0],
                             size=size, fig=fig, ax=ax, vmin=vmin, vmax=vmax, extent=extent)
@@ -425,21 +465,21 @@ class FieldBuffer:
                     self.plot_field(
                         field=field, time=times[i], size=size, fig=fig, ax=ax[l, k], vmin=vmin, vmax=vmax, extent=extent)
 
-            for j in range(n_rows*n_cols):
-                l = j // n_cols
-                k = j % n_cols
-
-                if j > T - 1:
-                    if n_rows == 1:
-                        ax[j].axis('off')
-                    else:
-                        ax[l, k].axis('off')
+        if T < n_rows*n_cols:
+            for j in range(T, n_rows*n_cols):
+                if n_rows == 1:
+                    ax[j].axis('off')
+                else:
+                    l = j//n_cols
+                    k = j % n_cols
+                    ax[l, k].axis('off')
 
         return fig, ax
 
 
 class StateBuffer:
-    def __init__(self, size=100, skip=10, preset_times=None, data=None, plant_kwargs=None):
+    def __init__(self, size=100, skip=10, sim=None, preset_times=None, data=None, plant_kwargs=None):
+        self.sim = sim
         self.size = size
         self.skip = skip
         self.states = []
@@ -452,14 +492,8 @@ class StateBuffer:
         self.preset_times = preset_times
 
     def add(self, state, t):
-        if len(self.states) == 0 or state != self.states[-1]:
-            self.states.append(state)
-            self.times.append(t)
-            print(
-                f'\n    StateBuffer.add(): Added state at time {t}.')
-
-            if len(self.states) > self.size:
-
+        if len(self.times) == 0 or t != self.times[-1]:
+            if len(self.times) >= self.size:
                 for i, time in enumerate(self.times):
                     if time not in self.preset_times:
                         self.states.pop(i)
@@ -467,6 +501,11 @@ class StateBuffer:
                         print(
                             f'\n    StateBuffer.add(): Removed state at time {time}.')
                         break
+
+            self.states.append(state)
+            self.times.append(t)
+            print(
+                f'\n    StateBuffer.add(): Added state at time {t}.')
 
     def get(self, times=None):
         if times is None:
@@ -558,20 +597,27 @@ class StateBuffer:
             ax.add_artist(plt.Circle(plant.pos, plant.r,
                                      color='green', fill=True, transform=ax.transData))
 
+        # if self.sim is not None:
+        #     _m = self.sim.kwargs.get('_m')
+        #     if _m is not None:
+        #         x_ticks = ax.get_xticks() * _m
+        #         y_ticks = ax.get_yticks() * _m
+        #         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
+        #         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
         ax.set_xticks([])
         ax.set_yticks([])
         return fig, ax
 
-    def plot(self, size=2):
+    def plot(self, size=2, title='StateBuffer'):
         states = self.get_states()
         times = self.get_times()
-        l = len(states)
-        if l == 1:
+        T = len(times)
+        if T == 1:
             n_rows = 1
             n_cols = 1
         else:
-            n_rows = int(np.floor(l / np.sqrt(l)))
-            n_cols = (l + 1) // n_rows + (l % n_rows > 0)
+            n_rows = int(np.floor(T / np.sqrt(T)))
+            n_cols = (T + 1) // n_rows + (T % n_rows > 0)
         print(f'StateBuffer.plot(): {n_rows = }, {n_cols = }')
 
         fig, ax = plt.subplots(
@@ -579,12 +625,11 @@ class StateBuffer:
         fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95,
                             top=0.95, wspace=0.05, hspace=0.05)
         fig.tight_layout()
-        if len(states) == 1:
+        fig.suptitle(title, fontsize=10)
+        if T == 1:
             self.plot_state(state=states[0], t=times[0], size=size, ax=ax)
         else:
-            i = 0
-            # for i, state in enumerate(states):
-            while i < len(states):
+            for i in range(T):
                 state = states[i]
                 if n_rows == 1:
                     k = i
@@ -596,9 +641,8 @@ class StateBuffer:
                     self.plot_state(
                         state=state, t=times[i], size=size, fig=fig, ax=ax[l, k])
 
-                i += 1
-        if len(states) < n_rows*n_cols:
-            for j in range(len(states), n_rows*n_cols):
+        if T < n_rows*n_cols:
+            for j in range(T, n_rows*n_cols):
                 if n_rows == 1:
                     ax[j].axis('off')
                 else:

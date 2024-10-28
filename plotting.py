@@ -38,9 +38,9 @@ def plot_kwargs(kwargs, title=None):
     fig.tight_layout()
 
 
-load_folder = 'Data/linear_decay_case_n100'
+load_folder = 'Data/linear_decay_case_n1000'
 # surfix = '10'
-for i in range(15):
+for i in range(3):
     surfix = str(i)
     kwargs = pd.read_json(
         f'{load_folder}/kwargs_{surfix}.json', typ='series').to_dict()
@@ -52,7 +52,7 @@ for i in range(15):
     density_field_buffer_arr = pd.read_csv(
         f'{load_folder}/density_field_buffer_{surfix}.csv', header=None).to_numpy()
     density_field_buffer = FieldBuffer(
-        data=density_field_buffer_arr, skip=sim_kwargs.get('density_field_buffer_skip'))
+        data=density_field_buffer_arr, skip=sim_kwargs.get('density_field_buffer_skip'), sim_kwargs=sim_kwargs)
     density_field_buffer.plot(
         size=2, title=f'{load_folder} - sim {surfix}')
 
