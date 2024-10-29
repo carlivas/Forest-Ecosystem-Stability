@@ -219,7 +219,7 @@ class Simulation:
         ax.set_ylim(-self.half_height, self.half_height)
         ax.set_aspect('equal', 'box')
         if t is not None:
-            ax.set_title(f'{t = }', fontsize=7)
+            ax.set_title(f'{t=}', fontsize=7)
         else:
             ax.set_title('')
         for plant in state:
@@ -238,8 +238,8 @@ class Simulation:
                           color=color, alpha=1, transform=ax.transData))
 
         _m = self.kwargs.get('_m')
-        print(f'Simulation.plot_state(): {ax.get_xticks() = }')
-        print(f'Simulation.plot_state(): {_m = }')
+        print(f'Simulation.plot_state(): {ax.get_xticks()=}')
+        print(f'Simulation.plot_state(): {_m=}')
         x_ticks = ax.get_xticks() * _m
         y_ticks = ax.get_yticks() * _m
         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
@@ -250,7 +250,7 @@ class Simulation:
         l = len(states)
         n_rows = int(np.floor(l / np.sqrt(l)))
         n_cols = (l + 1) // n_rows + (l % n_rows > 0)
-        print(f'simulation.plot_states(): {n_rows = }, {n_cols = }')
+        print(f'simulation.plot_states(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
@@ -348,8 +348,6 @@ class FieldBuffer:
             self.times.append(t)
             print(
                 f'\n    FieldBuffer.add(): Added field at time {t}.')
-            print(f'\n    FieldBuffer.add(): {len(self.times) = }')
-            print(f'\n    FieldBuffer.add(): {len(self.fields) = }')
 
     def get(self, times=None):
         if times is None:
@@ -425,7 +423,7 @@ class FieldBuffer:
         if vmax is None:
             vmax = np.nanmax(fields)
         T = len(times)
-        print(f'FieldBuffer.plot(): {T = }')
+        print(f'FieldBuffer.plot(): {T=}')
 
         if T == 1:
             n_rows = 1
@@ -618,7 +616,7 @@ class StateBuffer:
         else:
             n_rows = int(np.floor(T / np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
-        print(f'StateBuffer.plot(): {n_rows = }, {n_cols = }')
+        print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
@@ -656,19 +654,19 @@ class StateBuffer:
 class DataBuffer:
     def __init__(self, size=None, data=None):
         if data is not None:
-            self.buffer = data
+            self.values = data
             self.length = len(data)
             self.size = len(data)
         else:
             self.size = size
-            self.buffer = np.full((size, 3), np.nan)
+            self.values = np.full((size, 3), np.nan)
             self.length = 0
 
     def add(self, data, t):
-        self.buffer[t] = [t, *data]
+        self.values[t] = [t, *data]
 
-        if len(self.buffer) > self.size:
-            self.buffer.pop(0)
+        if len(self.values) > self.size:
+            self.values.pop(0)
         self.length = self.length + 1
 
     def analyze_state(self, state, t):
@@ -686,7 +684,7 @@ class DataBuffer:
         return data
 
     def finalize(self):
-        self.buffer = self.buffer[:self.length-1]
+        self.values = self.values[:self.length-1]
 
     def plot(self, size=6, title='DataBuffer'):
         fig, ax = plt.subplots(2, 1, figsize=(
@@ -696,10 +694,10 @@ class DataBuffer:
             fig.suptitle(title, fontsize=10)
 
         fig.tight_layout(pad=3.0)
-        ax[0].plot(self.buffer[:, 0], self.buffer[:, 1],
+        ax[0].plot(self.values[:, 0], self.values[:, 1],
                    label='Biomass', color='green')
         # ax[0].set_xticks([])
-        ax[1].plot(self.buffer[:, 0], self.buffer[:, 2],
+        ax[1].plot(self.values[:, 0], self.values[:, 2],
                    label='Population Size', color='teal')
         ax[1].set_xlabel('Time')
 
@@ -711,8 +709,11 @@ class DataBuffer:
     def get_data(self, indices=None):
 
         if indices is None:
-            return copy.deepcopy(self.buffer)
-        return copy.deepcopy([self.buffer[i] for i in indices])
+            return copy.deepcopy(self.values)
+        if isinstance(indices, int):
+            return copy.deepcopy(self.values[indices])
+
+        return copy.deepcopy([self.values[i] for i in indices])
 
     def save(self, path):
 
@@ -722,7 +723,7 @@ class DataBuffer:
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         # Save the DataBuffer object to the specified path as csv
-        np.savetxt(path, self.buffer, delimiter=',')
+        np.savetxt(path, self.values, delimiter=',')
         # with open(path, 'wb') as f:
         #     pickle.dump(self, f)
 

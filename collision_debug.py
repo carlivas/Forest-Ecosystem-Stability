@@ -27,6 +27,8 @@ sim_kwargs = {
     'kt_leafsize': 10,
     'land_quality': -0.1,
     'density_check_radius': 0.3
+    
+    
 }
 
 sim = Simulation(**sim_kwargs)
