@@ -9,122 +9,119 @@ import json
 import os
 
 # Save the data in a folder with the current time as the name
-save_folder = f'Data/{time.strftime("%Y%m%d_%H%M%S")}/'
+save_folder = f'Data\\temp'
 
-num_plants = 1_00
-n_iter = 10_000
-m2pp = m2_per_plant = 10_000  # m2/plant
+num_plants = 10_000
+n_iter = 100_000
+m2pp = m2_per_plant = 13_698  # m2/plant
 
 
 half_width = half_height = 0.5
 A_bound = 2 * half_width * 2 * half_height
 _m = np.sqrt(A_bound/(m2pp*num_plants))
 
-k = 24
-while k < 1000:
-    sgc = np.random.uniform(0.0, 1)
-    lq = np.random.uniform(-1, 1)
-    seed = np.random.randint(0, 1_000)
-    np.random.seed(seed)
+lq = 0.888
+sgc = 0.021
 
-    # Initialize simulation
-    plant_kwargs = {
-        'r_min': 0.1 * _m,
-        'r_max': 30 * _m,
-        'growth_rate': 0.1 * _m,
-        'dispersal_range': 100 * _m,
-        'species_germination_chance': sgc,
-    }
+seed = np.random.randint(0, 1e9)
+np.random.seed(seed)
 
-    buffer_size = 15
-    buffer_skip = 10
-    sim_kwargs = {
-        'seed': seed,
-        'n_iter': n_iter,
-        'half_width': half_width,
-        'half_height': half_height,
+# Initialize simulation
+plant_kwargs = {
+    'r_min': 0.1 * _m,
+    'r_max': 30 * _m,
+    'growth_rate': 0.1 * _m,
+    'dispersal_range': 100 * _m,
+    'species_germination_chance': sgc,
+}
 
-        'm2_per_plant': m2_per_plant,
-        '_m': _m,
-        'num_plants': num_plants,
-        'land_quality': lq,
+buffer_size = 15
+buffer_skip = 10
+buffer_preset_times = np.linspace(0, 20_000, buffer_size).astype(int)
 
-        'kt_leafsize': 10,
+sim_kwargs = {
+    'seed': seed,
+    'n_iter': n_iter,
+    'half_width': half_width,
+    'half_height': half_height,
 
-        'density_check_radius': 100 * _m,
-        'density_field_resolution': 50,
+    'm2_per_plant': m2_per_plant,
+    '_m': _m,
+    'num_plants': num_plants,
+    'land_quality': lq,
 
-        'density_field_buffer_size': buffer_size,
-        'density_field_buffer_skip': buffer_skip,
-        'density_field_buffer_preset_times': np.linspace(0, n_iter, buffer_size).tolist(),
+    'kt_leafsize': 10,
 
-        'state_buffer_size': buffer_size,
-        'state_buffer_skip': buffer_skip,
-        'state_buffer_preset_times': np.linspace(0, n_iter, buffer_size).tolist(),
-    }
+    'density_check_radius': 100 * _m,
 
-    print(f'{seed = }')
-    print(f'1 m = {_m} u')
-    print(f'1 u = {1/_m} m')
-    print(
-        f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
-    print(f'land_quality = {sim_kwargs["land_quality"]}')
+    'density_field_buffer_size': buffer_size,
+    'density_field_buffer_skip': buffer_skip,
+    'density_field_buffer_preset_times': buffer_preset_times,
 
-    sim = Simulation(**sim_kwargs)
+    'state_buffer_size': buffer_size,
+    'state_buffer_skip': buffer_skip,
+    'state_buffer_preset_times': buffer_preset_times,
+}
 
-    sim.initiate_uniform_lifetimes(
-        n=num_plants, t_min=1, t_max=300, **plant_kwargs)
+print(f'{seed=}')
+print(f'1 u = {1/_m} m')
+print(
+    f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
+print(f'land_quality = {sim_kwargs["land_quality"]}')
+print(f'{buffer_preset_times=}')
 
-    sim.run(n_iter)
+sim = Simulation(**sim_kwargs)
 
-    sim.data_buffer.finalize()
+sim.initiate_uniform_lifetimes(
+    n=num_plants, t_min=1, t_max=300, **plant_kwargs)
 
-    print(f'{seed = }')
-    print(f'1 m = {_m} u')
-    print(f'1 u = {1/_m} m')
-    print(
-        f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
-    print(f'land_quality = {sim_kwargs["land_quality"]}')
-    print('\nSimulation over.' + ' '*20)
+sim.run(n_iter)
 
-    def convert_to_serializable(obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, (np.integer, np.int32, np.int64)):
-            return int(obj)
-        if isinstance(obj, (np.floating, np.float32, np.float64)):
-            return float(obj)
-        if isinstance(obj, np.bool_):
-            return bool(obj)
-        if isinstance(obj, dict):
-            return {k: convert_to_serializable(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [convert_to_serializable(i) for i in obj]
-        return obj
+sim.data_buffer.finalize()
 
-    def save_kwargs(kwargs, path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path + '.json', 'w') as f:
-            serializable_kwargs = convert_to_serializable(kwargs)
-            json.dump(serializable_kwargs, f, indent=4)
+print(f'{seed=}')
+print(f'1 u = {1/_m} m')
+print(
+    f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
+print(f'land_quality = {sim_kwargs["land_quality"]}')
+print(f'{buffer_preset_times=}')
+print('\nSimulation over.' + ' '*20)
 
-    # def save_kwargs(kwargs, path):
-    #     os.makedirs(os.path.dirname(path), exist_ok=True)
-    #     with open(path + '.json', 'w') as f:
-    #         json.dump(kwargs, f, indent=4)
 
-    combined_kwargs = {
-        'plant_kwargs': plant_kwargs,
-        'sim_kwargs': sim_kwargs
-    }
+def convert_to_serializable(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    if isinstance(obj, (np.floating, np.float32, np.float64)):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_to_serializable(i) for i in obj]
+    return obj
 
-    surfix = f'{k}'
 
-    save_kwargs(combined_kwargs, f'{save_folder}/kwargs_{surfix}')
-    sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
-    sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
-    sim.density_field_buffer.save(
-        f'{save_folder}/density_field_buffer_{surfix}')
+def save_kwargs(kwargs, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.json', 'w') as f:
+        serializable_kwargs = convert_to_serializable(kwargs)
+        json.dump(serializable_kwargs, f, indent=4)
+    print('Kwargs saved.')
 
-    print('Data saved.')
-    k += 1
+
+combined_kwargs = {
+    'plant_kwargs': plant_kwargs,
+    'sim_kwargs': sim_kwargs
+}
+
+surfix = time.strftime("%Y%m%d-%H%M%S")
+save_kwargs(combined_kwargs, f'{save_folder}/kwargs_{surfix}')
+sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
+sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
+sim.density_field_buffer.save(
+    f'{save_folder}/density_field_buffer_{surfix}')
+
+print('Data saved.')

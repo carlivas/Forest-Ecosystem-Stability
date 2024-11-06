@@ -43,16 +43,19 @@ class Simulation:
             size=kwargs.get('n_iter'),
         )
 
+        density_field_resolution = np.ceil((2*self.half_width) /
+                                           (np.sqrt(2) * kwargs.get('density_check_radius'))).astype(int)
+        print(f'Simulation.__init__(): {density_field_resolution=}')
         self.density_field = DensityField(
-            self.half_width,
-            self.half_height,
-            kwargs.get('density_check_radius'),
-            kwargs.get('density_field_resolution')
+            half_width=self.half_width,
+            half_height=self.half_height,
+            check_radius=kwargs.get('density_check_radius'),
+            resolution=density_field_resolution,
         )
 
         self.density_field_buffer = FieldBuffer(
             sim=self,
-            resolution=kwargs.get('density_field_resolution'),
+            resolution=density_field_resolution,
             size=kwargs.get('density_field_buffer_size'),
             skip=kwargs.get('density_field_buffer_skip', 1),
             preset_times=kwargs.get('density_field_buffer_preset_times', None)
@@ -306,31 +309,15 @@ class FieldBuffer:
             self.fields = fields
             self.times = times
 
-    # def add(self, field, t):
-    #     fields = self.get_fields()
-    #     if len(self.times) == self.size:
-
-    #         for i, time in enumerate(self.times):
-
-    #             if time not in self.preset_times:
-    #                 self.fields[i] = field
-    #                 self.times.append(t)
-    #                 print(f'\n    FieldBuffer.add(): Added field at time {t}.')
-
-    #                 self.fields = np.concatenate(
-    #                     (fields[:i], np.roll(fields[i:], -1, axis=0)), axis=0)
-    #                 self.times.pop(i)
-
-    #                 print(
-    #                     f'\n    FieldBuffer.add(): Removed field at time {time}.')
-    #                 break
-    #     else:
-    #         self.fields[len(self.times)] = field
-    #         self.times.append(t)
-    #         print(f'\n    FieldBuffer.add(): Added field at time {t}.')
+        if preset_times is not None:
+            integer_types = (np.int8, np.uint8, np.int16, np.uint16,
+                             np.int32, np.uint32, np.int64, np.uint64)
+            if not all(isinstance(t, integer_types) for t in preset_times):
+                raise ValueError(
+                    "All elements in preset_times must be integers")
 
     def add(self, field, t):
-        if len(self.times) == 0 or t != self.times[-1]:
+        if len(self.times) == 0 or t not in self.times:
             if len(self.times) >= self.size:
                 for i, time in enumerate(self.times):
                     if time not in self.preset_times:
@@ -340,14 +327,16 @@ class FieldBuffer:
                             (fields[:i], B), axis=0)
                         self.fields = fields
                         self.times.pop(i)
-                        print(
-                            f'\n    FieldBuffer.add(): Removed field at time {time}.')
+                        # print(
+                        # f'FieldBuffer.add(): Removed field at time {time}.')
                         break
 
             self.fields[len(self.times)] = field
             self.times.append(t)
-            print(
-                f'\n    FieldBuffer.add(): Added field at time {t}.')
+            # print(f'FieldBuffer.add(): Added field at time {t}.')
+            # print(f'FieldBuffer.add(): {self.times=}')
+            # print(f'FieldBuffer.add(): {len(self.fields)=}')
+            # print()
 
     def get(self, times=None):
         if times is None:
@@ -423,8 +412,10 @@ class FieldBuffer:
         if vmax is None:
             vmax = np.nanmax(fields)
         T = len(times)
-        print(f'FieldBuffer.plot(): {T=}')
 
+        if T == 0:
+            print('FieldBuffer.plot(): No states to plot.')
+            return None, None
         if T == 1:
             n_rows = 1
             n_cols = 1
@@ -482,28 +473,32 @@ class StateBuffer:
         self.skip = skip
         self.states = []
         self.times = []
+        self.preset_times = preset_times
 
         if data is not None:
             self.import_data(
                 data=data, plant_kwargs=plant_kwargs)
 
-        self.preset_times = preset_times
+        if preset_times is not None:
+            preset_times = [int(t) for t in preset_times]
 
     def add(self, state, t):
-        if len(self.times) == 0 or t != self.times[-1]:
+        if len(self.times) == 0 or t not in self.times:
             if len(self.times) >= self.size:
                 for i, time in enumerate(self.times):
                     if time not in self.preset_times:
                         self.states.pop(i)
                         self.times.pop(i)
-                        print(
-                            f'\n    StateBuffer.add(): Removed state at time {time}.')
+                        # print(
+                        #     f'StateBuffer.add(): Removed state at time {time}.')
                         break
 
             self.states.append(state)
             self.times.append(t)
-            print(
-                f'\n    StateBuffer.add(): Added state at time {t}.')
+            # print(f'StateBuffer.add(): Added state at time {t}.')
+            # print(f'StateBuffer.add(): {self.times=}')
+            # print(f'StateBuffer.add(): {len(self.states)=}')
+            # print()
 
     def get(self, times=None):
         if times is None:
@@ -512,8 +507,8 @@ class StateBuffer:
         indices = []
         for t in times:
             if t < self.times[0] or t > self.times[-1]:
-                print(
-                    f'!Warning! StateBuffer.get(): Time {t} is out of bounds. Start time: {self.times[0]}, End time: {self.times[-1]}')
+                warnings.warn(
+                    f'Time {t} is out of bounds. Start time: {self.times[0]}, End time: {self.times[-1]}', UserWarning)
                 indices.append(np.nan)
             else:
                 indices.append(np.where(np.array(self.times) == t)[0][0])
@@ -610,6 +605,9 @@ class StateBuffer:
         states = self.get_states()
         times = self.get_times()
         T = len(times)
+        if T == 0:
+            print('StateBuffer.plot(): No states to plot.')
+            return None, None
         if T == 1:
             n_rows = 1
             n_cols = 1
@@ -654,16 +652,16 @@ class StateBuffer:
 class DataBuffer:
     def __init__(self, size=None, data=None):
         if data is not None:
-            self.values = data
-            self.length = len(data)
             self.size = len(data)
+            self.values = np.array(data)
+            self.length = len(data)
         else:
             self.size = size
             self.values = np.full((size, 3), np.nan)
             self.length = 0
 
     def add(self, data, t):
-        self.values[t] = [t, *data]
+        self.values[t] = np.array([t, *data])
 
         if len(self.values) > self.size:
             self.values.pop(0)
@@ -673,8 +671,8 @@ class DataBuffer:
         biomass = sum([plant.area for plant in state])
         population_size = len(state)
         data = np.array([biomass, population_size])
-        print(' '*45 +
-              f'|\tt = {t:^5}    |    P = {population_size:^6}    |    B = {np.round(biomass, 5):^5}', end='\r')
+        print(' '*25 + f'\t|\tt = {t:^5}    |    P = {population_size:^6}    |    B = {
+              np.round(biomass, 5):^5}', end='\r')
         self.add(data, t)
         return data
 

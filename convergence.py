@@ -9,15 +9,18 @@ from plant import Plant
 from simulation import Simulation, StateBuffer, DataBuffer, FieldBuffer
 from scipy.signal import welch
 
-load_folder = r'Data\20241028_114615'
+load_folder = r'Data\lq_rc_ensemble_n100'
 
 state_buffers = []
 density_field_buffers = []
 data_buffers = []
 kwargs = []
-
 end_populations = []
-for idx, i in enumerate([0, 3]):
+
+sim_nums = [f.split('_')[-1].split('.')[0]
+            for f in os.listdir(load_folder) if 'data_buffer' in f]
+
+for idx, i in enumerate(sim_nums):
     with open(os.path.join(load_folder, f'kwargs_{i}.json'), 'r') as file:
         kwargs.append(json.load(file))
 
@@ -38,8 +41,6 @@ for idx, i in enumerate([0, 3]):
         f'{load_folder}/data_buffer_{i}.csv', header=None).to_numpy()
     data_buffers.append(DataBuffer(data=data_buffer_arr))
 
-
-for idx, i in enumerate([0, 3]):
     data = data_buffers[idx].values
     population = data[:, 2]
     window_size = 1000
@@ -52,15 +53,13 @@ for idx, i in enumerate([0, 3]):
         np.std(population[:j]) for j in range(len(population))
     ]
 
-    fig, ax = plt.subplots(3, 1, figsize=(6, 6))
-    ax[0].plot(running_avg_population, label='Running Average')
-    ax[0].plot(population, label='Population')
+    fig, ax = plt.subplots(2, 1, figsize=(6, 6))
+    ax[0].plot(population, 'g', label='Population', alpha=0.5)
+    ax[0].plot(running_avg_population, 'k--', label='Running Average')
 
-    ax[1].plot(running_avg_change_population, label='Running Avg Change')
-
-    ax[2].plot(running_std_population, label='Running Std')
+    ax[1].plot(running_std_population, 'r', label='Running Std')
 
     fig.legend()
+    fig.suptitle(f'Sim {i}')
 
-
-plt.show()
+    plt.show()
