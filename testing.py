@@ -2,17 +2,20 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 import time
-
-from plant import Plant
-from simulation import Simulation
 import json
 import os
+import sys
 
-# Save the data in a folder with the current time as the name
+from mods.plant import Plant
+from mods.simulation import Simulation
+
+plot_results = True
+
+save_results = True
 save_folder = f'Data\\temp'
 
-num_plants = 10_000
-n_iter = 100_000
+num_plants = 10_0
+n_iter = 10_00
 m2pp = m2_per_plant = 13_698  # m2/plant
 
 
@@ -20,8 +23,8 @@ half_width = half_height = 0.5
 A_bound = 2 * half_width * 2 * half_height
 _m = np.sqrt(A_bound/(m2pp*num_plants))
 
-lq = 0.888
-sgc = 0.021
+lq = 0
+sgc = 0.002
 
 seed = np.random.randint(0, 1e9)
 np.random.seed(seed)
@@ -37,7 +40,7 @@ plant_kwargs = {
 
 buffer_size = 15
 buffer_skip = 10
-buffer_preset_times = np.linspace(0, 20_000, buffer_size).astype(int)
+buffer_preset_times = np.linspace(0, n_iter, buffer_size).astype(int)
 
 sim_kwargs = {
     'seed': seed,
@@ -52,7 +55,8 @@ sim_kwargs = {
 
     'kt_leafsize': 10,
 
-    'density_check_radius': 100 * _m,
+    'density_check_radius': 200 * _m,
+    'density_field_resolution': 100,
 
     'density_field_buffer_size': buffer_size,
     'density_field_buffer_skip': buffer_skip,
@@ -63,29 +67,30 @@ sim_kwargs = {
     'state_buffer_preset_times': buffer_preset_times,
 }
 
-print(f'{seed=}')
-print(f'1 u = {1/_m} m')
-print(
-    f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
-print(f'land_quality = {sim_kwargs["land_quality"]}')
-print(f'{buffer_preset_times=}')
+# print(f'{seed=}')
+# print(f'1 u = {1/_m} m')
+# print(
+#     f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
+# print(f'land_quality = {sim_kwargs["land_quality"]}')
+# print(f'{buffer_preset_times=}')
 
 sim = Simulation(**sim_kwargs)
 
 sim.initiate_uniform_lifetimes(
     n=num_plants, t_min=1, t_max=300, **plant_kwargs)
 
+print(f'Simulation initiated. Time: {time.strftime("%H:%M:%S")}\n')
 sim.run(n_iter)
 
 sim.data_buffer.finalize()
 
-print(f'{seed=}')
-print(f'1 u = {1/_m} m')
-print(
-    f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
-print(f'land_quality = {sim_kwargs["land_quality"]}')
-print(f'{buffer_preset_times=}')
-print('\nSimulation over.' + ' '*20)
+# print(f'{seed=}')
+# print(f'1 u = {1/_m} m')
+# print(
+#     f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
+# print(f'land_quality = {sim_kwargs["land_quality"]}')
+# print(f'{buffer_preset_times=}')
+# print('\nSimulation over.' + ' '*20)
 
 
 def convert_to_serializable(obj):
@@ -117,11 +122,21 @@ combined_kwargs = {
     'sim_kwargs': sim_kwargs
 }
 
-surfix = time.strftime("%Y%m%d-%H%M%S")
-save_kwargs(combined_kwargs, f'{save_folder}/kwargs_{surfix}')
-sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
-sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
-sim.density_field_buffer.save(
-    f'{save_folder}/density_field_buffer_{surfix}')
+if save_results:
+    surfix = time.strftime("%Y%m%d-%H%M%S")
+    save_kwargs(combined_kwargs, f'{save_folder}/kwargs_{surfix}')
+    sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
+    sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
+    sim.density_field_buffer.save(
+        f'{save_folder}/density_field_buffer_{surfix}')
 
-print('Data saved.')
+    print('Data saved.')
+
+if plot_results:
+    print('Plotting...')
+    surfix = time.strftime("%Y%m%d-%H%M%S")
+    print(*combined_kwargs)
+    sim.state_buffer.plot(title=f'state_buffer_{surfix}')
+    sim.data_buffer.plot(title=f'data_buffer_{surfix}')
+    sim.density_field_buffer.plot(title=f'density_field_buffer_{surfix}')
+    plt.show()

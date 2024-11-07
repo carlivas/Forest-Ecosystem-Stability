@@ -1,5 +1,5 @@
 import numpy as np
-# import quadT
+import copy
 
 
 class Plant:
@@ -60,7 +60,7 @@ class Plant:
             new_pos = self.pos + new_dir * d
 
             # Determine if reproduction is successful based on chance and site quality
-            reproduction_chance = simulation.site_quality(
+            reproduction_chance = simulation.quality_nearby(
                 new_pos) * self.species_germination_chance
 
             # if self.reproduction_thresholds[0] < p and p < self.reproduction_thresholds[1]:

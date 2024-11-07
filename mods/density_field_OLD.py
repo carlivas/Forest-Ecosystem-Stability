@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy.interpolate import RegularGridInterpolator
-from scipy.special import erf
 import copy
+from scipy.interpolate import RegularGridInterpolator
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 
 SQRT2 = np.sqrt(2)
 PI = np.pi
@@ -67,7 +67,6 @@ class DensityField():
                     pos = np.array([self.xx[i],
                                     self.yy[j]])
                     self.values[i, j] = self.density_local(simulation, pos)
-                    # self.values[i, j] = self.density_local(simulation, pos)
 
         self.interp_func = RegularGridInterpolator(
             (self.xx, self.yy), self.values, method='linear')

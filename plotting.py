@@ -4,8 +4,11 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import os
 
-from plant import Plant
-from simulation import Simulation, StateBuffer, DataBuffer, FieldBuffer
+from mods.plant import Plant
+from mods.simulation import Simulation
+from mods.state_buffer import StateBuffer
+from mods.data_buffer import DataBuffer
+from mods.field_buffer import FieldBuffer
 
 
 def plot_kwargs(kwargs, title=None):
