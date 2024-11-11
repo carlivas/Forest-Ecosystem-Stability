@@ -86,9 +86,8 @@ for i, n in enumerate(sim_nums):
     #     size=2, title=f'{load_folder} - sim {n}')
     p += 2
 
-    if p % 20 == 0 or p >= len(sim_nums):
+    if p % 20 == 0 or i >= len(sim_nums) - 1:
         plt.show()
-
 #
 #
 #

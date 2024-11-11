@@ -26,8 +26,10 @@ class DataBuffer:
         biomass = sum([plant.area for plant in state])
         population_size = len(state)
         data = np.array([biomass, population_size])
-        print(' '*25 + f'\t|\tt = {t:^5}    |    P = {population_size:^6}    |    B = {
-              np.round(biomass, 5):^5}', end='\r')
+        print(' '*30 + f'|\tt = {t:^5}\t|\tP = {population_size:^6}\t|\tB = {
+              np.round(biomass, 5):^5}\t|', end='\r')
+        if t % 100 == 0:
+            print()
         self.add(data, t)
         return data
 

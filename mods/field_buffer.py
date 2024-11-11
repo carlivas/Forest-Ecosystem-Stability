@@ -105,6 +105,8 @@ class FieldBuffer:
     def plot_field(self, field, time, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
+        ax.contour(field, levels=[1.0], colors=[
+                   'r'], linewidths=[1], alpha=0.5)
         ax.imshow(field, origin='lower', cmap='Greys',
                   vmin=vmin, vmax=vmax, extent=extent)
         ax.set_title(f't = {time}', fontsize=7)

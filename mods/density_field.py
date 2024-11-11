@@ -11,6 +11,23 @@ PI = np.pi
 SQRTPI = np.sqrt(PI)
 
 
+class kde(gaussian_kde):
+    def __init__(self, dataset, bw_method=None, weights=None):
+        super().__init__(dataset, bw_method=bw_method, weights=weights)
+
+    def _compute_covariance(self):
+        """Computes the covariance matrix for each Gaussian kernel using
+        covariance_factor().
+        """
+        self.factor = self.covariance_factor()
+        self._data_covariance = np.eye(self.dataset.shape[0])
+        self._data_cho_cov = np.eye(self.dataset.shape[0])
+        self.covariance = self._data_covariance * self.factor**2
+        self.cho_cov = (self._data_cho_cov * self.factor).astype(np.float64)
+        self.log_det = 2*np.log(np.diag(self.cho_cov
+                                        * np.sqrt(2*np.pi))).sum()
+
+
 class DensityField():
     def __init__(self, half_width, half_height, check_radius, resolution, values=None):
         print('!WARNING! DensityField is using gaussian_kde instead of RegularGridInterpolator, and more testing is needed.')
@@ -33,7 +50,7 @@ class DensityField():
         positions = np.array([plant.pos
                              for plant in simulation.plants])
         areas = np.array([plant.area for plant in simulation.plants])
-        self.kde = gaussian_kde(
+        self.kde = kde(
             positions.T, bw_method=self.bandwidth, weights=areas)
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):

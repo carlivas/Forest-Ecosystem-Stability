@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from matplotlib.colors import Normalize
+from scipy.stats import gaussian_kde
 
 from mods.plant import Plant
 from mods.density_field import DensityField
@@ -17,6 +18,12 @@ def check_pos_collision(pos, plant):
 
 def check_collision(p1, p2):
     return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
+
+
+def dbh_to_crown_radius(dbh):
+    # everything in m
+    d = 1.42 + 28.17*dbh - 11.26*dbh**2
+    return d/2
 
 
 class Simulation:
@@ -205,12 +212,33 @@ class Simulation:
         self.add(plants)
         self.initiate()
 
-    def plot(self, size=2, t=None, highlight=None):
-        if t is None:
-            t = self.t
-        fig, ax = self.plot_state(
-            self.get_state(), t=t, size=size, highlight=highlight)
-        return fig, ax
+    def initiate_dense_distribution(self, n, **plant_kwargs):
+        _m = self.kwargs.get('_m')
+        mean_dbhs = np.array([0.05, 0.2, 0.4, 0.6, 0.85, 1.50])  # in m
+        mean_rs = dbh_to_crown_radius(mean_dbhs) * _m
+        freqs = np.array([5800, 378.8, 50.98, 13.42, 5.62, 0.73])
+
+        # Apply log transformation to the data
+        log_mean_rs = np.log(mean_rs)
+
+        # Calculate the KDE of the log-transformed data
+        kde = gaussian_kde(log_mean_rs, weights=freqs,
+                           bw_method='silverman')
+
+        # Resample from the KDE and transform back to the original space
+        log_samples = kde.resample(n)[0]
+        samples = np.exp(log_samples)
+
+        # Create the plants
+        plants = [
+            Plant(
+                pos=np.random.uniform(-self.half_width, self.half_width, 2),
+                r=r, id=i, **plant_kwargs
+            )
+            for i, r in enumerate(samples)
+        ]
+        self.add(plants)
+        self.initiate()
 
     def plot_state(self, state, t=None, size=2, fig=None, ax=None, highlight=None):
         if ax is None:
@@ -235,7 +263,7 @@ class Simulation:
                           color=color, fill=True, transform=ax.transData))
 
             sm = plt.cm.ScalarMappable(
-                norm=Normalize(vmin=0, vmax=self.density_field.values.max()), cmap='Greys')
+                norm=Normalize(vmin=0, vmax=self.density_field.get_values().max()), cmap='Greys')
             color = sm.to_rgba(density)
             ax.add_artist(plt.Circle(plant.pos, plant.r, fill=True,
                           color=color, alpha=1, transform=ax.transData))
@@ -247,6 +275,13 @@ class Simulation:
         y_ticks = ax.get_yticks() * _m
         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
+        return fig, ax
+
+    def plot(self, size=2, t=None, highlight=None):
+        if t is None:
+            t = self.t
+        fig, ax = self.plot_state(
+            self.get_state(), t=t, size=size, highlight=highlight)
         return fig, ax
 
     def plot_states(self, states, times=None, size=2):
