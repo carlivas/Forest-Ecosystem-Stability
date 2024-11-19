@@ -73,10 +73,10 @@ class FieldBuffer:
         return copy.deepcopy(self.times)
 
     def import_data(self, data, sim_kwargs):
-        times = data[:, 0].astype(int)
-        fields_arr = data[:, 1:]
+        times = data.loc[:, 0].astype(int)
+        fields_arr = data.loc[:, 1:].values
 
-        self.resolution = int(np.sqrt(data.shape[-1]))
+        self.resolution = int(np.sqrt(data.values.shape[-1]))
         fields = fields_arr.reshape(-1, self.resolution, self.resolution)
 
         return fields, times

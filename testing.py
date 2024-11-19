@@ -10,15 +10,16 @@ from mods.plant import Plant
 from mods.simulation import Simulation
 
 save_results = True
-save_folder = f'Data\\temp'
+save_folder = f'Data\\data_buff_test'
 
 plot_results = False
 
-num_plants = 1_000
-n_iter = 10_000
-m2pp = 13_689
-
+num_plants = 1_00
+n_iter = 1_000
+# m2pp = 13_689
+m2pps = [100, 1_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000][::-1]
 half_width = half_height = 0.5
+
 
 def _m_from_m2pp(m2pp):
     A_bound = 1
@@ -31,18 +32,14 @@ def _m_from_domain_sides(L):
     return S_bound / L
 
 
-_m = _m_from_m2pp(m2pp)
+for m2pp in m2pps:
+    _m = _m_from_m2pp(m2pp)
 
+    lq = 0
+    sgc = 0.002
 
-lq = 0
-sgc = 0.002
-
-seed = 0
-np.random.seed(seed)
-nsim = 0
-while nsim < 10:
-    sgc = float(sgc)
-    print(f'{sgc=}')
+    seed = 0
+    np.random.seed(seed)
     # Initialize simulation
     plant_kwargs = {
         'r_min': 0.1 * _m,

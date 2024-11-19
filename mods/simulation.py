@@ -7,26 +7,86 @@ from scipy.stats import gaussian_kde
 
 from mods.plant import Plant
 from mods.density_field import DensityField
-from mods.data_buffer import DataBuffer
+from mods.data_buffer_keys import DataBuffer
 from mods.field_buffer import FieldBuffer
 from mods.state_buffer import StateBuffer
 
 
-def check_pos_collision(pos, plant):
+def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
+    """
+    Check if a position collides with a plant.
+
+    Parameters:
+    pos (np.ndarray): The position to check.
+    plant (Plant): The plant to check against.
+
+    Returns:
+    bool: True if there is a collision, False otherwise.
+    """
     return np.sum((pos - plant.pos) ** 2) < plant.r ** 2
 
 
-def check_collision(p1, p2):
+def check_collision(p1: Plant, p2: Plant) -> bool:
+    """
+    Check if two plants collide.
+
+    Parameters:
+    p1 (Plant): The first plant.
+    p2 (Plant): The second plant.
+
+    Returns:
+    bool: True if there is a collision, False otherwise.
+    """
     return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
 
 
-def dbh_to_crown_radius(dbh):
+def dbh_to_crown_radius(dbh: float) -> float:
+    """
+    Convert diameter at breast height (DBH) to crown radius.
+
+    Parameters:
+    dbh (float): Diameter at breast height in meters.
+
+    Returns:
+    float: Crown radius in meters.
+    """
     # everything in m
     d = 1.42 + 28.17*dbh - 11.26*dbh**2
     return d/2
 
 
 class Simulation:
+    """
+    A class to represent a simulation of plant growth and interactions.
+
+    Attributes:
+    -----------
+    kwargs : dict
+        A dictionary of keyword arguments for simulation parameters.
+    t : int
+        The current time step of the simulation.
+    plants : list
+        A list of Plant objects in the simulation.
+    land_quality : float
+        The quality of the land in the simulation. (see Simulation.quality_nearby())
+    half_width : float
+        Half the width of the simulation area.
+    half_height : float
+        Half the height of the simulation area.
+    kt_leafsize : int
+        The leaf size for the KDTree.
+    kt : KDTree or None
+        The KDTree for spatial queries.
+    state_buffer : StateBuffer
+        A buffer to store the state of the simulation at different time steps.
+    data_buffer : DataBuffer
+        A buffer to store data from the simulation.
+    density_field : DensityField
+        A field to store the density of plants in the simulation area.
+    density_field_buffer : FieldBuffer
+        A buffer to store the density field at different time steps.
+    """
+
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
@@ -120,10 +180,12 @@ class Simulation:
 
         self.data_buffer.analyze_and_add(self.get_state(), t=self.t)
 
-        if self.t % self.state_buffer.skip == 0 or self.t in self.state_buffer.preset_times:
-            self.state_buffer.add(state=self.get_state(), t=self.t)
+        do_save_state = self.t % self.state_buffer.skip == 0 or self.t in self.state_buffer.preset_times
+        do_save_density_field = self.t % self.density_field_buffer.skip == 0 or self.t in self.density_field_buffer.preset_times
 
-        if self.t % self.density_field_buffer.skip == 0 or self.t in self.density_field_buffer.preset_times:
+        if do_save_state:
+            self.state_buffer.add(state=self.get_state(), t=self.t)
+        if do_save_density_field:
             self.density_field_buffer.add(
                 field=self.density_field.get_values(), t=self.t)
 

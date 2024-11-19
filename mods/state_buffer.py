@@ -104,7 +104,7 @@ class StateBuffer:
         states = []
         times = []
         for i in range(len(data)):
-            x, y, r, t, id = data[i]
+            x, y, r, t, id = data.loc[i]
             if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t) or np.isnan(id):
                 continue
             else:
