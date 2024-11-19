@@ -6,8 +6,9 @@ import os
 import json
 import scipy
 
-from plant import Plant
-from simulation import Simulation, StateBuffer, DataBuffer, FieldBuffer
+from mods.plant import Plant
+from mods.simulation import Simulation
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
 
 def linear_regression(X, y, advanced=False):
@@ -38,7 +39,7 @@ def linear_regression(X, y, advanced=False):
         return intercept, slope
 
 
-load_folder = r'Data\lq_rc_ensemble'
+load_folder = r'Data\lq_rc_ensemble_n100'
 sim_nums = [int(f.split('.')[0].replace('data_buffer_', ' '))
             for f in os.listdir(load_folder) if 'data_buffer_' in f]
 
@@ -84,55 +85,40 @@ errs = np.array(errs)
 errs = errs[errs[:, 3].argsort()]
 lin_nums = errs[:, 0].astype(int)
 
-decay_kwargs_list = []
-for i, n in enumerate(lin_nums):
-    with open(os.path.join(load_folder, f'kwargs_{n}.json'), 'r') as file:
-        kwargs = json.load(file)
+fig, ax = plt.subplots(2, 2, figsize=(10, 10))
+for a in ax.flatten():
+    a.set_facecolor('#f0f0e0')
+# norm = plt.Normalize(vmin=0, vmax=max(errs[:, 3]))
+norm = plt.Normalize(vmin=0, vmax=10000)
+sc = ax[0, 0].scatter(errs[:, 1], errs[:, 2],
+                      c=errs[:, 3], cmap='Greys_r', norm=norm)
+ax[0, 0].set_xlabel('land quality')
+ax[0, 0].set_ylabel('species germination chance')
+plt.colorbar(sc, ax=ax[0, 0], label='Sum of Squared Residuals', norm=norm,
+             orientation='horizontal', pad=0.1, aspect=30, location='top').ax.xaxis.label.set_fontsize(7)
 
-    lq = kwargs['sim_kwargs']['land_quality']
-    sg = kwargs['plant_kwargs']['species_germination_chance']
+DY = (norm.vmax - norm.vmin)*0.05
+ylim = (norm.vmin - DY, norm.vmax + DY)
+ax[0, 1].scatter(errs[:, 1], errs[:, 3], c=errs[:, 3],
+                 cmap='Greys_r', norm=norm)
+ax[0, 1].set_ylim(ylim)
+ax[0, 1].set_xlabel('land quality', fontsize=7)
+ax[0, 1].set_ylabel('sum of squared residuals', fontsize=7)
+ax[0, 1].set_title('Error vs land quality', fontsize=8)
 
-    decay_kwargs_list.append([n, lq, sg])
+ax[1, 0].scatter(errs[:, 2], errs[:, 3], c=errs[:, 3],
+                 cmap='Greys_r', norm=norm)
+ax[1, 0].set_ylim(ylim)
+ax[1, 0].set_xlabel('species germination chance', fontsize=7)
+ax[1, 0].set_ylabel('sum of squared residuals', fontsize=7)
+ax[1, 0].set_title('Error vs germination chance', fontsize=8)
 
-decay_kwargs_list = np.array(decay_kwargs_list)
-
-np.savetxt(r'Data\lq_rc_ensemble_decay_kwargs_arr.csv', decay_kwargs_list,
-           delimiter=', ', header='sim_num, land_quality, species_germination_chance')
-
-# fig, ax = plt.subplots(2, 2, figsize=(10, 10))
-# for a in ax.flatten():
-#     a.set_facecolor('#f0f0e0')
-# # norm = plt.Normalize(vmin=0, vmax=max(errs[:, 3]))
-# norm = plt.Normalize(vmin=0, vmax=10000)
-# sc = ax[0, 0].scatter(errs[:, 1], errs[:, 2],
-#                       c=errs[:, 3], cmap='Greys_r', norm=norm)
-# ax[0, 0].set_xlabel('land quality')
-# ax[0, 0].set_ylabel('species germination chance')
-# plt.colorbar(sc, ax=ax[0, 0], label='Sum of Squared Residuals', norm=norm,
-#              orientation='horizontal', pad=0.1, aspect=30, location='top').ax.xaxis.label.set_fontsize(7)
-
-# DY = (norm.vmax - norm.vmin)*0.05
-# ylim = (norm.vmin - DY, norm.vmax + DY)
-# ax[0, 1].scatter(errs[:, 1], errs[:, 3], c=errs[:, 3],
-#                  cmap='Greys_r', norm=norm)
-# ax[0, 1].set_ylim(ylim)
-# ax[0, 1].set_xlabel('land quality', fontsize=7)
-# ax[0, 1].set_ylabel('sum of squared residuals', fontsize=7)
-# ax[0, 1].set_title('Error vs land quality', fontsize=8)
-
-# ax[1, 0].scatter(errs[:, 2], errs[:, 3], c=errs[:, 3],
-#                  cmap='Greys_r', norm=norm)
-# ax[1, 0].set_ylim(ylim)
-# ax[1, 0].set_xlabel('species germination chance', fontsize=7)
-# ax[1, 0].set_ylabel('sum of squared residuals', fontsize=7)
-# ax[1, 0].set_title('Error vs germination chance', fontsize=8)
-
-# bins = np.linspace(0, norm.vmax, 20)
-# ax[1, 1].hist(errs[:, 3], bins=bins, color='k')
-# ax[1, 1].set_xlabel('sum of squared residuals', fontsize=7)
-# ax[1, 1].set_ylabel('frequency', fontsize=7)
-# ax[1, 1].set_title('Error histogram', fontsize=8)
+bins = np.linspace(0, norm.vmax, 20)
+ax[1, 1].hist(errs[:, 3], bins=bins, color='k')
+ax[1, 1].set_xlabel('sum of squared residuals', fontsize=7)
+ax[1, 1].set_ylabel('frequency', fontsize=7)
+ax[1, 1].set_title('Error histogram', fontsize=8)
 
 
-# fig.tight_layout()
-# plt.show()
+fig.tight_layout()
+plt.show()

@@ -6,10 +6,11 @@ import os
 import json
 import scipy
 
-from plant import Plant
-from simulation import Simulation, StateBuffer, DataBuffer, FieldBuffer
+from mods.plant import Plant
+from mods.simulation import Simulation
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
-load_folder = r'Data\lq_rc_ensemble'
+load_folder = r'Data\lq_rc_ensemble_n100'
 sim_nums = [int(f.split('.')[0].replace('data_buffer_', ' '))
             for f in os.listdir(load_folder) if 'data_buffer_' in f]
 

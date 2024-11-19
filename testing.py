@@ -9,34 +9,33 @@ import sys
 from mods.plant import Plant
 from mods.simulation import Simulation
 
+save_folder = f'Data\\temp'
 save_results = True
-save_folder = f'Data\\data_buff_test'
-
 plot_results = False
 
 num_plants = 1_00
-n_iter = 1_000
+n_iter = 10_000
 # m2pp = 13_689
-m2pps = [100, 1_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000][::-1]
+Ls = [200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000]
 half_width = half_height = 0.5
 
 
-def _m_from_m2pp(m2pp):
-    A_bound = 1
+def _m_from_m2pp(m2pp, num_plants=1):
     return np.sqrt(A_bound/(m2pp*num_plants))
 
 
-def _m_from_domain_sides(L):
+def _m_from_domain_sides(L, S_bound=1):
     # L should be in meters
-    S_bound = 1
     return S_bound / L
 
 
-for m2pp in m2pps:
-    _m = _m_from_m2pp(m2pp)
+for L in Ls:
+    print(f'{L = } m')
+    _m = _m_from_domain_sides(L)
+    m2pp = L**2 / num_plants
 
     lq = 0
-    sgc = 0.002
+    sgc = 0.0005
 
     seed = 0
     np.random.seed(seed)
@@ -142,14 +141,22 @@ for m2pp in m2pps:
 
         print('Data saved.')
 
+    def print_nested_dict(d, indent=0):
+        for key, value in d.items():
+            print(' ' * indent + str(key) + ':', end=' ')
+            if isinstance(value, dict):
+                print()
+                print_nested_dict(value, indent + 4)
+            else:
+                print(value)
+
     if plot_results:
         print('Plotting...')
         surfix = time.strftime("%Y%m%d-%H%M%S")
-        print(*plant_kwargs)
-        print(*sim_kwargs)
-        sim.state_buffer.plot(title=f'state_buffer_{surfix}')
-        sim.data_buffer.plot(title=f'data_buffer_{surfix}')
-        sim.density_field_buffer.plot(title=f'density_field_buffer_{surfix}')
-        plt.show()
 
-    nsim += 1
+        print_nested_dict(combined_kwargs)
+        sim.state_buffer.plot(title=f'state_buffer_{surfix}, L = {L} m')
+        sim.density_field_buffer.plot(
+            title=f'density_field_buffer_{surfix}, L = {L} m')
+        sim.data_buffer.plot(title=f'data_buffer_{surfix}, L = {L} m')
+        plt.show()

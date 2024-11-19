@@ -6,9 +6,7 @@ import os
 
 from mods.plant import Plant
 from mods.simulation import Simulation
-from mods.state_buffer import StateBuffer
-from mods.data_buffer_keys import DataBuffer
-from mods.field_buffer import FieldBuffer
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
 
 def plot_kwargs(kwargs, title=None):
@@ -42,7 +40,7 @@ def plot_kwargs(kwargs, title=None):
     fig.tight_layout()
 
 
-load_folder = r'Data\data_buff_test'
+load_folder = r'Data\temp'
 sim_nums = [f.split('_')[-1].split('.')[0]
             for f in os.listdir(load_folder) if 'data_buffer' in f][::-1]
 
@@ -55,13 +53,13 @@ for i, n in enumerate(sim_nums):
         f'{load_folder}/kwargs_{n}.json', typ='series').to_dict()
     sim_kwargs = kwargs['sim_kwargs']
     plant_kwargs = kwargs['plant_kwargs']
-    lq = sim_kwargs['land_quality']
-    sg = plant_kwargs['species_germination_chance']
+    # lq = sim_kwargs['land_quality']
+    # sg = plant_kwargs['species_germination_chance']
+    m2pp = sim_kwargs['m2_per_plant']
     print('plotting.py: Loaded kwargs...')
 
     data_buffer_arr = pd.read_csv(
         f'{load_folder}/data_buffer_{n}.csv')
-    print(data_buffer_arr)
     data_buffer = DataBuffer(data=data_buffer_arr)
     print('plotting.py: Loaded data_buffer...')
 
@@ -77,11 +75,13 @@ for i, n in enumerate(sim_nums):
         data=density_field_buffer_arr, skip=sim_kwargs.get('density_field_buffer_skip'), sim_kwargs=sim_kwargs)
     print('plotting.py: Loaded density_field_buffer...')
 
-    plot_kwargs(kwargs, title=f'{load_folder} - sim {n}')
-    data_buffer.plot(title=f'sim {n}, lq = {lq:.3f}, sg = {sg:.3f}')
-    state_buffer.plot(size=2, title=f'sim {n}, lq = {lq:.3f}, sg = {sg:.3f}')
-    density_field_buffer.plot(
-        size=2, title=f'{load_folder} - sim {n}')
+    # title = f'sim {n}, lq = {lq:.3f}, sg = {sg:.3f}'
+    title = f'sim {n}, m2pp = {m2pp:.3f}'
+    # plot_kwargs(kwargs, title=title)
+    data_buffer.plot(title=title)
+    state_buffer.plot(size=2, title=title)
+    # density_field_buffer.plot(
+    #     size=2, title=title)
     p += 2
 
     if p % 20 == 0 or i >= len(sim_nums) - 1:

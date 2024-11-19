@@ -4,62 +4,102 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import os
 import json
-
-from plant import Plant
-from simulation import Simulation, StateBuffer, DataBuffer, FieldBuffer
 from scipy.signal import welch
+
+from mods.plant import Plant
+from mods.simulation import Simulation
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
+
+
+def linear_regression(x, y, advanced=False):
+    """Calculates the linear regression of a dataset.
+
+    Args:
+        x (ndarray): (N, ) array of the independent variable.
+        y (ndarray): (N, ) array of the dependent variable.
+
+    Returns:
+        tuple: A tuple containing the slope, intercept, regression line, residuals and R2 of the linear regression.
+    """
+    X = np.vstack([np.ones_like(x), x]).T
+
+    # Calculate theta using the equation
+    theta = np.linalg.inv(X.T @ X) @ X.T @ y
+    intercept, slope = theta
+
+    if advanced:
+        # Calculate the regression line using the calculated theta
+        regression_line = X @ theta
+
+        residuals = y - regression_line
+        # Calculate the sum of squared residuals
+        sum_squared_residuals = np.sum(residuals**2)
+        # regression_line = slope * X[:, 1] + intercept
+        # residuals = y - regression_line
+        return intercept, slope, regression_line, residuals, sum_squared_residuals
+    else:
+        return intercept, slope
+
 
 load_folder = r'Data\lq_rc_ensemble_n100'
 
-state_buffers = []
-density_field_buffers = []
-data_buffers = []
-kwargs = []
-end_populations = []
+trend_window = 5000
+trend_threshold = 1e-3
 
 sim_nums = [f.split('_')[-1].split('.')[0]
             for f in os.listdir(load_folder) if 'data_buffer' in f]
 
-for idx, i in enumerate(sim_nums):
-    with open(os.path.join(load_folder, f'kwargs_{i}.json'), 'r') as file:
-        kwargs.append(json.load(file))
-
-    sim_kwargs = kwargs[idx].get('sim_kwargs')
-    plant_kwargs = kwargs[idx].get('plant_kwargs')
-
-    # state_buffer_arr = pd.read_csv(
-    #     f'{load_folder}/state_buffer_{i}.csv', header=None).to_numpy()
-    # state_buffers.append(StateBuffer(
-    #     data=state_buffer_arr, plant_kwargs=plant_kwargs))
-
-    # density_field_buffer_arr = pd.read_csv(
-    #     f'{load_folder}/density_field_buffer_{i}.csv', header=None).to_numpy()
-    # density_field_buffers.append(FieldBuffer(
-    #     data=density_field_buffer_arr, skip=sim_kwargs.get('density_field_buffer_skip'), sim_kwargs=sim_kwargs))
+for idx, i in enumerate(sim_nums[:]):
+    kwargs = json.load(open(f'{load_folder}/kwargs_{i}.json'))
 
     data_buffer_arr = pd.read_csv(
-        f'{load_folder}/data_buffer_{i}.csv', header=None).to_numpy()
-    data_buffers.append(DataBuffer(data=data_buffer_arr))
+        f'{load_folder}/data_buffer_{i}.csv')
+    data_buffer = DataBuffer(data=data_buffer_arr)
 
-    data = data_buffers[idx].values
+    # time, population, biomass = data_buffer.get_data(
+    #     keys=['time', 'population', 'biomass'])
+    data_buffer.finalize()
+    data = data_buffer.get_data()
+    time = data[:, 0]
+    biomass = data[:, 1]
     population = data[:, 2]
-    window_size = 1000
-    running_avg_population = np.convolve(
-        population, np.ones(window_size)/window_size, mode='valid')
-    running_avg_population = np.concatenate(
-        (np.full(window_size//2, np.nan), running_avg_population)
-    )
-    running_std_population = [
-        np.std(population[:j]) for j in range(len(population))
-    ]
+    print(f'{time=}')
+    print(f'{population=}')
+    print(f'{biomass=}')
 
-    fig, ax = plt.subplots(2, 1, figsize=(6, 6))
-    ax[0].plot(population, 'g', label='Population', alpha=0.5)
-    ax[0].plot(running_avg_population, 'k--', label='Running Average')
+    window = np.min([trend_window, len(time)])
+    x = time[-window:]
+    y_B = biomass[-window:]
+    y_P = population[-window:]
 
-    ax[1].plot(running_std_population, 'r', label='Running Std')
+    _, slope_B, regression_line_B, _, _ = linear_regression(
+        x, y_B, advanced=True)
+    _, slope_P, regression_line_P, _, _ = linear_regression(
+        x, y_P, advanced=True)
 
-    fig.legend()
-    fig.suptitle(f'Sim {i}')
+    fig, ax = data_buffer.plot(keys=['biomass', 'population'])
+
+    rel_slope_B = slope_B/y_B.max()
+    rel_slope_P = slope_P/y_P.max()
+
+    did_converge_B = np.abs(rel_slope_B) < trend_threshold
+    c_B = 'g' if did_converge_B else 'r'
+    did_converge_P = np.abs(rel_slope_P) < trend_threshold
+    c_P = 'g' if did_converge_P else 'r'
+    did_converge = did_converge_B and did_converge_P
+    c = 'g' if did_converge else 'r'
+
+    ax[0].plot(x, regression_line_B, label=f'relative slope: {
+               rel_slope_B:.5f}', linestyle='--', color=c_B)
+    ax[0].set_ylabel('Biomass', fontsize=8)
+    ax[0].legend(fontsize=8)
+
+    ax[1].plot(x, regression_line_P, label=f'relative slope: {
+               rel_slope_P:.5f}', linestyle='--', color=c_P)
+    ax[1].set_ylabel('Population', fontsize=8)
+    ax[1].set_xlabel('Time', fontsize=8)
+    ax[1].legend(fontsize=8)
+    fig.suptitle(f'Trend analysis for sim {
+                 i}\nConverged: {did_converge}', color=c)
 
     plt.show()

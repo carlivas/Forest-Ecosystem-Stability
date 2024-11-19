@@ -6,8 +6,9 @@ import os
 import json
 import scipy
 
-from plant import Plant
-from simulation import Simulation, StateBuffer, DataBuffer, FieldBuffer
+from mods.plant import Plant
+from mods.simulation import Simulation
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
 load_folder = r'Data\lq_rc_ensemble_n100'
 sim_names = [f.split('.')[0].replace('data_buffer_', '')

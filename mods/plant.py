@@ -88,7 +88,7 @@ class Plant:
     #     indices = simulation.kt.query_ball_point(
     #         x=self.pos, r=self.d, workers=-1)
     #     for i in indices:
-    #         other_plant = simulation.plants[i]
+    #         other_plant = simulation.state[i]
     #         if other_plant != self:
     #             if check_collision(self, other_plant):
     #                 self.is_colliding = True

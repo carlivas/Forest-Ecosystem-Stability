@@ -6,9 +6,7 @@ import os
 
 from mods.plant import Plant
 from mods.simulation import Simulation
-from mods.state_buffer import StateBuffer
-from mods.data_buffer_keys import DataBuffer
-from mods.field_buffer import FieldBuffer
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
 load_folder = r'Data\data_buff_test'
 sim_nums = [f.split('_')[-1].split('.')[0]
