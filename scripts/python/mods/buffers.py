@@ -97,11 +97,13 @@ class DataBuffer:
         elif isinstance(data_idx, int):
             data_idx = [data_idx]
 
-        data = copy.deepcopy(self.values[np.ix_(data_idx, keys_idx)])
+        data = self.values[np.ix_(data_idx, keys_idx)]
 
         return data if len(data_idx) > 1 else data[0]
 
     def save(self, path):
+        self.finalize()
+
         if not path.endswith('.csv'):
             path = path + '.csv'
 
@@ -180,25 +182,19 @@ class FieldBuffer:
             # print(f'FieldBuffer.add(): {len(self.fields)=}')
             # print()
 
-    def get(self, times=None):
+    def get_fields(self, times=None):
         if times is None:
-            return copy.deepcopy(self.fields)
+            fields = self.fields
         else:
-            indices = []
-            for t in times:
-                if t not in self.times:
-                    print(
-                        f'!Warning! FieldBuffer.get(): Time {t} not in field buffer. Times: {self.times}')
-                    indices.append(np.nan)
-                else:
-                    indices.append(np.where(np.array(self.times) == t)[0][0])
-            return copy.deepcopy([self.fields[i] for i in indices if not np.isnan(i)])
+            # Find the the indices of FieldBuffer.times that match the input times
+            indices = [np.where(np.array(self.times) == t)[
+                0][0] if t in self.times else np.nan for t in times]
 
-    def get_fields(self):
-        return copy.deepcopy(self.fields)
+            fields = [self.fields[i] for i in indices if not np.isnan(i)]
+        return copy.deepcopy(fields)
 
     def get_times(self):
-        return copy.deepcopy(self.times)
+        return self.times.copy()
 
     def import_data(self, data, sim_kwargs):
         times = data.loc[:, 0].astype(int)
@@ -230,17 +226,19 @@ class FieldBuffer:
         # Save the FieldBuffer array object to the specified path as csv
         np.savetxt(path, self.make_array(), delimiter=',')
 
-    def plot_field(self, field, time, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+    def plot_field(self, field, t=None, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         ax.contour(field, levels=[1.0], colors=[
                    'r'], linewidths=[1], alpha=0.5)
         ax.imshow(field, origin='lower', cmap='Greys',
                   vmin=vmin, vmax=vmax, extent=extent)
-        ax.set_title(f't = {time}', fontsize=7)
+
+        if t is not None:
+            ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
 
         # if self.sim is not None:
-        #     _m = self.sim.kwargs.get('_m')
+        #     _m = self.sim.kwargs['_m']
         #     if _m is not None:
         #         x_ticks = ax.get_xticks() * _m
         #         y_ticks = ax.get_yticks() * _m
@@ -283,7 +281,7 @@ class FieldBuffer:
         cbar.ax.tick_params(labelsize=7)
 
         if T == 1:
-            self.plot_field(fields[0], time=times[0],
+            self.plot_field(fields[0], t=times[0],
                             size=size, fig=fig, ax=ax, vmin=vmin, vmax=vmax, extent=extent)
         else:
             for i in range(T):
@@ -291,12 +289,12 @@ class FieldBuffer:
                 if n_rows == 1:
                     k = i
                     self.plot_field(
-                        field=field, time=times[i], size=size, fig=fig, ax=ax[k], vmin=vmin, vmax=vmax, extent=extent)
+                        field=field, t=times[i], size=size, fig=fig, ax=ax[k], vmin=vmin, vmax=vmax, extent=extent)
                 else:
                     l = i // n_cols
                     k = i % n_cols
                     self.plot_field(
-                        field=field, time=times[i], size=size, fig=fig, ax=ax[l, k], vmin=vmin, vmax=vmax, extent=extent)
+                        field=field, t=times[i], size=size, fig=fig, ax=ax[l, k], vmin=vmin, vmax=vmax, extent=extent)
 
         if T < n_rows*n_cols:
             for j in range(T, n_rows*n_cols):
@@ -318,6 +316,7 @@ class StateBuffer:
         self.states = []
         self.times = []
         self.preset_times = preset_times
+        self.plant_kwargs = plant_kwargs
 
         if data is not None:
             self.import_data(
@@ -344,22 +343,15 @@ class StateBuffer:
             # print(f'StateBuffer.add(): {len(self.states)=}')
             # print()
 
-    def get(self, times=None):
+    def get_states(self, times=None):
         if times is None:
-            return copy.deepcopy(self.states)
-
-        indices = []
-        for t in times:
-            if t < self.times[0] or t > self.times[-1]:
-                warnings.warn(
-                    f'Time {t} is out of bounds. Start time: {self.times[0]}, End time: {self.times[-1]}', UserWarning)
-                indices.append(np.nan)
-            else:
-                indices.append(np.where(np.array(self.times) == t)[0][0])
-        return copy.deepcopy([self.states[i] for i in indices if not np.isnan(i)])
-
-    def get_states(self):
-        return copy.deepcopy(self.states)
+            states = self.states
+        else:
+            # Find the the indices of StateBuffer.times that match the input times
+            indices = [np.where(np.array(self.times) == t)[
+                0][0] if t in self.times else np.nan for t in times]
+            states = [self.states[i] for i in indices if not np.isnan(i)]
+        return copy.deepcopy(states)
 
     def get_times(self):
         return copy.deepcopy(self.times)
@@ -419,7 +411,7 @@ class StateBuffer:
         self.states = states
         self.times = times
 
-    def plot_state(self, state, t=None, size=2, fig=None, ax=None, half_width=0.5, half_height=0.5):
+    def plot_state(self, state, t=None, size=2, fig=None, ax=None, half_width=0.5, half_height=0.5, fast=False):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         # ax.set_title('State')
@@ -428,14 +420,22 @@ class StateBuffer:
         ax.set_xlim(-half_width, half_width)
         ax.set_ylim(-half_height, half_height)
         ax.set_aspect('equal', 'box')
+
+        if fast:
+            r_min = self.plant_kwargs['r_min']*100
         for plant in state:
-            if t is not None:
-                ax.set_title(f't = {t}', fontsize=7)
-            ax.add_artist(plt.Circle(plant.pos, plant.r,
-                                     color='green', fill=True, transform=ax.transData))
+            if fast and plant.r > r_min:
+                ax.add_artist(plt.Circle(plant.pos, plant.r,
+                                         color='green', fill=False, transform=ax.transData))
+            elif not fast:
+                ax.add_artist(plt.Circle(plant.pos, plant.r,
+                                         color='green', fill=False, transform=ax.transData))
+
+        if t is not None:
+            ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
 
         # if self.sim is not None:
-        #     _m = self.sim.kwargs.get('_m')
+        #     _m = self.sim.kwargs['_m']
         #     if _m is not None:
         #         x_ticks = ax.get_xticks() * _m
         #         y_ticks = ax.get_yticks() * _m
@@ -445,7 +445,10 @@ class StateBuffer:
         ax.set_yticks([])
         return fig, ax
 
-    def plot(self, size=2, title='StateBuffer'):
+    def plot(self, size=2, title='StateBuffer', fast=False):
+        if fast:
+            print('!Warning! StateBuffer.plot(): Faster plotting is enabled.')
+            title += ' (Fast)'
         states = self.get_states()
         times = self.get_times()
         T = len(times)
@@ -458,7 +461,7 @@ class StateBuffer:
         else:
             n_rows = int(np.floor(T / np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
-        print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
+        # print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
@@ -467,19 +470,20 @@ class StateBuffer:
         fig.tight_layout()
         fig.suptitle(title, fontsize=10)
         if T == 1:
-            self.plot_state(state=states[0], t=times[0], size=size, ax=ax)
+            self.plot_state(state=states[0], t=times[0],
+                            size=size, ax=ax, fast=fast)
         else:
             for i in range(T):
                 state = states[i]
                 if n_rows == 1:
                     k = i
                     self.plot_state(
-                        state=state, t=times[i], size=size, fig=fig, ax=ax[k])
+                        state=state, t=times[i], size=size, fig=fig, ax=ax[k], fast=fast)
                 else:
                     l = i//n_cols
                     k = i % n_cols
                     self.plot_state(
-                        state=state, t=times[i], size=size, fig=fig, ax=ax[l, k])
+                        state=state, t=times[i], size=size, fig=fig, ax=ax[l, k], fast=fast)
 
         if T < n_rows*n_cols:
             for j in range(T, n_rows*n_cols):

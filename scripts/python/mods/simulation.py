@@ -7,7 +7,7 @@ from matplotlib.colors import Normalize
 from scipy.stats import gaussian_kde
 
 from mods.plant import Plant
-from mods.fields import DensityField
+from mods.fields import DensityFieldSPH as DensityField
 from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
 
@@ -117,36 +117,47 @@ class Simulation:
         self.biomass = None
         self.population = None
         self.land_quality = kwargs['land_quality']
+        self._m = kwargs['_m']
+        self.n_iter = kwargs['n_iter']
 
-        self.half_width = kwargs['half_width']
-        self.half_height = kwargs['half_height']
-        self.kt_leafsize = kwargs['kt_leafsize']
+        self.half_width = kwargs.get('half_width', 0.5)
+        self.half_height = kwargs.get('half_height', self.half_width)
+        self.kt_leafsize = kwargs.get('kt_leafsize', 10)
         self.kt = None
 
+        buffer_size = kwargs.get('buffer_size', 15)
+        buffer_skip = kwargs.get('buffer_skip', 10)
+        buffer_preset_times = kwargs.get('buffer_preset_times', np.linspace(
+            0, self.n_iter, buffer_size).astype(int))
+
         self.state_buffer = StateBuffer(
-            size=kwargs['state_buffer_size'],
-            skip=kwargs['state_buffer_skip'],
-            preset_times=kwargs['state_buffer_preset_times']
+            size=kwargs.get('state_buffer_size', buffer_size),
+            skip=kwargs.get('state_buffer_skip', buffer_skip),
+            preset_times=kwargs.get(
+                'state_buffer_preset_times', buffer_preset_times)
         )
 
         self.data_buffer = DataBuffer(
             size=kwargs['n_iter'],
         )
 
+        df_res = kwargs.get('density_field_resolution', 100)
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
-            check_radius=kwargs['density_check_radius'],
-            resolution=kwargs['density_field_resolution'],
+            check_radius=kwargs.get(
+                'density_check_radius', 100 * self._m),
+            resolution=df_res,
             simulation=self
         )
 
         self.density_field_buffer = FieldBuffer(
             sim=self,
-            resolution=kwargs['density_field_resolution'],
-            size=kwargs['density_field_buffer_size'],
-            skip=kwargs['density_field_buffer_skip'],
-            preset_times=kwargs['density_field_buffer_preset_times'],
+            resolution=df_res,
+            size=kwargs.get('density_field_buffer_size', buffer_size),
+            skip=kwargs.get('density_field_buffer_skip', buffer_skip),
+            preset_times=kwargs.get(
+                'density_field_buffer_preset_times', buffer_preset_times),
         )
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]) -> None:
@@ -220,7 +231,7 @@ class Simulation:
         self.update_kdtree()
         self.density_field.update()
 
-        data = self.data_buffer.analyze_and_add(self.get_state(), t=self.t)
+        data = self.data_buffer.analyze_and_add(self.state, t=self.t)
         self.biomass = data[0]
         self.population = data[1]
 
@@ -322,9 +333,6 @@ class Simulation:
     def get_state(self):
         return copy.deepcopy(self.state)
 
-    def get_density_field(self):
-        return copy.deepcopy(self.density_field)
-
     def initiate(self) -> None:
         """
         Initialize the simulation by updating necessary data structures.
@@ -340,6 +348,18 @@ class Simulation:
         self.state_buffer.add(state=self.get_state(), t=0)
         self.density_field_buffer.add(
             field=self.density_field.get_values(), t=0)
+
+    def initiate_from_state(self, state: List[Plant]) -> None:
+        """
+        Initialize the simulation from a given state.
+
+        Parameters:
+        -----------
+        state : List[Plant]
+            The initial state of the simulation.
+        """
+        self.state = state
+        self.initiate()
 
     def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, **plant_kwargs: Any) -> None:
         """
@@ -406,7 +426,7 @@ class Simulation:
         self.add(plants)
         self.initiate()
 
-    def plot_state(self, state: List[Plant], t: Optional[int] = None, size: int = 2, fig: Optional[plt.Figure] = None, ax: Optional[plt.Axes] = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
+    def plot_state(self, state: List[Plant], title: Optional = None, t: Optional[int] = None, size: int = 2, fig: Optional[plt.Figure] = None, ax: Optional[plt.Axes] = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
         """
         Plot a simulation state.
 
@@ -448,20 +468,18 @@ class Simulation:
             ax.add_artist(plt.Circle(plant.pos, plant.r,
                           color=color, fill=True, transform=ax.transData))
 
-            sm = plt.cm.ScalarMappable(norm=Normalize(
-                vmin=0, vmax=self.density_field.get_values().max()), cmap='Greys')
-            color = sm.to_rgba(density)
-            ax.add_artist(plt.Circle(plant.pos, plant.r, fill=True,
-                          color=color, alpha=1, transform=ax.transData))
-
-        _m = self.kwargs['_m']
-        x_ticks = ax.get_xticks() * _m
-        y_ticks = ax.get_yticks() * _m
-        ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
-        ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
+        # _m = self.kwargs['_m']
+        # x_ticks = ax.get_xticks() * _m
+        # y_ticks = ax.get_yticks() * _m
+        # ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
+        # ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        if title is not None:
+            ax.set_title(title, fontsize=7)
         return fig, ax
 
-    def plot(self, size: int = 2, t: Optional = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
+    def plot(self, size: int = 2, title: Optional = None, t: Optional = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
         """
         Plot the current state of the simulation.
 
@@ -482,7 +500,7 @@ class Simulation:
         if t is None:
             t = self.t
         fig, ax = self.plot_state(
-            self.get_state(), t=t, size=size, highlight=highlight)
+            self.get_state(), title=title, t=t, size=size, highlight=highlight)
         return fig, ax
 
     def plot_states(self, states: List[List[Plant]], times: Optional[List[int]] = None, size: int = 2) -> Tuple[plt.Figure, plt.Axes]:

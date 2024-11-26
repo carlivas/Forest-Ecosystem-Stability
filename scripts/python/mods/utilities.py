@@ -101,4 +101,4 @@ def print_nested_dict(d, indent=0):
             if isinstance(value, float) and value.is_integer():
                 value = int(value)
             print(value)
-    time.sleep(0.3)
+    time.sleep(0.5)

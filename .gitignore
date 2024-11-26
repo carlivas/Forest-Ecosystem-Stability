@@ -1,5 +1,6 @@
-/__pycache__
 /Data
 /Figures
 /venv
-/mods/__pycache__
+scripts/python/trees
+scripts/python/mods/__pycache__
+scripts/python/mods/build

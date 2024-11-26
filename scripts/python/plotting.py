@@ -9,17 +9,17 @@ from mods.simulation import Simulation
 from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 from mods.utilities import print_nested_dict
 
-load_folder = r'Data\temp'
+load_folder = r'Data\init_density_experiment_SPH\ensemble'
 sim_nums = [f.split('_')[-1].split('.')[0]
             for f in os.listdir(load_folder) if 'data_buffer' in f][::-1]
 print(f'sim_nums: {sim_nums}')
 
 print_kwargs = True
-plot_data = False
+plot_data = True
 plot_states = True
-plot_density_field = True
+plot_density_field = False
 
-fast = True
+fast = False
 
 
 def plot_kwargs_func(kwargs, title=None):
@@ -65,9 +65,9 @@ for i, n in enumerate(sim_nums):
     plant_kwargs = kwargs['plant_kwargs']
     lq = sim_kwargs['land_quality']
     sg = plant_kwargs['species_germination_chance']
-    dens0 = sim_kwargs['dens0']
+    # dens0 = sim_kwargs['dens0']
     num_plants = sim_kwargs['num_plants']
-    title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},   dens0={(dens0):.3e})'
+    title = f'{n}   (lq={lq:.3e},   sg={sg:.3e})'  # ,   dens0={(dens0):.3e})'
 
     if print_kwargs:
         print('plotting.py: Loaded kwargs...')

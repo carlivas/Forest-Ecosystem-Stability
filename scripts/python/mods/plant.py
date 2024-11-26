@@ -42,24 +42,25 @@ class Plant:
 
     def reproduce(self, simulation):
         if self.species_germination_chance > 0:
-            rand_ang = np.random.rand() * 2 * np.pi
-            new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
-            d = np.random.uniform(self.r, self.dispersal_range)
-            new_pos = self.pos + new_dir * d
+            if self.r > self.r_min * 100 and not self.is_dead:
+                # Determine if reproduction is successful based on chance and site quality
+                reproduction_chance = simulation.quality_nearby(
+                    self.pos) * self.species_germination_chance
 
-            # Determine if reproduction is successful based on chance and site quality
-            reproduction_chance = simulation.quality_nearby(
-                new_pos) * self.species_germination_chance
+                if reproduction_chance > np.random.rand():
+                    rand_ang = np.random.rand() * 2 * np.pi
+                    new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
+                    d = np.random.normal(self.r, self.dispersal_range)
+                    new_pos = self.pos + new_dir * d
 
-            if reproduction_chance > np.random.rand():
-                new_plant_kwargs = self.kwargs.copy()
-                new_plant_kwargs['r_min'] = self.r_min
-                new_plant_kwargs['r'] = self.r_min
-                new_plant_kwargs['is_colliding'] = False
-                new_plant_kwargs['is_dead'] = False
-                new_plant_kwargs['generation'] = self.generation + 1
+                    new_plant_kwargs = self.kwargs.copy()
+                    new_plant_kwargs['r_min'] = self.r_min
+                    new_plant_kwargs['r'] = self.r_min
+                    new_plant_kwargs['is_colliding'] = False
+                    new_plant_kwargs['is_dead'] = False
+                    new_plant_kwargs['generation'] = self.generation + 1
 
-                simulation.add(Plant(new_pos, **new_plant_kwargs))
+                    simulation.add(Plant(new_pos, **new_plant_kwargs))
 
     def compete(self, other_plant):
         p = 0.5
