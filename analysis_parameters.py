@@ -31,8 +31,8 @@ analyzed_sim_nums = []
 for i, n in enumerate(sim_names):
     with open(os.path.join(load_folder, f'kwargs_{n}.json'), 'r') as file:
         kwargs.append(json.load(file))
-    sim_kwargs = kwargs[i].get('sim_kwargs')
-    plant_kwargs = kwargs[i].get('plant_kwargs')
+    sim_kwargs = kwargs[i]['sim_kwargs']
+    plant_kwargs = kwargs[i]['plant_kwargs']
 
     data_buffer_arr = pd.read_csv(
         f'{load_folder}/data_buffer_{n}.csv', header=None).to_numpy()
@@ -47,7 +47,7 @@ for i, n in enumerate(sim_names):
     # density_field_buffer_arr = pd.read_csv(
     #     f'{load_folder}/density_field_buffer_{n}.csv', header=None).to_numpy()
     # density_field_buffers.append(FieldBuffer(
-    #     data=density_field_buffer_arr, skip=sim_kwargs.get('density_field_buffer_skip'), sim_kwargs=sim_kwargs))
+    #     data=density_field_buffer_arr, skip=sim_kwargs['density_field_buffer_skip'], sim_kwargs=sim_kwargs))
 
     population_data = data_buffers[len(analyzed_sim_nums)].values[:, 2]
     end_population = population_data[~np.isnan(population_data)][-1]
@@ -60,8 +60,8 @@ fig, ax = plt.subplots()
 norm = plt.Normalize(vmin=0, vmax=20_000)
 for i, n in enumerate(analyzed_sim_nums):
     print(f'plotting.py: sim {i+1} / {len(analyzed_sim_nums)}', end='\r')
-    lq = kwargs[i].get('sim_kwargs').get('land_quality')
-    sgc = kwargs[i].get('plant_kwargs').get('species_germination_chance')
+    lq = kwargs[i]['sim_kwargs']['land_quality']
+    sgc = kwargs[i]['plant_kwargs']['species_germination_chance']
 
     last_time = data_buffers[i].values[:, 0][-1]
     alpha = np.clip((last_time)/5e3, 0.2, 1)

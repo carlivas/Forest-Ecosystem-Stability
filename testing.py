@@ -2,40 +2,29 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 import time
-import json
-import os
-import sys
 
 from mods.plant import Plant
-from mods.simulation import Simulation
+from mods.simulation import Simulation, _m_from_domain_sides
+from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 
 save_folder = f'Data\\temp'
 save_results = True
-plot_results = False
+plot_results = True
 
-num_plants = 1_00
+# num_plantss = [1_000, 1_500, 2_000, 2_500]p[::-1]
+num_plantss = [2000]
 n_iter = 10_000
-# m2pp = 13_689
-Ls = [200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000]
+L = 10_000
 half_width = half_height = 0.5
+_m = _m_from_domain_sides(L, S_bound=2*half_width)
 
 
-def _m_from_m2pp(m2pp, num_plants=1):
-    return np.sqrt(A_bound/(m2pp*num_plants))
+for n in num_plantss:
+    dens0 = n / L**2
+    print(f'{n=} plants')
 
-
-def _m_from_domain_sides(L, S_bound=1):
-    # L should be in meters
-    return S_bound / L
-
-
-for L in Ls:
-    print(f'{L = } m')
-    _m = _m_from_domain_sides(L)
-    m2pp = L**2 / num_plants
-
-    lq = 0
-    sgc = 0.0005
+    lq = 0.1
+    sgc = 0.04
 
     seed = 0
     np.random.seed(seed)
@@ -46,6 +35,9 @@ for L in Ls:
         'growth_rate': 0.1 * _m,
         'dispersal_range': 100 * _m,
         'species_germination_chance': sgc,
+        'is_dead': False,
+        'is_colliding': False,
+        'generation': 0,
     }
 
     buffer_size = 15
@@ -58,9 +50,9 @@ for L in Ls:
         'half_width': half_width,
         'half_height': half_height,
 
-        'm2_per_plant': m2pp,
+        'dens0': dens0,
         '_m': _m,
-        'num_plants': num_plants,
+        'num_plants': n,
         'land_quality': lq,
 
         'kt_leafsize': 10,
@@ -76,60 +68,26 @@ for L in Ls:
         'state_buffer_skip': buffer_skip,
         'state_buffer_preset_times': buffer_preset_times,
     }
-
-    # print(f'{seed=}')
-    # print(f'1 u = {1/_m} m')
-    # print(
-    #     f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
-    # print(f'land_quality = {sim_kwargs["land_quality"]}')
-    # print(f'{buffer_preset_times=}')
-
-    sim = Simulation(**sim_kwargs)
-
-    sim.initiate_uniform_lifetimes(
-        n=num_plants, t_min=1, t_max=300, **plant_kwargs)
-
-    np.random.seed(np.random.randint(0, 1_000_000))
-    print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
-    sim.run(n_iter)
-
-    np.random.seed(seed)
-    sim.data_buffer.finalize()
-
-    # print(f'{seed=}')
-    # print(f'1 u = {1/_m} m')
-    # print(
-    #     f'species_germination_chance = {plant_kwargs["species_germination_chance"]}')
-    # print(f'land_quality = {sim_kwargs["land_quality"]}')
-    # print(f'{buffer_preset_times=}')
-    # print('\nSimulation over.' + ' '*20)
-
-    def convert_to_serializable(obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, (np.integer, np.int32, np.int64)):
-            return int(obj)
-        if isinstance(obj, (np.floating, np.float32, np.float64)):
-            return float(obj)
-        if isinstance(obj, np.bool_):
-            return bool(obj)
-        if isinstance(obj, dict):
-            return {k: convert_to_serializable(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [convert_to_serializable(i) for i in obj]
-        return obj
-
-    def save_kwargs(kwargs, path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path + '.json', 'w') as f:
-            serializable_kwargs = convert_to_serializable(kwargs)
-            json.dump(serializable_kwargs, f, indent=4)
-        print('Kwargs saved.')
-
     combined_kwargs = {
         'plant_kwargs': plant_kwargs,
         'sim_kwargs': sim_kwargs
     }
+
+    # print_nested_dict(combined_kwargs)
+
+    sim = Simulation(**sim_kwargs)
+
+    sim.initiate_uniform_lifetimes(
+        n=n, t_min=1, t_max=300, **plant_kwargs)
+
+    np.random.seed(np.random.randint(0, 1_000_000))
+    print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
+    sim.run(n_iter=n_iter)
+
+    np.random.seed(seed)
+    sim.data_buffer.finalize()
+
+    print_nested_dict(combined_kwargs)
 
     if save_results:
         surfix = time.strftime("%Y%m%d-%H%M%S")
@@ -140,15 +98,6 @@ for L in Ls:
             f'{save_folder}/density_field_buffer_{surfix}')
 
         print('Data saved.')
-
-    def print_nested_dict(d, indent=0):
-        for key, value in d.items():
-            print(' ' * indent + str(key) + ':', end=' ')
-            if isinstance(value, dict):
-                print()
-                print_nested_dict(value, indent + 4)
-            else:
-                print(value)
 
     if plot_results:
         print('Plotting...')

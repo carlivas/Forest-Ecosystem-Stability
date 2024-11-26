@@ -54,6 +54,35 @@ def dbh_to_crown_radius(dbh: float) -> float:
     return d/2
 
 
+def _m_from_m2pp(m2pp, num_plants, A_bound=1) -> float:
+    """
+    Calculate the conversion rate between dimensionless units (u) and meters (m) from the initial square meters per plant and the number of plants.
+
+    Parameters:
+    m2pp (float): The initial square meters per plant.
+    num_plants (int, optional): The initial number of plants
+    A_bound (float, optional): The area of the boundary in (u) for scaling. Default is 1.
+
+    Returns:
+    float: The conversion rate in meters.
+    """
+    return np.sqrt(A_bound/(m2pp*num_plants))
+
+
+def _m_from_domain_sides(L, S_bound=1) -> float:
+    """
+    Calculate the conversion rate between dimensionless units (u) and meters (m) from the domain sides.
+
+    Parameters:
+    L (float): Length in meters.
+    S_bound (float, optional): Boundary value for scaling. Default is 1.
+
+    Returns:
+    float: Conversion rate (S_bound / L) between dimensionless units and meters.
+    """
+    return S_bound / L
+
+
 class Simulation:
     """
     A class to represent a simulation of plant growth and interactions.
@@ -87,41 +116,37 @@ class Simulation:
         self.state = []
         self.biomass = None
         self.population = None
-        self.land_quality = kwargs.get('land_quality')
+        self.land_quality = kwargs['land_quality']
 
-        self.half_width = kwargs.get('half_width')
-        self.half_height = kwargs.get('half_height', self.half_width)
-        self.kt_leafsize = kwargs.get('kt_leafsize')
+        self.half_width = kwargs['half_width']
+        self.half_height = kwargs['half_height']
+        self.kt_leafsize = kwargs['kt_leafsize']
         self.kt = None
 
         self.state_buffer = StateBuffer(
-            size=kwargs.get('state_buffer_size', 20),
-            skip=kwargs.get('state_buffer_skip', 1),
-            preset_times=kwargs.get('state_buffer_preset_times', None)
+            size=kwargs['state_buffer_size'],
+            skip=kwargs['state_buffer_skip'],
+            preset_times=kwargs['state_buffer_preset_times']
         )
 
         self.data_buffer = DataBuffer(
-            size=kwargs.get('n_iter'),
+            size=kwargs['n_iter'],
         )
 
-        # density_field_resolution = np.ceil((2*self.half_width) /
-        #                                    (np.sqrt(2) * kwargs.get('density_check_radius'))).astype(int)
-        # density_field_resolution = max(25, density_field_resolution)
-        # print(f'Simulation.__init__(): {density_field_resolution=}')
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
-            check_radius=kwargs.get('density_check_radius'),
-            resolution=kwargs.get('density_field_resolution'),
+            check_radius=kwargs['density_check_radius'],
+            resolution=kwargs['density_field_resolution'],
             simulation=self
         )
 
         self.density_field_buffer = FieldBuffer(
             sim=self,
-            resolution=kwargs.get('density_field_resolution'),
-            size=kwargs.get('density_field_buffer_size'),
-            skip=kwargs.get('density_field_buffer_skip', 1),
-            preset_times=kwargs.get('density_field_buffer_preset_times', None)
+            resolution=kwargs['density_field_resolution'],
+            size=kwargs['density_field_buffer_size'],
+            skip=kwargs['density_field_buffer_skip'],
+            preset_times=kwargs['density_field_buffer_preset_times'],
         )
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]) -> None:
@@ -208,7 +233,7 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.get_values(), t=self.t)
 
-    def run(self, n_iter: Optional[int] = None) -> None:
+    def run(self, n_iter: Optional[int] = None, max_population: Optional[int] = None) -> None:
         """
         Run the simulation for a given number of iterations.
 
@@ -219,15 +244,15 @@ class Simulation:
         """
         import time
         if n_iter is None:
-            n_iter = self.kwargs.get('n_iter')
+            n_iter = self.kwargs['n_iter']
         start_time = time.time()
         try:
             for _ in range(1, n_iter):
                 self.step()
 
-                # if no plants are left or if the number of plants exceeds 100 times the number of plants in the initial state, stop the simulation
+                # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.state)
-                if l == 0 or l > self.kwargs.get('num_plants') * 100:
+                if l == 0 or (max_population is not None and l > max_population):
                     break
 
                 elapsed_time = time.time() - start_time
@@ -239,7 +264,7 @@ class Simulation:
                 else:
                     dots = '...'
 
-                print(f'{dots} Elapsed time: {elapsed_time:.2f}s', end='\r')
+                print(f'{dots} Elapsed time: {elapsed_time:.0f}s', end='\r')
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
@@ -286,13 +311,13 @@ class Simulation:
         float
             The quality of the land near the given position.
         """
-        quality = self.land_quality
         pos_in_box = np.abs(pos[0]) < self.half_width and np.abs(
             pos[1]) < self.half_height
         if pos_in_box:
             density_nearby = self.density_field.query(pos)
-            quality = density_nearby + self.land_quality
-        return quality
+        else:
+            density_nearby = 0
+        return density_nearby + self.land_quality
 
     def get_state(self):
         return copy.deepcopy(self.state)
@@ -355,7 +380,7 @@ class Simulation:
         plant_kwargs : dict
             Additional keyword arguments for the Plant objects.
         """
-        _m = self.kwargs.get('_m')
+        _m = self.kwargs['_m']
         mean_dbhs = np.array([0.05, 0.2, 0.4, 0.6, 0.85, 1.50])  # in m
         mean_rs = dbh_to_crown_radius(mean_dbhs) * _m
         freqs = np.array([5800, 378.8, 50.98, 13.42, 5.62, 0.73])
@@ -429,7 +454,7 @@ class Simulation:
             ax.add_artist(plt.Circle(plant.pos, plant.r, fill=True,
                           color=color, alpha=1, transform=ax.transData))
 
-        _m = self.kwargs.get('_m')
+        _m = self.kwargs['_m']
         x_ticks = ax.get_xticks() * _m
         y_ticks = ax.get_yticks() * _m
         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])

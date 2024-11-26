@@ -3,39 +3,27 @@ import copy
 
 
 class Plant:
-    def __init__(self, pos: np.ndarray, id=None, **kwargs):
+    def __init__(self, pos: np.ndarray, r, id=None, **kwargs):
         self.pos = pos
         self.id = id
 
         self.kwargs = kwargs
 
-        self.r_min = kwargs.get('r_min')
-        self.r_max = kwargs.get('r_max')
-        self.r = kwargs.get('r', self.r_min)
+        self.r_min = kwargs['r_min']
+        self.r_max = kwargs['r_max']
+        self.r = r
         self.d = 2*self.r
         self.area = np.pi*self.r**2
 
-        self.growth_rate = kwargs.get('growth_rate')
+        self.growth_rate = kwargs['growth_rate']
         self.age_max = (self.r_max - self.r_min)/self.growth_rate
 
-        self.species_germination_chance = kwargs.get(
-            'species_germination_chance')
-        self.dispersal_range = kwargs.get(
-            'dispersal_range')
+        self.species_germination_chance = kwargs['species_germination_chance']
+        self.dispersal_range = kwargs['dispersal_range']
 
-        self.young_color = tuple(np.array([69, 194, 51]))
-        self.old_color = tuple(np.array([163, 194, 122]))
-        self.color = kwargs.get('color', self.young_color)
         self.is_dead = kwargs.get('is_dead', False)
         self.is_colliding = kwargs.get('is_colliding', False)
         self.generation = kwargs.get('generation', 0)
-
-    def set_color(self, color):
-        self.color = color
-
-    def color_from_size(self):
-        t = np.clip(self.r / self.r_max, 0, 1)
-        return tuple(np.array(self.young_color) * (1 - t) + np.array(self.old_color) * t)
 
     def grow(self):
         self.r = self.r + self.growth_rate
@@ -63,7 +51,6 @@ class Plant:
             reproduction_chance = simulation.quality_nearby(
                 new_pos) * self.species_germination_chance
 
-            # if self.reproduction_thresholds[0] < p and p < self.reproduction_thresholds[1]:
             if reproduction_chance > np.random.rand():
                 new_plant_kwargs = self.kwargs.copy()
                 new_plant_kwargs['r_min'] = self.r_min
@@ -82,20 +69,6 @@ class Plant:
         else:
             other_plant.die()
 
-    # def get_collisions(self, simulation):
-    #     self.is_colliding = False
-    #     collisions = []
-    #     indices = simulation.kt.query_ball_point(
-    #         x=self.pos, r=self.d, workers=-1)
-    #     for i in indices:
-    #         other_plant = simulation.state[i]
-    #         if other_plant != self:
-    #             if check_collision(self, other_plant):
-    #                 self.is_colliding = True
-    #                 other_plant.is_colliding = True
-    #                 collisions.append(other_plant)
-    #     return collisions
-
     def resolve_collisions(self, collisions):
         for other_plant in collisions:
             self.compete(other_plant)
@@ -108,7 +81,6 @@ class Plant:
 
         self.reproduce(simulation)
         self.mortality()
-        self.set_color(self.color_from_size())
         return
 
     def copy(self):

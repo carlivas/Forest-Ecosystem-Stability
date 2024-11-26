@@ -7,9 +7,22 @@ import os
 from mods.plant import Plant
 from mods.simulation import Simulation
 from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
+from mods.utilities import print_nested_dict
+
+load_folder = r'Data\temp'
+sim_nums = [f.split('_')[-1].split('.')[0]
+            for f in os.listdir(load_folder) if 'data_buffer' in f][::-1]
+print(f'sim_nums: {sim_nums}')
+
+print_kwargs = True
+plot_data = False
+plot_states = True
+plot_density_field = True
+
+fast = True
 
 
-def plot_kwargs(kwargs, title=None):
+def plot_kwargs_func(kwargs, title=None):
     fig, ax = plt.subplots()
     if title is not None:
         ax.set_title(f'kwargs ({title})', fontsize=10)
@@ -40,10 +53,7 @@ def plot_kwargs(kwargs, title=None):
     fig.tight_layout()
 
 
-load_folder = r'Data\temp'
-sim_nums = [f.split('_')[-1].split('.')[0]
-            for f in os.listdir(load_folder) if 'data_buffer' in f][::-1]
-
+prev_mod = 0
 p = 0
 for i, n in enumerate(sim_nums):
     print(f'\nplotting.py: sim {i+1} / {len(sim_nums)}')
@@ -53,36 +63,47 @@ for i, n in enumerate(sim_nums):
         f'{load_folder}/kwargs_{n}.json', typ='series').to_dict()
     sim_kwargs = kwargs['sim_kwargs']
     plant_kwargs = kwargs['plant_kwargs']
-    # lq = sim_kwargs['land_quality']
-    # sg = plant_kwargs['species_germination_chance']
-    m2pp = sim_kwargs['m2_per_plant']
-    print('plotting.py: Loaded kwargs...')
+    lq = sim_kwargs['land_quality']
+    sg = plant_kwargs['species_germination_chance']
+    dens0 = sim_kwargs['dens0']
+    num_plants = sim_kwargs['num_plants']
+    title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},   dens0={(dens0):.3e})'
 
-    data_buffer_arr = pd.read_csv(
-        f'{load_folder}/data_buffer_{n}.csv')
-    data_buffer = DataBuffer(data=data_buffer_arr)
-    print('plotting.py: Loaded data_buffer...')
+    if print_kwargs:
+        print('plotting.py: Loaded kwargs...')
+        # plot_kwargs_func(kwargs, title=title)
+        print_nested_dict(kwargs)
+        print()
 
-    state_buffer_arr = pd.read_csv(
-        f'{load_folder}/state_buffer_{n}.csv')
-    state_buffer = StateBuffer(
-        data=state_buffer_arr, plant_kwargs=plant_kwargs)
-    print('plotting.py: Loaded state_buffer...')
+    if plot_data:
+        data_buffer_arr = pd.read_csv(
+            f'{load_folder}/data_buffer_{n}.csv')
+        data_buffer = DataBuffer(data=data_buffer_arr)
+        print('plotting.py: Loaded data_buffer...')
+        data_buffer.plot(title=title)
 
-    density_field_buffer_arr = pd.read_csv(
-        f'{load_folder}/density_field_buffer_{n}.csv', header=None)
-    density_field_buffer = FieldBuffer(
-        data=density_field_buffer_arr, skip=sim_kwargs.get('density_field_buffer_skip'), sim_kwargs=sim_kwargs)
-    print('plotting.py: Loaded density_field_buffer...')
+    if plot_states:
+        state_buffer_arr = pd.read_csv(
+            f'{load_folder}/state_buffer_{n}.csv')
+        state_buffer = StateBuffer(
+            data=state_buffer_arr, plant_kwargs=plant_kwargs)
+        print('plotting.py: Loaded state_buffer...')
+        state_buffer.plot(size=2, title=title, fast=fast)
 
-    # title = f'sim {n}, lq = {lq:.3f}, sg = {sg:.3f}'
-    title = f'sim {n}, m2pp = {m2pp:.3f}'
-    # plot_kwargs(kwargs, title=title)
-    data_buffer.plot(title=title)
-    state_buffer.plot(size=2, title=title)
-    # density_field_buffer.plot(
-    #     size=2, title=title)
-    p += 2
+    if plot_density_field:
+        density_field_buffer_arr = pd.read_csv(
+            f'{load_folder}/density_field_buffer_{n}.csv', header=None)
+        density_field_buffer = FieldBuffer(
+            data=density_field_buffer_arr, skip=sim_kwargs['density_field_buffer_skip'], sim_kwargs=sim_kwargs)
+        print('plotting.py: Loaded density_field_buffer...')
 
-    if p % 20 == 0 or i >= len(sim_nums) - 1:
+        density_field_buffer.plot(
+            size=2, title=title)
+
+    p += int(plot_data) + \
+        int(plot_states) + int(plot_density_field)
+    mod = p % 10
+    if mod < prev_mod or i >= len(sim_nums) - 1:
         plt.show()
+
+    prev_mod = mod
