@@ -102,3 +102,10 @@ def print_nested_dict(d, indent=0):
                 value = int(value)
             print(value)
     time.sleep(0.5)
+
+
+def scientific_notation_parser(float_str):
+    if 'e' in float_str:
+        base, exponent = float_str.split('e')
+        return float(base) * 10**int(exponent)
+    return float(float_str)

@@ -41,17 +41,22 @@ class Plant:
         self.is_dead = True
 
     def reproduce(self, simulation):
-        if self.species_germination_chance > 0:
-            if self.r > self.r_min * 100 and not self.is_dead:
-                # Determine if reproduction is successful based on chance and site quality
-                reproduction_chance = simulation.quality_nearby(
-                    self.pos) * self.species_germination_chance
+        if self.species_germination_chance > 0 and not self.is_dead:
+            # Determine if reproduction is successful based on chance and site quality
+            # new_pos = self.pos + np.random.uniform(-self.dispersal_range,
+            #                                         self.dispersal_range, size=2)
+            new_pos = self.pos + np.random.normal(
+                0, self.dispersal_range, size=2)
 
-                if reproduction_chance > np.random.rand():
-                    rand_ang = np.random.rand() * 2 * np.pi
-                    new_dir = np.array([np.cos(rand_ang), np.sin(rand_ang)])
-                    d = np.random.normal(self.r, self.dispersal_range)
-                    new_pos = self.pos + new_dir * d
+            if simulation.pos_in_box(new_pos):
+
+                # reproduction_chance = simulation.local_density(
+                #     new_pos) * self.species_germination_chance
+                reproduction_chance = (simulation.local_density(
+                    new_pos) + simulation.land_quality) * self.species_germination_chance
+
+                # if reproduction_chance > np.random.uniform(0, 1 - simulation.land_quality):
+                if reproduction_chance > np.random.uniform(0, 1):
 
                     new_plant_kwargs = self.kwargs.copy()
                     new_plant_kwargs['r_min'] = self.r_min

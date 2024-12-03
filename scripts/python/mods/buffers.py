@@ -19,8 +19,8 @@ class DataBuffer:
         else:
             self.keys = ['Time', 'Biomass', 'Population']
 
-        self.size = size
-        self.values = np.full((size, len(self.keys)), np.nan)
+        self.size = size+1
+        self.values = np.full((size+1, len(self.keys)), np.nan)
         self.length = 0
 
     def add(self, t, data):
@@ -397,9 +397,11 @@ class StateBuffer:
     def import_data(self, data, plant_kwargs):
         states = []
         times = []
-        for i in range(len(data)):
+        for i in range(data.shape[0]):
             x, y, r, t, id = data.loc[i]
-            if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t) or np.isnan(id):
+            if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t):
+                print(
+                    f'StateBuffer.import_data(): !Warning! Skipping NaN values at row {i}.')
                 continue
             else:
                 if t not in times:
@@ -421,15 +423,13 @@ class StateBuffer:
         ax.set_ylim(-half_height, half_height)
         ax.set_aspect('equal', 'box')
 
-        if fast:
-            r_min = self.plant_kwargs['r_min']*100
         for plant in state:
-            if fast and plant.r > r_min:
+            if fast and plant.r > self.plant_kwargs['r_min']*100:
                 ax.add_artist(plt.Circle(plant.pos, plant.r,
                                          color='green', fill=False, transform=ax.transData))
             elif not fast:
                 ax.add_artist(plt.Circle(plant.pos, plant.r,
-                                         color='green', fill=False, transform=ax.transData))
+                                         color='green', fill=True, transform=ax.transData))
 
         if t is not None:
             ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
@@ -447,7 +447,8 @@ class StateBuffer:
 
     def plot(self, size=2, title='StateBuffer', fast=False):
         if fast:
-            print('!Warning! StateBuffer.plot(): Faster plotting is enabled.')
+            print(
+                'StateBuffer.plot(): Faster plotting is enabled, some elements might be missing in the plots.')
             title += ' (Fast)'
         states = self.get_states()
         times = self.get_times()
@@ -461,7 +462,7 @@ class StateBuffer:
         else:
             n_rows = int(np.floor(T / np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
-        # print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
+        print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))

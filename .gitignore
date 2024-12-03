@@ -1,6 +1,6 @@
 /Data
 /Figures
 /venv
-scripts/python/trees
+scripts/python/trees_venv
 scripts/python/mods/__pycache__
 scripts/python/mods/build

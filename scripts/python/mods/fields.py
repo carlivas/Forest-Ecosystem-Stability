@@ -51,7 +51,7 @@ def getDensity(r, pos, m, hSq):
 
 class DensityFieldSPH:
     def __init__(self, half_width, half_height, check_radius, resolution, simulation=None):
-        print('!WARNING! DensityField is using SPH density estimation, and more testing is needed.')
+        print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
         self.resolution = resolution
         self.xx = np.linspace(-half_width, half_width, self.resolution)
         self.yy = np.linspace(-half_height, half_height, self.resolution)
@@ -132,7 +132,7 @@ class kde(gaussian_kde):
 
 class DensityFieldKDE:
     def __init__(self, half_width, half_height, check_radius, resolution, simulation=None):
-        print('!WARNING! DensityField is using gaussian_kde instead of RegularGridInterpolator, and more testing is needed.')
+        print('DensityFieldKDE: DensityField is using gaussian kernel density estimation.')
         self.resolution = resolution
         self.xx = np.linspace(-half_width, half_width, self.resolution)
         self.yy = np.linspace(-half_height, half_height, self.resolution)

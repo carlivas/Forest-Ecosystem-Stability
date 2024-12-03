@@ -138,7 +138,7 @@ class Simulation:
         )
 
         self.data_buffer = DataBuffer(
-            size=kwargs['n_iter'],
+            size=kwargs['n_iter']+1,
         )
 
         df_res = kwargs.get('density_field_resolution', 100)
@@ -214,13 +214,13 @@ class Simulation:
 
         # Second Phase: Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
         new_plants = []
-        plant_ids = [plant.id for plant in self.state]
+        # plant_ids = [plant.id for plant in self.state]
 
         for plant in self.state:
             if not plant.is_dead:
-                if plant.id is None:
-                    plant.id = max(
-                        [id for id in plant_ids if id is not None]) + 1
+                # if plant.id is None:
+                #     plant.id = max(
+                #         [id for id in plant_ids if id is not None]) + 1
                 new_plants.append(plant)
 
         self.state = new_plants
@@ -267,6 +267,10 @@ class Simulation:
                     break
 
                 elapsed_time = time.time() - start_time
+                hours, rem = divmod(elapsed_time, 3600)
+                minutes, seconds = divmod(rem, 60)
+                elapsed_time_str = f"{str(int(hours))}".rjust(
+                    2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
 
                 if _ % 3 == 0:
                     dots = '.  '
@@ -275,7 +279,7 @@ class Simulation:
                 else:
                     dots = '...'
 
-                print(f'{dots} Elapsed time: {elapsed_time:.0f}s', end='\r')
+                print(f'{dots} Elapsed time: {elapsed_time_str}', end='\r')
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
@@ -308,7 +312,12 @@ class Simulation:
                         collisions.append(other_plant)
         return collisions
 
-    def quality_nearby(self, pos: np.ndarray) -> float:
+    def pos_in_box(self, pos: np.ndarray) -> bool:
+        pos_in_box = np.abs(pos[0]) < self.half_width and np.abs(
+            pos[1]) < self.half_height
+        return pos_in_box
+
+    def local_density(self, pos: np.ndarray) -> float:
         """
         Get the quality of the land near a given position.
 
@@ -322,13 +331,10 @@ class Simulation:
         float
             The quality of the land near the given position.
         """
-        pos_in_box = np.abs(pos[0]) < self.half_width and np.abs(
-            pos[1]) < self.half_height
-        if pos_in_box:
-            density_nearby = self.density_field.query(pos)
+        if self.pos_in_box(pos):
+            return self.density_field.query(pos)
         else:
-            density_nearby = 0
-        return density_nearby + self.land_quality
+            return 0
 
     def get_state(self):
         return copy.deepcopy(self.state)
@@ -423,6 +429,36 @@ class Simulation:
             )
             for i, r in enumerate(samples)
         ]
+        self.add(plants)
+        self.initiate()
+
+    def initiate_packed_distribution(self, r: float, **plant_kwargs):
+        """
+        Initialize the simulation with a packed hexagonal grid of plants.
+
+        Parameters:
+        -----------
+        r : float
+            The radius of each plant.
+        plant_kwargs : dict
+            Additional keyword arguments for the Plant objects.
+        """
+        plants = []
+        dx = 2 * r
+        dy = np.sqrt(3) * r
+
+        # for i, x in enumerate(np.arange(-self.half_width + r, self.half_width - r, dx)):
+        # for j, y in enumerate(np.arange(-self.half_height + r, self.half_height - r, dy)):
+        for i, x in enumerate(np.arange(-self.half_width + r, self.half_width - r, dx)):
+            for j, y in enumerate(np.arange(-self.half_height + r, self.half_height - r, dy)):
+
+                if j % 2 == 0:
+                    x += r
+                if j % 2 == 1:
+                    x -= r
+                pos = np.array([x, y])
+                plants.append(Plant(pos=pos, r=r, **plant_kwargs))
+
         self.add(plants)
         self.initiate()
 

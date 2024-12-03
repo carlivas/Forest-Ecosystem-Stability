@@ -1,37 +1,41 @@
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
-import sys
 import time
+import sys
+import os
 
 from mods.plant import Plant
 from mods.simulation import Simulation, _m_from_domain_sides
-from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
+from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable, scientific_notation_parser
 
-save_folder = '../Data/init_density_experiment_SPH/ensemble'
-print(f'{save_folder=}')
+save_folder = os.path.abspath(sys.argv[1])
+os.makedirs(save_folder, exist_ok=True)
+print(f'testing.sh: Data will be saved in: {save_folder}')
+
 save_results = True
 plot_results = False
 
-num_plants = int(sys.argv[1])
-n_iter = int(sys.argv[2])
-lq = float(sys.argv[3])
-sgc = float(sys.argv[4])
-
-L = 30_00  # m
+L = int(sys.argv[2])  # m
 half_width = half_height = 0.5
 _m = _m_from_domain_sides(L, S_bound=2*half_width)
+dispersal_range = 90  # m
+
+num_plants = int(sys.argv[3])
+n_iter = int(sys.argv[4])
+lq = scientific_notation_parser(sys.argv[5])
+sgc = scientific_notation_parser(sys.argv[6])
 
 dens0 = num_plants / L**2
 
-seed = 0
+seed = np.random.randint(0, 1_000_000)
 np.random.seed(seed)
 # Initialize simulation
 plant_kwargs = {
     'r_min': 0.1 * _m,
     'r_max': 30 * _m,
     'growth_rate': 0.1 * _m,
-    'dispersal_range': 100 * _m,
+    'dispersal_range': dispersal_range * _m,
     'species_germination_chance': sgc,
     'is_dead': False,
     'is_colliding': False,
@@ -77,11 +81,15 @@ sim = Simulation(**sim_kwargs)
 
 sim.initiate_uniform_lifetimes(
     n=num_plants, t_min=1, t_max=300, **plant_kwargs)
+# print(f'testing_bash.py: INITIATING DENSE DISTRIBUTION')
+# sim.initiate_dense_distribution(n=num_plants, **plant_kwargs)
 np.random.seed(np.random.randint(0, 1_000_000))
-print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
-sim.run(n_iter=n_iter, max_population=15_000)
+print()
+print(f'testing_bash.py: Simulation initiated. Time: {
+      time.strftime("%H:%M:%S")}')
+sim.run(n_iter=n_iter, max_population=25_000)
 
-if sim.t > 50:
+if sim.t > 300:
     np.random.seed(seed)
 
     print_nested_dict(combined_kwargs)
@@ -98,10 +106,11 @@ if sim.t > 50:
 
     if plot_results:
         print('Plotting...')
-        surfix = time.strftime("%Y%m%d-%H%M%S")
-
-        sim.state_buffer.plot(title=f'state_buffer_{surfix}, L = {L} m')
-        sim.density_field_buffer.plot(
-            title=f'density_field_buffer_{surfix}, L = {L} m')
-        sim.data_buffer.plot(title=f'data_buffer_{surfix}, L = {L} m')
+        time = time.strftime("%Y%m%d-%H%M%S")
+        title = f'(lq={lq:.3e},   sg={sg:.3e},   dispersal_range={
+            (dispersal_range):.3e})'
+        sim.state_buffer.plot(title=f'{title}')
+        # sim.density_field_buffer.plot(
+        #     title=f'{title}')
+        sim.data_buffer.plot(title=f'{title}')
         plt.show()
