@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 import copy
 
 
@@ -40,52 +41,68 @@ class Plant:
     def die(self):
         self.is_dead = True
 
-    def reproduce(self, simulation):
+    def disperse(self, sim):
         if self.species_germination_chance > 0 and not self.is_dead:
-            # Determine if reproduction is successful based on chance and site quality
-            # new_pos = self.pos + np.random.uniform(-self.dispersal_range,
-            #                                         self.dispersal_range, size=2)
+            new_pos = self.pos + sp.stats.cauchy.rvs(
+                loc=0, scale=self.dispersal_range, size=2)
+
+            dispersal_chance = sim.local_density(
+                new_pos) * sim.precipitation_func(sim.t) * self.species_germination_chance
+
+            if dispersal_chance > np.random.uniform(0, 1 - sim.land_quality):
+
+                new_plant_kwargs = self.kwargs.copy()
+                new_plant_kwargs['r_min'] = self.r_min
+                new_plant_kwargs['r'] = self.r_min
+                new_plant_kwargs['is_colliding'] = False
+                new_plant_kwargs['is_dead'] = False
+                new_plant_kwargs['generation'] = self.generation + 1
+
+                sim.add(Plant(new_pos, **new_plant_kwargs))
+
+    def disperse_old(self, sim):
+        if self.species_germination_chance > 0 and not self.is_dead:
             new_pos = self.pos + np.random.normal(
                 0, self.dispersal_range, size=2)
 
-            if simulation.pos_in_box(new_pos):
+            dispersal_chance = (sim.local_density(
+                new_pos) + sim.land_quality) * self.species_germination_chance
 
-                # reproduction_chance = simulation.local_density(
-                #     new_pos) * self.species_germination_chance
-                reproduction_chance = (simulation.local_density(
-                    new_pos) + simulation.land_quality) * self.species_germination_chance
+            if dispersal_chance > np.random.uniform(0, 1):
 
-                # if reproduction_chance > np.random.uniform(0, 1 - simulation.land_quality):
-                if reproduction_chance > np.random.uniform(0, 1):
+                new_plant_kwargs = self.kwargs.copy()
+                new_plant_kwargs['r_min'] = self.r_min
+                new_plant_kwargs['r'] = self.r_min
+                new_plant_kwargs['is_colliding'] = False
+                new_plant_kwargs['is_dead'] = False
+                new_plant_kwargs['generation'] = self.generation + 1
 
-                    new_plant_kwargs = self.kwargs.copy()
-                    new_plant_kwargs['r_min'] = self.r_min
-                    new_plant_kwargs['r'] = self.r_min
-                    new_plant_kwargs['is_colliding'] = False
-                    new_plant_kwargs['is_dead'] = False
-                    new_plant_kwargs['generation'] = self.generation + 1
-
-                    simulation.add(Plant(new_pos, **new_plant_kwargs))
+                sim.add(Plant(new_pos, **new_plant_kwargs))
 
     def compete(self, other_plant):
-        p = 0.5
-        # p = np.random.rand()
-        if p > self.r / (self.r + other_plant.r):
+        if self.r < other_plant.r:
             self.die()
-        else:
+
+        elif self.r > other_plant.r:
             other_plant.die()
+
+        elif self.r == other_plant.r:
+            if np.random.rand() > 0.5:
+                self.die()
+            else:
+                other_plant.die()
 
     def resolve_collisions(self, collisions):
         for other_plant in collisions:
             self.compete(other_plant)
 
-    def update(self, simulation):
+    def update(self, sim):
         self.grow()
 
-        collisions = simulation.get_collisions(self)
+        collisions = sim.get_collisions(self)
         self.resolve_collisions(collisions)
 
-        self.reproduce(simulation)
+        self.disperse(sim)
         self.mortality()
         return
 

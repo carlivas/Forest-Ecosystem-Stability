@@ -6,10 +6,11 @@ import copy
 import warnings
 
 from mods.plant import Plant
+from matplotlib.colors import ListedColormap
 
 
 class DataBuffer:
-    def __init__(self, size=None, data=None, keys=None):
+    def __init__(self, sim=None, size=None, data=None, keys=None):
         if data is not None:
             self.import_data(data)
             return
@@ -17,8 +18,9 @@ class DataBuffer:
         if keys is not None:
             self.keys = list(str(key) for key in keys)
         else:
-            self.keys = ['Time', 'Biomass', 'Population']
+            self.keys = ['Time', 'Biomass', 'Population', 'Precipitation']
 
+        self.sim = sim
         self.size = size+1
         self.values = np.full((size+1, len(self.keys)), np.nan)
         self.length = 0
@@ -34,9 +36,10 @@ class DataBuffer:
     def analyze_state(self, state, t):
         biomass = sum([plant.area for plant in state])
         population = len(state)
-        data = np.array([biomass, population])
-        print(' '*30 + f'|\tt = {t:^5}\t|\tP = {population:^6}\t|\tB = {
-              np.round(biomass, 5):^5}\t|', end='\r')
+        precipitation = self.sim.precipitation_func(t)
+        data = np.array([biomass, population, precipitation])
+        print(' '*30 + f'|  t = {t:<6}  |  N = {population:<6}  |  B = {
+              np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
         if t % 100 == 0:
             print()
         self.add(t, data)
@@ -53,14 +56,21 @@ class DataBuffer:
         self.length = self.values.shape[0]
 
     def plot(self, size=6, title='DataBuffer', keys=None):
-        fig, ax = plt.subplots(len(self.keys) - 1, 1, figsize=(
-            size/2 * len(self.keys) - 1, size))
+        if keys is not None:
+            self.keys = keys
+        fig, ax = plt.subplots(
+            len(self.keys) - 1, 1,
+            figsize=(size,
+                     size * (len(self.keys) - 1) / 3),
+            sharex=True)
 
         if title is not None:
             fig.suptitle(title, fontsize=10)
 
-        fig.tight_layout(pad=3.0)
-        cmap = plt.get_cmap('winter')
+        fig.tight_layout(pad=3.0, h_pad=0.0)
+
+        cmap = ListedColormap(
+            ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
 
         if keys is None:
             keys = self.keys[1:]
@@ -71,9 +81,10 @@ class DataBuffer:
 
             ax[i].plot(x_data, y_data,
                        label=key, color=cmap((i + 1)/len(self.keys)))
+            ax[i].set_ylim(0, 1.1*np.nanmax(y_data))
             ax[i].grid()
             ax[i].legend()
-        ax[1].set_xlabel('Time')
+        ax[-1].set_xlabel('Time')
 
         for ax_i in ax:
             ax_i.grid()
@@ -149,7 +160,7 @@ class FieldBuffer:
 
         if data is not None:
             fields, times = self.import_data(
-                data=data, sim_kwargs=sim_kwargs)
+                data=data)
             self.fields = fields
             self.times = times
 
@@ -196,7 +207,7 @@ class FieldBuffer:
     def get_times(self):
         return self.times.copy()
 
-    def import_data(self, data, sim_kwargs):
+    def import_data(self, data):
         times = data.loc[:, 0].astype(int)
         fields_arr = data.loc[:, 1:].values
 

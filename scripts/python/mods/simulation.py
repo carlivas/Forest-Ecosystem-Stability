@@ -119,6 +119,7 @@ class Simulation:
         self.land_quality = kwargs['land_quality']
         self._m = kwargs['_m']
         self.n_iter = kwargs['n_iter']
+        self.precipitation_func = kwargs.get('precipitation_func', lambda t: 1)
 
         self.half_width = kwargs.get('half_width', 0.5)
         self.half_height = kwargs.get('half_height', self.half_width)
@@ -128,7 +129,11 @@ class Simulation:
         buffer_size = kwargs.get('buffer_size', 15)
         buffer_skip = kwargs.get('buffer_skip', 10)
         buffer_preset_times = kwargs.get('buffer_preset_times', np.linspace(
-            0, self.n_iter, buffer_size).astype(int))
+            1, self.n_iter, buffer_size).astype(int))
+
+        self.data_buffer = DataBuffer(sim=self,
+                                      size=kwargs['n_iter']+1,
+                                      )
 
         self.state_buffer = StateBuffer(
             size=kwargs.get('state_buffer_size', buffer_size),
@@ -137,20 +142,7 @@ class Simulation:
                 'state_buffer_preset_times', buffer_preset_times)
         )
 
-        self.data_buffer = DataBuffer(
-            size=kwargs['n_iter']+1,
-        )
-
         df_res = kwargs.get('density_field_resolution', 100)
-        self.density_field = DensityField(
-            half_width=self.half_width,
-            half_height=self.half_height,
-            check_radius=kwargs.get(
-                'density_check_radius', 100 * self._m),
-            resolution=df_res,
-            simulation=self
-        )
-
         self.density_field_buffer = FieldBuffer(
             sim=self,
             resolution=df_res,
@@ -158,6 +150,15 @@ class Simulation:
             skip=kwargs.get('density_field_buffer_skip', buffer_skip),
             preset_times=kwargs.get(
                 'density_field_buffer_preset_times', buffer_preset_times),
+        )
+
+        self.density_field = DensityField(
+            half_width=self.half_width,
+            half_height=self.half_height,
+            check_radius=kwargs.get(
+                'density_check_radius', 100 * self._m),
+            resolution=df_res,
+            simulation=self
         )
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]) -> None:
@@ -208,14 +209,13 @@ class Simulation:
         and saves the state and density field at specified intervals.
         """
 
-        # First Phase: Update all plants
+        # First Phase: Update all plants based on the current state of the simulation
         for plant in self.state:
             plant.update(self)
 
         # Second Phase: Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
         new_plants = []
         # plant_ids = [plant.id for plant in self.state]
-
         for plant in self.state:
             if not plant.is_dead:
                 # if plant.id is None:

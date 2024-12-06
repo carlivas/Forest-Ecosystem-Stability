@@ -41,7 +41,8 @@ for i, n in enumerate(sim_nums[:10]):
     dispersal_range = plant_kwargs.get('dispersal_range')
     num_plants = sim_kwargs.get('num_plants')
     # title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},  dispersal_range={(dispersal_range):.3e})'
-    title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},  dens0={(dens0):.3e})'
+    # title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},  dens0={(dens0):.3e})'
+    title = f'{n}   (dens0={(dens0):.3e})'
 
     if print_kwargs:
         print('plotting.py: Loaded kwargs...')
@@ -67,7 +68,7 @@ for i, n in enumerate(sim_nums[:10]):
         density_field_buffer_arr = pd.read_csv(
             f'{load_folder}/density_field_buffer_{n}.csv', header=None)
         density_field_buffer = FieldBuffer(
-            data=density_field_buffer_arr, skip=sim_kwargs['density_field_buffer_skip'], sim_kwargs=sim_kwargs)
+            data=density_field_buffer_arr)
         print('plotting.py: Loaded density_field_buffer...')
 
         density_field_buffer.plot(

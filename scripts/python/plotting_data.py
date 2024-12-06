@@ -15,8 +15,12 @@ grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
 path = sys.argv[1]
+if not os.path.exists(path):
+    raise FileNotFoundError(f"The specified path does not exist: {path}")
+
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
+
 
 sim_nums = [f.split('_')[-1].split('.')[0]
             for f in os.listdir(load_folder) if 'kwargs' in f]
@@ -51,6 +55,14 @@ def teal_cmap(t): return white * (1 - t) + teal * t
 def green_cmap(t): return white * (1 - t) + green * t
 
 
+norm = plt.Normalize(vmin=0, vmax=max_num_plants)
+sm = []
+sm.append(plt.cm.ScalarMappable(cmap=plt.cm.colors.ListedColormap(
+    [teal_cmap(t) for t in np.linspace(0, 1, 256)]), norm=norm))
+sm.append(plt.cm.ScalarMappable(cmap=plt.cm.colors.ListedColormap(
+    [green_cmap(t) for t in np.linspace(0, 1, 256)]), norm=norm))
+
+
 for i, n in enumerate(sim_nums):
     kwargs = kwargs_list[i]
     data_buffer_df = data_buffer_list[i]
@@ -81,13 +93,6 @@ ax[1].set_title('Population', color=white, fontsize=9)
 ax[0].set_ylim(0, biomass_ylim)
 ax[1].set_ylim(0, population_ylim)
 
-
-norm = plt.Normalize(vmin=0, vmax=max_num_plants)
-sm = []
-sm.append(plt.cm.ScalarMappable(cmap=plt.cm.colors.ListedColormap(
-    [teal_cmap(t) for t in np.linspace(0, 1, 256)]), norm=norm))
-sm.append(plt.cm.ScalarMappable(cmap=plt.cm.colors.ListedColormap(
-    [green_cmap(t) for t in np.linspace(0, 1, 256)]), norm=norm))
 
 for ax, sm in zip(ax, sm):
     ax.set_xlim(0, 10000)

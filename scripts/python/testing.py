@@ -42,7 +42,7 @@ for i in range(n_searches):
 
         buffer_size = 15
         buffer_skip = 10
-        buffer_preset_times = np.linspace(0, n_iter, buffer_size).astype(int)
+        buffer_preset_times = np.linspace(1, n_iter, buffer_size).astype(int)
 
         sim_kwargs = {
             'seed': seed,

@@ -29,6 +29,8 @@ def convert_to_serializable(obj):
         return {k: convert_to_serializable(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [convert_to_serializable(i) for i in obj]
+    if isinstance(obj, type(lambda: None)):
+        return obj.__name__
     return obj
 
 
@@ -100,6 +102,8 @@ def print_nested_dict(d, indent=0):
         else:
             if isinstance(value, float) and value.is_integer():
                 value = int(value)
+            if isinstance(value, type(lambda: None)):
+                value = value.__name__
             print(value)
     time.sleep(0.5)
 
