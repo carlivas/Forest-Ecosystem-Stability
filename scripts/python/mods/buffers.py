@@ -7,6 +7,7 @@ import warnings
 
 from mods.plant import Plant
 from matplotlib.colors import ListedColormap
+from matplotlib import animation
 
 
 class DataBuffer:
@@ -272,9 +273,12 @@ class FieldBuffer:
         if T == 1:
             n_rows = 1
             n_cols = 1
-        else:
+        elif T <= 20:
             n_rows = int(np.floor(np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
+        else:
+            self.animate(size=size, vmin=vmin, vmax=vmax, extent=extent)
+            return None, None
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
@@ -317,6 +321,36 @@ class FieldBuffer:
                     ax[l, k].axis('off')
 
         return fig, ax
+
+    def animate(self, size=2, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+        print('FieldBuffer.animation(): Animating FieldBuffer...')
+        fields = self.get_fields()
+        times = self.get_times()
+        T = len(times)
+
+        fig, ax = plt.subplots(1, 1, figsize=(size, size))
+        fig.suptitle('FieldBuffer Animation', fontsize=10)
+        fig.tight_layout()
+        cax = fig.add_axes([0.05, 0.05, 0.9, 0.02])
+        norm = plt.Normalize(vmin=vmin, vmax=vmax)
+        sm = plt.cm.ScalarMappable(cmap='Greys', norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
+        cbar.ax.tick_params(labelsize=7)
+
+        def animate(i):
+            ax.clear()
+            ax.set_title(f't = {times[i]}')
+            ax.imshow(fields[i], origin='lower', cmap='Greys',
+                      vmin=vmin, vmax=vmax, extent=extent)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            return ax
+
+        ani = animation.FuncAnimation(
+            fig, animate, frames=T, interval=100, repeat=True)
+        plt.show()
+        return ani
 
 
 class StateBuffer:
@@ -470,9 +504,12 @@ class StateBuffer:
         if T == 1:
             n_rows = 1
             n_cols = 1
-        else:
+        elif T <= 20:
             n_rows = int(np.floor(T / np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
+        else:
+            self.animate(size=size, fast=fast)
+            return None, None
         print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
@@ -507,3 +544,25 @@ class StateBuffer:
                     ax[l, k].axis('off')
 
         return fig, ax
+
+    def animate(self, size=6, fast=False):
+        print('StateBuffer.animation(): Animating StateBuffer...')
+        states = self.get_states()
+        times = self.get_times()
+        T = len(times)
+
+        fig, ax = plt.subplots(1, 1, figsize=(size, size))
+        fig.suptitle('StateBuffer Animation', fontsize=10)
+        fig.tight_layout()
+
+        def animate(i):
+            ax.clear()
+            ax.set_title(f't = {times[i]}')
+            self.plot_state(state=states[i], t=times[i],
+                            size=size, fig=fig, ax=ax, fast=fast)
+            return ax
+
+        ani = animation.FuncAnimation(
+            fig, animate, frames=T, interval=100, repeat=True)
+        plt.show()
+        return ani

@@ -45,7 +45,7 @@ for i, n in enumerate(sim_nums[:10]):
     title = f'{n}   (dens0={(dens0):.3e})'
 
     if print_kwargs:
-        print('plotting.py: Loaded kwargs...')
+        print('plotting.py: Loaded kwargs, now printing...')
         print_nested_dict(kwargs)
         print()
 
@@ -53,7 +53,7 @@ for i, n in enumerate(sim_nums[:10]):
         data_buffer_arr = pd.read_csv(
             f'{load_folder}/data_buffer_{n}.csv')
         data_buffer = DataBuffer(data=data_buffer_arr)
-        print('plotting.py: Loaded data_buffer...')
+        print('plotting.py: Loaded data_buffer, now plotting...')
         data_buffer.plot(title=title)
 
     if plot_states:
@@ -61,7 +61,7 @@ for i, n in enumerate(sim_nums[:10]):
             f'{load_folder}/state_buffer_{n}.csv', header=None)
         state_buffer = StateBuffer(
             data=state_buffer_arr, plant_kwargs=plant_kwargs)
-        print('plotting.py: Loaded state_buffer...')
+        print('plotting.py: Loaded state_buffer, now plotting...')
         state_buffer.plot(size=2, title=title, fast=fast_plot)
 
     if plot_density_field:
@@ -69,7 +69,7 @@ for i, n in enumerate(sim_nums[:10]):
             f'{load_folder}/density_field_buffer_{n}.csv', header=None)
         density_field_buffer = FieldBuffer(
             data=density_field_buffer_arr)
-        print('plotting.py: Loaded density_field_buffer...')
+        print('plotting.py: Loaded density_field_buffer, now plotting...')
 
         density_field_buffer.plot(
             size=2, title=title)

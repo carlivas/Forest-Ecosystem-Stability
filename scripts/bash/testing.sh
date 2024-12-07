@@ -6,8 +6,8 @@ cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit
 source ./scripts/bash/venv.sh
 
 
-precipitations=(6000e-5 6250e-5 6500e-5 6750e-5 7000e-5)
-num_plantss=(50 100 250 500 750 1000 1250 1500 1750 2000 2500 3000)
+precipitations=(7500e-5 8000e-5 8500e-5 9000e-5)
+num_plantss=(100 250 500 1000 1500 2000 2500 3000)
 # num_plantss=(2000 2200 2400 2600 2800 3000)
 # num_plantss=(555 1111 2222 5555 8333 11111 16666 22222 38888)
 

@@ -40,16 +40,6 @@ plant_kwargs = {
     'species_germination_chance': 1.,
 }
 
-# buffer_size = 15
-# buffer_skip = 10
-# buffer_preset_times = np.linspace(0, n_iter, buffer_size).astype(int)
-
-
-def precipitation_func(t): return precipitation
-
-
-precipitation_func.__name__ = f'{precipitation}'
-
 sim_kwargs = {
     'seed': seed,
     'n_iter': n_iter,
