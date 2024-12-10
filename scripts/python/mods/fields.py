@@ -4,6 +4,7 @@ import copy
 from numba import njit, prange
 from scipy.interpolate import RegularGridInterpolator
 from scipy.stats import gaussian_kde
+from scipy.spatial import KDTree
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 SQRT2 = np.sqrt(2)
@@ -53,31 +54,43 @@ class DensityFieldSPH:
     def __init__(self, half_width, half_height, check_radius, resolution, simulation=None):
         print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
         self.resolution = resolution
-        self.xx = np.linspace(-half_width, half_width, self.resolution)
-        self.yy = np.linspace(-half_height, half_height, self.resolution)
+        xx = np.linspace(-half_width, half_width, self.resolution)
+        X, Y = np.meshgrid(xx, xx)
+        self.grid_points = np.vstack([X.ravel(), Y.ravel()]).T
 
+        self.KDTree = KDTree(np.vstack([X.ravel(), Y.ravel()]).T)
         self.bandwidthSq = check_radius**2
         self.values = np.zeros((resolution, resolution))
 
         self.simulation = simulation
 
     def query(self, pos):
-        i = np.argmin(np.abs(self.yy - pos[1]))
-        j = np.argmin(np.abs(self.xx - pos[0]))
+        # Find the nearest neighbor using KDTree
+        dist, idx = self.KDTree.query(pos)
+        # Convert the 1D index from KDTree query to 2D index for the values array
+        idx_2d = np.unravel_index(idx, (self.resolution, self.resolution))
+        return self.values[idx_2d]
 
-        return self.values[i, j].copy()
+    # def query(self, pos):
+    #     # Ensure pos is a NumPy array for efficient operations
+    #     pos = np.array(pos)
+
+    #     # Find the indices of the closest points
+    #     i = np.argmin(np.abs(self.yy - pos[1]))
+    #     j = np.argmin(np.abs(self.xx - pos[0]))
+
+    #     # Return a copy of the value at the found indices
+    #     return self.values[i, j]
 
     def update(self):
         if self.simulation.kt is None:
             return
-        X, Y = np.meshgrid(self.xx, self.yy)
-        XY_vstack = np.vstack([X.ravel(), Y.ravel()])
 
         positions = np.array([plant.pos
                              for plant in self.simulation.state])
         areas = np.array([plant.area for plant in self.simulation.state])
         self.values = getDensity(
-            XY_vstack.T, positions, areas, self.bandwidthSq).reshape(X.shape)
+            self.grid_points, positions, areas, self.bandwidthSq).reshape(self.resolution, self.resolution)
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
         if ax is None:
@@ -130,54 +143,54 @@ class kde(gaussian_kde):
                                         * np.sqrt(2*PI))).sum()
 
 
-class DensityFieldKDE:
-    def __init__(self, half_width, half_height, check_radius, resolution, simulation=None):
-        print('DensityFieldKDE: DensityField is using gaussian kernel density estimation.')
-        self.resolution = resolution
-        self.xx = np.linspace(-half_width, half_width, self.resolution)
-        self.yy = np.linspace(-half_height, half_height, self.resolution)
+# class DensityFieldKDE:
+#     def __init__(self, half_width, half_height, check_radius, resolution, simulation=None):
+#         print('DensityFieldKDE: DensityField is using gaussian kernel density estimation.')
+#         self.resolution = resolution
+#         self.xx = np.linspace(-half_width, half_width, self.resolution)
+#         self.yy = np.linspace(-half_height, half_height, self.resolution)
 
-        self.bandwidth = check_radius
-        self.kde = None
+#         self.bandwidth = check_radius
+#         self.kde = None
 
-        self.simulation = simulation
+#         self.simulation = simulation
 
-    def query(self, pos):
-        return self.kde(pos) * self.simulation.biomass
+#     def query(self, pos):
+#         return self.kde(pos) * self.simulation.biomass
 
-    def update(self):
-        if self.simulation.kt is None:
-            return
+#     def update(self):
+#         if self.simulation.kt is None:
+#             return
 
-        positions = np.array([plant.pos
-                              for plant in self.simulation.state])
-        areas = np.array([plant.area for plant in self.simulation.state])
-        self.kde = kde(
-            positions.T, bw_method=self.bandwidth, weights=areas)
+#         positions = np.array([plant.pos
+#                               for plant in self.simulation.state])
+#         areas = np.array([plant.area for plant in self.simulation.state])
+#         self.kde = kde(
+#             positions.T, bw_method=self.bandwidth, weights=areas)
 
-    def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
-        if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        im = ax.imshow(self.get_values(), origin='lower', cmap='Greys',
-                       vmin=vmin, vmax=vmax, extent=extent)
-        ax.set_title(title, fontsize=7)
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = plt.colorbar(im, cax=cax)
-        cbar.set_label('Density')
-        # ax.set_xticks([])
-        # ax.set_yticks([])
-        return fig, ax
+#     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+#         if ax is None:
+#             fig, ax = plt.subplots(1, 1, figsize=(size, size))
+#         im = ax.imshow(self.get_values(), origin='lower', cmap='Greys',
+#                        vmin=vmin, vmax=vmax, extent=extent)
+#         ax.set_title(title, fontsize=7)
+#         divider = make_axes_locatable(ax)
+#         cax = divider.append_axes("right", size="5%", pad=0.05)
+#         cbar = plt.colorbar(im, cax=cax)
+#         cbar.set_label('Density')
+#         # ax.set_xticks([])
+#         # ax.set_yticks([])
+#         return fig, ax
 
-    def get_values(self):
-        X, Y = np.meshgrid(self.xx, self.yy)
-        XY_vstack = np.vstack([X.ravel(), Y.ravel()])
-        values = self.kde(XY_vstack).reshape(
-            self.resolution, self.resolution) * self.simulation.biomass
-        return copy.deepcopy(values)
+#     def get_values(self):
+#         X, Y = np.meshgrid(self.xx, self.yy)
+#         XY_vstack = np.vstack([X.ravel(), Y.ravel()])
+#         values = self.kde(XY_vstack).reshape(
+#             self.resolution, self.resolution) * self.simulation.biomass
+#         return copy.deepcopy(values)
 
 
-# class DensityFieldKDE():
+# class DensityFieldKDE_old():
 #     def __init__(self, half_width, half_height, check_radius, resolution, values=None):
 #         self.resolution = resolution
 #         self.xx = np.linspace(-half_width, half_width, self.resolution)

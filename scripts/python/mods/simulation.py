@@ -110,36 +110,44 @@ class Simulation:
             - density_field_buffer_skip (int, optional): The skip interval for the density field buffer. Defaults to 1.
             - density_field_buffer_preset_times (list, optional): Preset times for the density field buffer. Defaults to None.
         """
-        self.kwargs = kwargs
 
         self.t = 0
         self.state = []
-        self.biomass = None
-        self.population = None
-        self.land_quality = kwargs['land_quality']
-        self._m = kwargs['_m']
-        self.n_iter = kwargs['n_iter']
-        self.precipitation_func = kwargs.get('precipitation_func', lambda t: 1)
+
+        self.land_quality = kwargs.get('land_quality')
+        self.precipitation = kwargs.get('precipitation')
 
         self.half_width = kwargs.get('half_width', 0.5)
         self.half_height = kwargs.get('half_height', self.half_width)
+        self._m = 2*self.half_width / kwargs['L']
+
+        kwargs['_m'] = self._m
+        kwargs['r_min'] = kwargs['r_min'] * kwargs['_m']
+        kwargs['r_max'] = kwargs['r_max'] * kwargs['_m']
+        kwargs['growth_rate'] = kwargs['growth_rate'] * kwargs['_m']
+        kwargs['density_range'] = kwargs['density_range'] * kwargs['_m']
+
+        self.kwargs = kwargs
+
         self.kt_leafsize = kwargs.get('kt_leafsize', 10)
         self.kt = None
 
-        buffer_size = kwargs.get('buffer_size', 15)
-        buffer_skip = kwargs.get('buffer_skip', 10)
-        buffer_preset_times = kwargs.get('buffer_preset_times', np.linspace(
-            1, self.n_iter, buffer_size).astype(int))
+        buffer_size = kwargs.get('buffer_size', 19)
+        buffer_skip = kwargs.get('buffer_skip', 150)
+        buffer_preset_times = kwargs.get(
+            'buffer_preset_times', (np.arange(buffer_size) * buffer_skip).astype(int))
 
         self.data_buffer = DataBuffer(sim=self,
-                                      size=kwargs['n_iter']+1,
+                                      size=kwargs.get(
+                                          'data_buffer_size', 10000),
                                       )
 
         self.state_buffer = StateBuffer(
             size=kwargs.get('state_buffer_size', buffer_size),
             skip=kwargs.get('state_buffer_skip', buffer_skip),
             preset_times=kwargs.get(
-                'state_buffer_preset_times', buffer_preset_times)
+                'state_buffer_preset_times', buffer_preset_times),
+            kwargs=kwargs
         )
 
         df_res = kwargs.get('density_field_resolution', 100)
@@ -155,8 +163,7 @@ class Simulation:
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
-            check_radius=kwargs.get(
-                'density_check_radius', 100 * self._m),
+            check_radius=kwargs['density_range'],
             resolution=df_res,
             simulation=self
         )
@@ -176,7 +183,8 @@ class Simulation:
             If the input is not a Plant object or an array_like of Plant objects.
         """
         if isinstance(plant, Plant):
-            self.state.append(plant)
+
+            print(f'Added plant {plant.id}')
         elif isinstance(plant, (list, np.ndarray)):
             for p in plant:
                 if isinstance(p, Plant):
@@ -201,13 +209,18 @@ class Simulation:
             self.kt = KDTree(
                 [plant.pos for plant in self.state], leafsize=self.kt_leafsize)
 
-    def step(self) -> None:
+    def step(self, verbose=False) -> None:
         """
         Perform a single time step of the simulation.
 
         This method updates all plants, collects non-dead plants, updates necessary data structures,
         and saves the state and density field at specified intervals.
         """
+        population = len(self.state)
+        min_spawn_rate = 1
+
+        n = max(min_spawn_rate, population)
+        self.attempt_spawn(n=n, **self.kwargs)
 
         # First Phase: Update all plants based on the current state of the simulation
         for plant in self.state:
@@ -231,9 +244,14 @@ class Simulation:
         self.update_kdtree()
         self.density_field.update()
 
-        data = self.data_buffer.analyze_and_add(self.state, t=self.t)
-        self.biomass = data[0]
-        self.population = data[1]
+        biomass = sum([plant.area for plant in self.state])
+        precipitation = self.precipitation
+        data = np.array([biomass, population, precipitation])
+        self.data_buffer.add(data=data, t=self.t)
+
+        if verbose:
+            print(' '*30 + f'|  t = {self.t:<6}  |  N = {population:<6}  |  B = {
+                np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
 
         do_save_state = self.t % self.state_buffer.skip == 0 or self.t in self.state_buffer.preset_times
         do_save_density_field = self.t % self.density_field_buffer.skip == 0 or self.t in self.density_field_buffer.preset_times
@@ -244,7 +262,7 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.get_values(), t=self.t)
 
-    def run(self, n_iter: Optional[int] = None, max_population: Optional[int] = None) -> None:
+    def run(self, n_iter: int, max_population: Optional[int] = None, verbose: bool = False) -> None:
         """
         Run the simulation for a given number of iterations.
 
@@ -254,16 +272,14 @@ class Simulation:
             The number of iterations to run the simulation. If None, the value from kwargs is used.
         """
         import time
-        if n_iter is None:
-            n_iter = self.kwargs['n_iter']
         start_time = time.time()
         try:
             for _ in range(1, n_iter):
-                self.step()
+                self.step(verbose=True)
 
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.state)
-                if l == 0 or (max_population is not None and l > max_population):
+                if (max_population is not None and l > max_population):
                     break
 
                 elapsed_time = time.time() - start_time
@@ -283,6 +299,63 @@ class Simulation:
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
+
+    def spin_up(self, target_population: int, max_iter: int = 3000) -> None:
+        """
+        Run the simulation until the population reaches a given maximum value.
+
+        Parameters:
+        -----------
+        target_population : int
+            The maximum population size to run the simulation until.
+        """
+        import time
+        start_time = time.time()
+        land_quality = self.land_quality
+        print(f'Simulation.spin_up(): Simulating until population reaches {
+            target_population}...')
+        print(f'Simulation.spin_up(): !Warning! setting land_quality to 0.01')
+        self.land_quality = 0.01
+        try:
+            while len(self.state) < target_population and self.t <= max_iter:
+
+                self.step(verbose=True)
+
+                elapsed_time = time.time() - start_time
+                hours, rem = divmod(elapsed_time, 3600)
+                minutes, seconds = divmod(rem, 60)
+                elapsed_time_str = f"{str(int(hours))}".rjust(
+                    2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
+
+                print(f'Elapsed time: {elapsed_time_str}', end='\r')
+
+        except KeyboardInterrupt:
+            print('\nInterrupted by user...')
+
+        self.land_quality = land_quality
+        print(f'Simulation.spin_up(): Done. Setting land_quality back to {
+              land_quality}')
+
+    def attempt_spawn(self, n: int, **kwargs: Any) -> None:
+
+        new_positions = np.random.uniform(-self.half_width,
+                                          self.half_width, (n, 2))
+
+        densities = self.density_field.query(new_positions)
+
+        random_values = np.random.uniform(0, 1, n)
+
+        probabilities = np.clip(
+            densities * self.precipitation, self.land_quality, 1)
+        # print(f'Simulation.attempt_spawn(): {np.mean(probabilities)=}')
+
+        spawn_indices = np.where(
+            probabilities > random_values)[0]
+
+        new_plants = [Plant(pos=new_positions[i], r=kwargs['r_min'], **kwargs)
+                      for i in spawn_indices]
+
+        self.add(new_plants)
 
     def get_collisions(self, plant: Plant) -> List[Plant]:
         """
@@ -348,9 +421,13 @@ class Simulation:
         self.update_kdtree()
         self.density_field.update()
 
-        data = self.data_buffer.analyze_and_add(state=self.get_state(), t=0)
-        self.biomass = data[0]
-        self.population = data[1]
+        # data = self.data_buffer.analyze_and_add(state=self.get_state(), t=0)
+        biomass = sum([plant.area for plant in self.state])
+        population = len(self.state)
+        precipitation = self.precipitation
+        data = np.array([biomass, population, precipitation])
+
+        self.data_buffer.add(data=data, t=0)
         self.state_buffer.add(state=self.get_state(), t=0)
         self.density_field_buffer.add(
             field=self.density_field.get_values(), t=0)
@@ -367,9 +444,9 @@ class Simulation:
         self.state = state
         self.initiate()
 
-    def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, **plant_kwargs: Any) -> None:
+    def initiate_uniform_radii(self, n: int, r_min: float, r_max: float) -> None:
         """
-        Initialize the simulation with plants having uniform lifetimes. This is only valid for the case where the growth rate is constant.
+        Initialize the simulation with plants having uniform radii. This is only valid for the case where the growth rate is constant.
 
         Parameters:
         -----------
@@ -379,20 +456,22 @@ class Simulation:
             The minimum lifetime of the plants.
         t_max : float
             The maximum lifetime of the plants.
-        plant_kwargs : dict
+        kwargs : dict
             Additional keyword arguments for the Plant objects.
         """
-        growth_rate = plant_kwargs['growth_rate']
-        plant_kwargs['r_max'] = t_max * growth_rate
-        plants = [
+        kwargs = self.kwargs
+        r_min = r_min * self._m
+        r_max = r_max * self._m
+
+        new_plants = [
             Plant(
                 pos=np.random.uniform(-self.half_width, self.half_width, 2),
-                r=np.random.uniform(t_min, t_max) * growth_rate, id=i,
-                **plant_kwargs
+                r=np.random.uniform(r_min, r_max),
+                **kwargs
             )
             for i in range(n)
         ]
-        self.add(plants)
+        self.add(new_plants)
         self.initiate()
 
     def initiate_dense_distribution(self, n: int, **plant_kwargs: Any) -> None:

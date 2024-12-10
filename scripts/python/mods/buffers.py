@@ -26,7 +26,7 @@ class DataBuffer:
         self.values = np.full((size+1, len(self.keys)), np.nan)
         self.length = 0
 
-    def add(self, t, data):
+    def add(self, data, t):
         self.values[t] = np.array([t, *data])
         self.length = self.length + 1
 
@@ -37,10 +37,8 @@ class DataBuffer:
     def analyze_state(self, state, t):
         biomass = sum([plant.area for plant in state])
         population = len(state)
-        precipitation = self.sim.precipitation_func(t)
+        precipitation = self.sim.precipitation
         data = np.array([biomass, population, precipitation])
-        print(' '*30 + f'|  t = {t:<6}  |  N = {population:<6}  |  B = {
-              np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
         if t % 100 == 0:
             print()
         self.add(t, data)
@@ -147,14 +145,14 @@ class DataBuffer:
 
 
 class FieldBuffer:
-    def __init__(self, sim=None, resolution=2, size=10, skip=1, preset_times=None, data=None, **sim_kwargs):
+    def __init__(self, sim=None, resolution=2, size=10, skip=1, preset_times=None, data=None, **kwargs):
         self.sim = sim
         self.size = size    # estimated max number of fields to store
         self.resolution = resolution
         self.skip = skip
         self.times = []
         self.preset_times = preset_times
-        self.sim_kwargs = sim_kwargs
+        self.kwargs = kwargs
 
         self.fields = np.full(
             (self.size, self.resolution, self.resolution), np.nan)
@@ -173,26 +171,23 @@ class FieldBuffer:
                     "All elements in preset_times must be integers")
 
     def add(self, field, t):
-        if len(self.times) == 0 or t not in self.times:
-            if len(self.times) >= self.size:
-                for i, time in enumerate(self.times):
-                    if time not in self.preset_times:
-                        fields = self.get_fields()
-                        B = np.roll(fields[i:], -1, axis=0)
-                        fields = np.concatenate(
-                            (fields[:i], B), axis=0)
-                        self.fields = fields
-                        self.times.pop(i)
-                        # print(
-                        # f'FieldBuffer.add(): Removed field at time {time}.')
-                        break
-
+        if len(self.times) < self.size:
             self.fields[len(self.times)] = field
             self.times.append(t)
-            # print(f'FieldBuffer.add(): Added field at time {t}.')
-            # print(f'FieldBuffer.add(): {self.times=}')
-            # print(f'FieldBuffer.add(): {len(self.fields)=}')
-            # print()
+        elif len(self.times) < self.size:
+            for i, time in enumerate(self.times):
+                if time not in self.preset_times:
+                    fields = self.get_fields()
+                    B = np.roll(fields[i:], -1, axis=0)
+                    fields = np.concatenate(
+                        (fields[:i], B), axis=0)
+                    self.fields = fields
+                    self.times.pop(i)
+        else:
+            self.fields = np.roll(self.fields, -1, axis=0)
+            self.fields[-1] = field
+            self.times.pop(0)
+            self.times.append(t)
 
     def get_fields(self, times=None):
         if times is None:
@@ -348,24 +343,24 @@ class FieldBuffer:
             return ax
 
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval=100, repeat=True)
+            fig, animate, frames=T, interval=30, repeat=True)
         plt.show()
         return ani
 
 
 class StateBuffer:
-    def __init__(self, size=100, skip=10, sim=None, preset_times=None, data=None, plant_kwargs=None):
+    def __init__(self, size=100, skip=10, sim=None, preset_times=None, data=None, kwargs=None):
         self.sim = sim
         self.size = size
         self.skip = skip
         self.states = []
         self.times = []
         self.preset_times = preset_times
-        self.plant_kwargs = plant_kwargs
+        self.kwargs = kwargs
 
         if data is not None:
             self.import_data(
-                data=data, plant_kwargs=plant_kwargs)
+                data=data, kwargs=kwargs)
 
         if preset_times is not None:
             preset_times = [int(t) for t in preset_times]
@@ -439,7 +434,7 @@ class StateBuffer:
         # Save the StateBuffer array object to the specified path as csv
         np.savetxt(path, state_buffer_array, delimiter=',')
 
-    def import_data(self, data, plant_kwargs):
+    def import_data(self, data, kwargs):
         states = []
         times = []
         for i in range(data.shape[0]):
@@ -453,7 +448,7 @@ class StateBuffer:
                     states.append([])
                     times.append(int(t))
                 states[-1].append(
-                    Plant(pos=np.array([x, y]), r=r, id=id, **plant_kwargs))
+                    Plant(pos=np.array([x, y]), r=r, id=id, **kwargs))
 
         self.states = states
         self.times = times
@@ -469,7 +464,7 @@ class StateBuffer:
         ax.set_aspect('equal', 'box')
 
         for plant in state:
-            if fast and plant.r > self.plant_kwargs['r_min']*100:
+            if fast and plant.r > self.kwargs['r_min']*100:
                 ax.add_artist(plt.Circle(plant.pos, plant.r,
                                          color='green', fill=False, transform=ax.transData))
             elif not fast:
@@ -479,13 +474,6 @@ class StateBuffer:
         if t is not None:
             ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
 
-        # if self.sim is not None:
-        #     _m = self.sim.kwargs['_m']
-        #     if _m is not None:
-        #         x_ticks = ax.get_xticks() * _m
-        #         y_ticks = ax.get_yticks() * _m
-        #         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
-        #         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
         ax.set_xticks([])
         ax.set_yticks([])
         return fig, ax
@@ -508,9 +496,9 @@ class StateBuffer:
             n_rows = int(np.floor(T / np.sqrt(T)))
             n_cols = (T + 1) // n_rows + (T % n_rows > 0)
         else:
-            self.animate(size=size, fast=fast)
+            self.animate(fast=fast)
             return None, None
-        print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
+        print(f'\nStateBuffer.plot(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
@@ -563,6 +551,6 @@ class StateBuffer:
             return ax
 
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval=100, repeat=True)
+            fig, animate, frames=T, interval=30, repeat=True)
         plt.show()
         return ani
