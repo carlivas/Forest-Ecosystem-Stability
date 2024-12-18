@@ -35,7 +35,7 @@ class DataBuffer:
             self.length = self.size
 
     def analyze_state(self, state, t):
-        biomass = sum([plant.area for plant in state])
+        biomass = np.sum(state['area'])
         population = len(state)
         precipitation = self.sim.precipitation(t)
         data = np.array([biomass, population, precipitation])
@@ -160,24 +160,6 @@ class StateBuffer:
             self.import_data(
                 data=data, kwargs=kwargs)
 
-    # def add(self, state, t):
-    #     if len(self.times) == 0 or t not in self.times:
-    #         if len(self.times) >= self.size:
-    #             for i, time in enumerate(self.times):
-    #                 if time not in self.preset_times:
-    #                     self.states.pop(i)
-    #                     self.times.pop(i)
-    #                     # print(
-    #                     #     f'StateBuffer.add(): Removed state at time {time}.')
-    #                     break
-
-    #         self.states.append(state)
-    #         self.times.append(t)
-    #         # print(f'StateBuffer.add(): Added state at time {t}.')
-    #         # print(f'StateBuffer.add(): {self.times=}')
-    #         # print(f'StateBuffer.add(): {len(self.states)=}')
-    #         # print()
-
     def add(self, state, t):
         if len(self.times) < self.size:
             self.states.append(state)
@@ -282,10 +264,10 @@ class StateBuffer:
 
         for plant in state:
             if fast and plant.r > 0.005:
-                ax.add_artist(plt.Circle(plant.pos, plant.r,
+                ax.add_artist(plt.Circle(plant['pos'], plant['r'],
                                          color='green', fill=False, transform=ax.transData))
             elif not fast:
-                ax.add_artist(plt.Circle(plant.pos, plant.r,
+                ax.add_artist(plt.Circle(plant['pos'], plant['r'],
                                          color='green', fill=True, transform=ax.transData))
 
         if t is not None:
@@ -501,13 +483,6 @@ class FieldBuffer:
         if t is not None:
             ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
 
-        # if self.sim is not None:
-        #     _m = self.sim.kwargs['_m']
-        #     if _m is not None:
-        #         x_ticks = ax.get_xticks() * _m
-        #         y_ticks = ax.get_yticks() * _m
-        #         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
-        #         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
         ax.set_xticks([])
         ax.set_yticks([])
         return fig, ax

@@ -54,12 +54,12 @@ class Plant:
 
             new_pos = self.pos + np.random.normal(
                 0, self.dispersal_range, size=2)
-            dispersal_chance = sim.local_density(
-                new_pos) * sim.precipitation(sim.t) * self.species_germination_chance
+            dispersal_chance = np.max(sim.land_quality, sim.local_density(
+                new_pos) * sim.precipitation(sim.t) * self.species_germination_chance)
 
             if dispersal_chance <= 0:
                 return
-            elif dispersal_chance > np.random.uniform(0, 1 - sim.land_quality):
+            elif dispersal_chance > np.random.uniform(0, 1):
                 sim.add(Plant(new_pos, r=self.r_min, r_min=self.r_min, r_max=self.r_max,
                         growth_rate=self.growth_rate, dispersal_range=self.dispersal_range))
 

@@ -74,15 +74,11 @@ class DensityFieldSPH:
         dist, idx = self.KDTree.query(pos)
         return self.values[idx]
 
-    def update(self):
-        if self.simulation.kt is None:
-            self.values = np.zeros_like(self.grid_points)
-        else:
-            positions = np.array([plant.pos
-                                  for plant in self.simulation.state])
-            areas = np.array([plant.area for plant in self.simulation.state])
-            self.values = getDensity(
-                self.grid_points, positions, areas, self.bandwidthSq)
+    def update(self, state):
+        positions = state['pos']
+        areas = state['area']
+        self.values = getDensity(
+            self.grid_points, positions, areas, self.bandwidthSq)
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
         if ax is None:

@@ -13,10 +13,10 @@ save_folder = f'Data\\temp'
 save_results = False
 plot_results = True
 
-num_plants = 2000
+num_plants = 100
 
 kwargs = {
-    'L': 3000,
+    'L': 300,
     'dispersal_range': 90,
     'land_quality': 0.001,
     'precipitation': 0.06,
@@ -27,19 +27,23 @@ kwargs = {
 }
 
 sim = Simulation(**kwargs)
+print(sim.state['is_dead'].sum())
+
 sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
 print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
 
+print(sim.state['is_dead'].sum())
 
 # Profile the simulation run
 profiler = cProfile.Profile()
 profiler.enable()
 
-sim.run(n_iter=200)
+sim.run(100)
 
 profiler.disable()
 stats = pstats.Stats(profiler)
-stats.sort_stats('cumtime').print_stats()
+stats.sort_stats('cumtime')
+stats.print_stats()
 
 if save_results:
     # surfix = time.strftime("%Y%m%d-%H%M%S")
