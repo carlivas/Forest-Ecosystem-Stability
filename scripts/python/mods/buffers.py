@@ -400,6 +400,7 @@ class FieldBuffer:
             self.times = times
 
     def add(self, field, t):
+        field = field.reshape(self.resolution, self.resolution)
         if len(self.times) < self.size:
             self.fields[len(self.times)] = field
             self.times.append(t)

@@ -46,12 +46,14 @@ class Plant:
 
     def disperse(self, sim):
         if self.species_germination_chance > 0 and not self.is_dead:
-            angle = np.random.uniform(0, 2*np.pi)
-            distance = np.random.lognormal(
-                mean=0, sigma=1.5) * self.dispersal_range
-            new_pos = self.pos + \
-                np.array([np.cos(angle), np.sin(angle)]) * distance
+            # angle = np.random.uniform(0, 2*np.pi)
+            # distance = np.random.lognormal(
+            #     mean=0, sigma=1.5) * self.dispersal_range
+            # new_pos = self.pos + \
+            #     np.array([np.cos(angle), np.sin(angle)]) * distance
 
+            new_pos = self.pos + np.random.normal(
+                0, self.dispersal_range, size=2)
             dispersal_chance = sim.local_density(
                 new_pos) * sim.precipitation(sim.t) * self.species_germination_chance
 
