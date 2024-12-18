@@ -23,35 +23,36 @@ plot_data = bool(int(sys.argv[3]))
 plot_states = bool(int(sys.argv[4]))
 plot_density_field = bool(int(sys.argv[5]))
 
-fast_plot = bool(int(sys.argv[6]))
+detailed_plot = not bool(int(sys.argv[6]))
 
 prev_mod = 0
 p = 0
-for i, n in enumerate(sim_nums[:10]):
+for i, n in enumerate(sim_nums):
     print(f'\nplotting.py: sim {i+1} / {len(sim_nums)}')
     print(f'plotting.py: Loading sim {n}...')
 
     kwargs = pd.read_json(
         f'{load_folder}/kwargs_{n}.json', typ='series').to_dict()
-    sim_kwargs = kwargs.get('sim_kwargs')
-    plant_kwargs = kwargs.get('plant_kwargs')
-    lq = sim_kwargs.get('land_quality')
-    sg = plant_kwargs.get('species_germination_chance')
-    dens0 = sim_kwargs.get('dens0', -1)
-    dispersal_range = plant_kwargs.get('dispersal_range')
-    num_plants = sim_kwargs.get('num_plants')
-    # title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},  dispersal_range={(dispersal_range):.3e})'
-    # title = f'{n}   (lq={lq:.3e},   sg={sg:.3e},  dens0={(dens0):.3e})'
-    title = f'{n}   (dens0={(dens0):.3e})'
+    data_buffer_arr = pd.read_csv(
+        f'{load_folder}/data_buffer_{n}.csv')
+    num_plants = data_buffer_arr['Population'].iloc[0]
+
+    # if num_plants < 1000 or num_plants > 2000:
+    #     print(f'plotting.py: Skipping sim {n} due to low population...')
+    #     continue
+
+    L = kwargs.get('L', -1)
+
+    subpath = path.replace('Data\\', '')
+    title = f'{subpath}\\{n}   ($N_0$={num_plants:.0f}, L={L} m)'
 
     if print_kwargs:
         print('plotting.py: Loaded kwargs, now printing...')
+        print()
         print_nested_dict(kwargs)
         print()
 
     if plot_data:
-        data_buffer_arr = pd.read_csv(
-            f'{load_folder}/data_buffer_{n}.csv')
         data_buffer = DataBuffer(data=data_buffer_arr)
         print('plotting.py: Loaded data_buffer, now plotting...')
         data_buffer.plot(title=title)
@@ -60,9 +61,9 @@ for i, n in enumerate(sim_nums[:10]):
         state_buffer_arr = pd.read_csv(
             f'{load_folder}/state_buffer_{n}.csv', header=None)
         state_buffer = StateBuffer(
-            data=state_buffer_arr, plant_kwargs=plant_kwargs)
+            data=state_buffer_arr, kwargs=kwargs)
         print('plotting.py: Loaded state_buffer, now plotting...')
-        state_buffer.plot(size=2, title=title, fast=fast_plot)
+        state_buffer.plot(size=2, title=title, fast=detailed_plot)
 
     if plot_density_field:
         density_field_buffer_arr = pd.read_csv(
