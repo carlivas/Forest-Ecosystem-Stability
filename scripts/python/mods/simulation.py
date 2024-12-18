@@ -13,103 +13,29 @@ from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 
 
 def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
-    """
-    Check if a position collides with a plant.
-
-    Parameters:
-    pos (np.ndarray): The position to check.
-    plant (Plant): The plant to check against.
-
-    Returns:
-    bool: True if there is a collision, False otherwise.
-    """
     return np.sum((pos - plant.pos) ** 2) < plant.r ** 2
 
 
 def check_collision(p1: Plant, p2: Plant) -> bool:
-    """
-    Check if two plants collide.
-
-    Parameters:
-    p1 (Plant): The first plant.
-    p2 (Plant): The second plant.
-
-    Returns:
-    bool: True if there is a collision, False otherwise.
-    """
     return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
 
 
 def dbh_to_crown_radius(dbh: float) -> float:
-    """
-    Empirically based quadratic regression to convert diameter at breast height (DBH) to crown radius.
-
-    Parameters:
-    dbh (float): Diameter at breast height in meters.
-
-    Returns:
-    float: Crown radius in meters.
-    """
     # everything in m
     d = 1.42 + 28.17*dbh - 11.26*dbh**2
     return d/2
 
 
 def _m_from_m2pp(m2pp, num_plants, A_bound=1) -> float:
-    """
-    Calculate the conversion rate between dimensionless units (u) and meters (m) from the initial square meters per plant and the number of plants.
-
-    Parameters:
-    m2pp (float): The initial square meters per plant.
-    num_plants (int, optional): The initial number of plants
-    A_bound (float, optional): The area of the boundary in (u) for scaling. Default is 1.
-
-    Returns:
-    float: The conversion rate in meters.
-    """
     return np.sqrt(A_bound/(m2pp*num_plants))
 
 
 def _m_from_domain_sides(L, S_bound=1) -> float:
-    """
-    Calculate the conversion rate between dimensionless units (u) and meters (m) from the domain sides.
-
-    Parameters:
-    L (float): Length in meters.
-    S_bound (float, optional): Boundary value for scaling. Default is 1.
-
-    Returns:
-    float: Conversion rate (S_bound / L) between dimensionless units and meters.
-    """
     return S_bound / L
 
 
 class Simulation:
-    """
-    A class to represent a simulation of plant growth and interactions.
-    """
-
     def __init__(self, **kwargs):
-        """
-        Initialize a Simulation object with given parameters.
-
-        Parameters:
-        -----------
-        kwargs : dict
-            A dictionary of keyword arguments for simulation parameters, including:
-            - land_quality (float): The quality of the land in the simulation.
-            - half_width (float): Half the width of the simulation area.
-            - half_height (float, optional): Half the height of the simulation area. Defaults to half_width.
-            - state_buffer_size (int, optional): The size of the state buffer. Defaults to 20.
-            - state_buffer_skip (int, optional): The skip interval for the state buffer. Defaults to 1.
-            - state_buffer_preset_times (list, optional): Preset times for the state buffer. Defaults to None.
-            - n_iter (int): The number of iterations for the data buffer.
-            - density_check_radius (float): The radius for density checks.
-            - density_field_resolution (int): The resolution of the density field.
-            - density_field_buffer_size (int): The size of the density field buffer.
-            - density_field_buffer_skip (int, optional): The skip interval for the density field buffer. Defaults to 1.
-            - density_field_buffer_preset_times (list, optional): Preset times for the density field buffer. Defaults to None.
-        """
         self.kwargs = kwargs
         self.spinning_up = False
         self.verbose = kwargs.get('verbose', True)
@@ -183,19 +109,6 @@ class Simulation:
         )
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]) -> None:
-        """
-        Add a plant or a list of plants to the simulation.
-
-        Parameters:
-        -----------
-        plant : Union[Plant, List[Plant], np.ndarray]
-            A Plant object, a list of Plant objects, or a numpy array of Plant objects to be added to the simulation.
-
-        Raises:
-        -------
-        ValueError:
-            If the input is not a Plant object or an array_like of Plant objects.
-        """
         if isinstance(plant, Plant):
             self.state.append(plant)
         elif isinstance(plant, (list, np.ndarray)):
@@ -210,12 +123,6 @@ class Simulation:
                 "Input must be a Plant object or an array_like of Plant objects")
 
     def update_kdtree(self) -> None:
-        """
-        Update the KDTree with the current plant positions.
-
-        If there are no plants in the simulation, the KDTree is set to None.
-        Otherwise, the KDTree is updated with the positions of the plants.
-        """
         if len(self.state) == 0:
             self.kt = None
         else:
@@ -223,13 +130,6 @@ class Simulation:
                 [plant.pos for plant in self.state], leafsize=10)
 
     def step(self) -> None:
-        """
-        Perform a single time step of the simulation.
-
-        This method updates all plants, collects non-dead plants, updates necessary data structures,
-        and saves the state and density field at specified intervals.
-        """
-
         n = self.spawn_rate  # * self.dt
         self.attempt_spawn(n=n, **self.kwargs)
 
