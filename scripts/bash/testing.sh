@@ -6,8 +6,8 @@ cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit
 source ./scripts/bash/venv.sh
 
 L=3000
-num_plantss=(1500 2250 3000 3750 4500)
-precipitations=(800e-4 1000e-4 1200e-4)
+num_plantss=(1500 1750 2000 2250 2500)
+precipitations=(800e-4 850e-4 900e-4 950e-4 1000e-4)
 dispersal_range=30
 
 len_precipitations=${#precipitations[@]}
