@@ -218,8 +218,13 @@ class StateBuffer:
     def import_data(self, data, kwargs):
         states = []
         times = []
+
+        r_min = kwargs.get('r_min', 0.1)
+        r_max = kwargs.get('r_max', 30)
+        growth_rate = kwargs.get('growth_rate', 0.01)
+        
         for i in range(data.shape[0]):
-            x, y, r, t = data.loc[i]
+            x, y, r, t = data.loc[i][:4]
             if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t):
                 print(
                     f'StateBuffer.import_data(): !Warning! Skipping NaN values at row {i}.')
@@ -228,8 +233,9 @@ class StateBuffer:
                 if t not in times:
                     states.append([])
                     times.append(t)
+
                 states[-1].append(
-                    Plant(pos=np.array([x, y]), r=r, **kwargs))
+                    Plant(pos=np.array([x, y]), r=r, r_min=r_min, r_max=r_max, growth_rate=growth_rate, **kwargs))
 
         self.states = states
         self.times = times

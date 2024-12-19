@@ -7,7 +7,7 @@ cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit 1
 source ./scripts/bash/venv.sh
 
 # Run the plotting script
-path='Data\time_steps_experiment\time_step0.5'
+path='Data\precipitation_experiments_L3000m\gauss_disp90m\precipitation_6000e-5'
 
 echo "plotting.sh: Loading from $path"
 echo "plotting.sh: Please enter arguments:"
