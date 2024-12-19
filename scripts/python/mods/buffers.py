@@ -259,7 +259,7 @@ class StateBuffer:
                                          color='green', fill=True, transform=ax.transData))
 
         if t is not None:
-            t = round(t, 2)
+            t = float(round(t, 2))
             ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
 
         ax.set_xticks([])
@@ -416,7 +416,7 @@ class FieldBuffer:
         return self.times.copy()
 
     def import_data(self, data):
-        times = data.loc[:, 0].astype(int)
+        times = data.loc[:, 0].values
         fields_arr = data.loc[:, 1:].values
 
         self.resolution = int(np.sqrt(data.values.shape[-1]))
@@ -454,7 +454,7 @@ class FieldBuffer:
                   vmin=vmin, vmax=vmax, extent=extent)
 
         if t is not None:
-            t = round(t, 2)
+            t = float(round(t, 2))
             ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
 
         ax.set_xticks([])
