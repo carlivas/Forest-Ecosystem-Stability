@@ -27,7 +27,7 @@ class DataBuffer:
         self.length = 0
 
     def add(self, data, t):
-        self.values[t] = np.array([t, *data])
+        self.values[self.length] = np.array([t, *data])
         self.length = self.length + 1
 
         if len(self.values) > self.size:
@@ -39,8 +39,6 @@ class DataBuffer:
         population = len(state)
         precipitation = self.sim.precipitation(t)
         data = np.array([biomass, population, precipitation])
-        print(' '*30 + f'|  t = {t:<6}  |  N = {population:<6}  |  B = {
-              np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
         if t % 100 == 0:
             print()
         self.add(t, data)
@@ -160,31 +158,13 @@ class StateBuffer:
             self.import_data(
                 data=data, kwargs=kwargs)
 
-    # def add(self, state, t):
-    #     if len(self.times) == 0 or t not in self.times:
-    #         if len(self.times) >= self.size:
-    #             for i, time in enumerate(self.times):
-    #                 if time not in self.preset_times:
-    #                     self.states.pop(i)
-    #                     self.times.pop(i)
-    #                     # print(
-    #                     #     f'StateBuffer.add(): Removed state at time {time}.')
-    #                     break
-
-    #         self.states.append(state)
-    #         self.times.append(t)
-    #         # print(f'StateBuffer.add(): Added state at time {t}.')
-    #         # print(f'StateBuffer.add(): {self.times=}')
-    #         # print(f'StateBuffer.add(): {len(self.states)=}')
-    #         # print()
-
     def add(self, state, t):
         if len(self.times) < self.size:
             self.states.append(state)
             self.times.append(t)
         elif len(self.times) == self.size:
             removable_indices = [i for i, time in enumerate(
-                self.times) if time not in self.preset_times]
+                self.times) if not any(np.isclose(time, preset_time) for preset_time in self.preset_times)]
             if removable_indices:
                 self.states.pop(removable_indices[0])
                 self.times.pop(removable_indices[0])
@@ -214,7 +194,7 @@ class StateBuffer:
         return copy.deepcopy(self.times)
 
     def make_array(self):
-        columns_per_plant = 5  # x, y, r, t, id
+        columns_per_plant = 4  # x, y, r, t
 
         L = 0
 
@@ -235,7 +215,6 @@ class StateBuffer:
                     state_buffer_array[i, 1] = plant.pos[1]
                     state_buffer_array[i, 2] = plant.r
                     state_buffer_array[i, 3] = t
-                    state_buffer_array[i, 4] = plant.id
 
                     i += 1
         return state_buffer_array
@@ -289,15 +268,9 @@ class StateBuffer:
                                          color='green', fill=True, transform=ax.transData))
 
         if t is not None:
-            ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
+            t = round(t, 2)
+            ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
 
-        # if self.sim is not None:
-        #     _m = self.sim.kwargs['_m']
-        #     if _m is not None:
-        #         x_ticks = ax.get_xticks() * _m
-        #         y_ticks = ax.get_yticks() * _m
-        #         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
-        #         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
         ax.set_xticks([])
         ax.set_yticks([])
         return fig, ax
@@ -361,27 +334,42 @@ class StateBuffer:
         print('StateBuffer.animation(): Animating StateBuffer...')
         states = self.get_states()
         times = self.get_times()
+        time_step = times[1] - times[0]
         T = len(times)
 
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
         fig.suptitle('StateBuffer Animation', fontsize=10)
         fig.tight_layout()
 
+        ax.set_xlim(-0.5, 0.5)
+        ax.set_ylim(-0.5, 0.5)
+        ax.set_aspect('equal', 'box')
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        circles = [plt.Circle(plant.pos, plant.r, color='green',
+                              fill=not fast) for plant in states[0]]
+        for circle in circles:
+            ax.add_artist(circle)
+
+        time_text = ax.text(0.0, -0.6, '', ha='center', fontsize=7)
+
         def animate(i):
-            ax.clear()
-            ax.set_title(f't = {times[i]}')
-            self.plot_state(state=states[i], t=times[i],
-                            size=size, fig=fig, ax=ax, fast=fast)
-            return ax
+            for circle, plant in zip(circles, states[i]):
+                circle.center = plant.pos
+                circle.radius = plant.r
+            t = round(times[i], 2)
+            time_text.set_text(f'{t = }')
+            return ax, time_text
 
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval=60, repeat=True)
+            fig, animate, frames=T, interval=100 * time_step, repeat=True)
         plt.show()
         return ani
 
 
 class FieldBuffer:
-    def __init__(self, sim=None, resolution=2, size=10, skip=1, preset_times=None, data=None, **kwargs):
+    def __init__(self, sim=None, resolution=2, size=40, skip=10, preset_times=None, data=None, **kwargs):
         self.sim = sim
         self.size = size    # estimated max number of fields to store
         self.resolution = resolution
@@ -405,7 +393,7 @@ class FieldBuffer:
             self.times.append(t)
         elif len(self.times) == self.size:
             for i, time in enumerate(self.times):
-                if time not in self.preset_times:
+                if not any(np.isclose(time, preset_time) for preset_time in self.preset_times):
                     fields = self.get_fields()
                     B = np.roll(fields[i:], -1, axis=0)
                     fields = np.concatenate(
@@ -422,28 +410,6 @@ class FieldBuffer:
             self.fields[-1] = field
             self.times.pop(0)
             self.times.append(t)
-
-    # def add(self, field, t):
-    #     if len(self.times) == 0 or t not in self.times:
-    #         if len(self.times) >= self.size:
-    #             for i, time in enumerate(self.times):
-    #                 if time not in self.preset_times:
-    #                     fields = self.get_fields()
-    #                     B = np.roll(fields[i:], -1, axis=0)
-    #                     fields = np.concatenate(
-    #                         (fields[:i], B), axis=0)
-    #                     self.fields = fields
-    #                     self.times.pop(i)
-    #                     # print(
-    #                     # f'FieldBuffer.add(): Removed field at time {time}.')
-    #                     break
-
-    #         self.fields[len(self.times)] = field
-    #         self.times.append(t)
-    #         # print(f'FieldBuffer.add(): Added field at time {t}.')
-    #         # print(f'FieldBuffer.add(): {self.times=}')
-    #         # print(f'FieldBuffer.add(): {len(self.fields)=}')
-    #         # print()
 
     def get_fields(self, times=None):
         if times is None:
@@ -498,15 +464,9 @@ class FieldBuffer:
                   vmin=vmin, vmax=vmax, extent=extent)
 
         if t is not None:
-            ax.text(0.0, -0.6, f't = {t}', ha='center', fontsize=7)
+            t = round(t, 2)
+            ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
 
-        # if self.sim is not None:
-        #     _m = self.sim.kwargs['_m']
-        #     if _m is not None:
-        #         x_ticks = ax.get_xticks() * _m
-        #         y_ticks = ax.get_yticks() * _m
-        #         ax.set_xticklabels([f'{x:.1f}' for x in x_ticks])
-        #         ax.set_yticklabels([f'{y:.1f}' for y in y_ticks])
         ax.set_xticks([])
         ax.set_yticks([])
         return fig, ax
@@ -591,7 +551,8 @@ class FieldBuffer:
 
         def animate(i):
             ax.clear()
-            ax.set_title(f't = {times[i]}')
+            t = round(times[i], 2)
+            ax.set_title(f'{t = }')
             ax.imshow(fields[i], origin='lower', cmap='Greys',
                       vmin=vmin, vmax=vmax, extent=extent)
             ax.set_xticks([])

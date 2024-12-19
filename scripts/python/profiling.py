@@ -18,7 +18,6 @@ n_iter = 1000
 kwargs = {
     'L': 3000,
     'dispersal_range': 90,
-    'land_quality': 0.001,
     'precipitation': 0.06,
     'spawn_rate': 10,
 
