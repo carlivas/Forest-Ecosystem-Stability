@@ -34,21 +34,6 @@ class DataBuffer:
             self.values.pop(0)
             self.length = self.size
 
-    def analyze_state(self, state, t):
-        biomass = sum([plant.area for plant in state])
-        population = len(state)
-        precipitation = self.sim.precipitation(t)
-        data = np.array([biomass, population, precipitation])
-        if t % 100 == 0:
-            print()
-        self.add(t, data)
-        return data
-
-    def analyze_and_add(self, state, t):
-        data = self.analyze_state(state, t)
-        self.add(t, data)
-        return data
-
     def finalize(self):
         self.values = self.values[:np.where(
             ~np.isnan(self.values).all(axis=1))[0][-1] + 1]
@@ -234,7 +219,7 @@ class StateBuffer:
         states = []
         times = []
         for i in range(data.shape[0]):
-            x, y, r, t, id = data.loc[i]
+            x, y, r, t = data.loc[i]
             if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t):
                 print(
                     f'StateBuffer.import_data(): !Warning! Skipping NaN values at row {i}.')
@@ -242,9 +227,9 @@ class StateBuffer:
             else:
                 if t not in times:
                     states.append([])
-                    times.append(int(t))
+                    times.append(t)
                 states[-1].append(
-                    Plant(pos=np.array([x, y]), r=r, id=id, **kwargs))
+                    Plant(pos=np.array([x, y]), r=r, **kwargs))
 
         self.states = states
         self.times = times

@@ -149,6 +149,7 @@ class Simulation:
         n_dead = n1 - n2
         # print(f'step(): {n_spawned=} {n_dead=}', end='\n')
 
+        prev_t = self.t
         self.t += self.time_step
 
         # Update necessary data structures
@@ -165,13 +166,20 @@ class Simulation:
 
         if self.verbose:
             t = round(self.t, 2)
-            print(' '*30 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {
+            print(' '*30 + f'|  {t = :^8}  |  N = {population:<6}  |  B = {
                 np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
 
-        do_save_state = np.isclose(self.t % self.state_buffer.skip, 0) or any(
-            np.isclose(self.t, self.state_buffer.preset_times))
-        do_save_density_field = np.isclose(self.t % self.density_field_buffer.skip, 0) or any(
-            np.isclose(self.t, self.density_field_buffer.preset_times))
+        prev_mod_state = prev_t % self.state_buffer.skip
+        mod_state = self.t % self.state_buffer.skip
+        do_save_state = prev_mod_state > mod_state
+        # do_save_state = np.isclose(self.t % self.state_buffer.skip, 0) or any(
+        #     np.isclose(self.t, self.state_buffer.preset_times))
+        
+        prev_mod_density_field = prev_t % self.density_field_buffer.skip
+        mod_density_field = self.t % self.density_field_buffer.skip
+        do_save_density_field = prev_mod_density_field > mod_density_field
+        # do_save_density_field = np.isclose(self.t % self.density_field_buffer.skip, 0) or any(
+        #     np.isclose(self.t, self.density_field_buffer.preset_times))
 
         if do_save_state:
             self.state_buffer.add(state=self.get_state(), t=self.t)
