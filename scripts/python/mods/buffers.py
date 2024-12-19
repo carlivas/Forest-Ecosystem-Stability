@@ -348,7 +348,7 @@ class StateBuffer:
             for circle, plant in zip(circles, states[i]):
                 circle.center = plant.pos
                 circle.radius = plant.r
-            t = round(times[i], 2)
+            t = float(round(times[i], 2))
             time_text.set_text(f'{t = }')
             return ax, time_text
 
@@ -541,7 +541,7 @@ class FieldBuffer:
 
         def animate(i):
             ax.clear()
-            t = round(times[i], 2)
+            t = float(round(times[i], 2))
             ax.set_title(f'{t = }')
             ax.imshow(fields[i], origin='lower', cmap='Greys',
                       vmin=vmin, vmax=vmax, extent=extent)
