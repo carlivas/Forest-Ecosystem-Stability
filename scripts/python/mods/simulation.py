@@ -165,21 +165,17 @@ class Simulation:
         self.data_buffer.add(data=data, t=self.t)
 
         if self.verbose:
-            t = round(self.t, 2)
+            t = float(round(self.t, 2))
             print(' '*30 + f'|  {t = :^8}  |  N = {population:<6}  |  B = {
                 np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
 
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
         do_save_state = prev_mod_state > mod_state
-        # do_save_state = np.isclose(self.t % self.state_buffer.skip, 0) or any(
-        #     np.isclose(self.t, self.state_buffer.preset_times))
         
         prev_mod_density_field = prev_t % self.density_field_buffer.skip
         mod_density_field = self.t % self.density_field_buffer.skip
         do_save_density_field = prev_mod_density_field > mod_density_field
-        # do_save_density_field = np.isclose(self.t % self.density_field_buffer.skip, 0) or any(
-        #     np.isclose(self.t, self.density_field_buffer.preset_times))
 
         if do_save_state:
             self.state_buffer.add(state=self.get_state(), t=self.t)
@@ -533,7 +529,7 @@ class Simulation:
         ax.set_ylim(-self.half_height, self.half_height)
         ax.set_aspect('equal', 'box')
         if t is not None:
-            t = round(t, 2)
+            t = float(round(t, 2))
             ax.set_title(f'{t=}', fontsize=7)
         else:
             ax.set_title('')
