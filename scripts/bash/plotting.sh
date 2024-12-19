@@ -7,7 +7,7 @@ cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit 1
 source ./scripts/bash/venv.sh
 
 # Run the plotting script
-path='Loading from Data\precipitation_experiments_L6000m\lognorm_disp10m\precipitation_1700e-4'
+path='Data\precipitation_experiments_L3000m\gauss_disp90m\precipitation_6000e-5'
 
 echo "plotting.sh: Loading from $path"
 echo "plotting.sh: Please enter arguments:"
@@ -17,7 +17,7 @@ read -p "plotting.sh: Detailed plot? (might take longer...) (1/0): " detailed_pl
 print_kwargs=1
 plot_data=1
 plot_states=1
-plot_density_field=0
+plot_density_field=1
 detailed_plot=${detailed_plot:-0}
 
 converted_path=$(echo "$path" | sed 's|\\\\|/|g')

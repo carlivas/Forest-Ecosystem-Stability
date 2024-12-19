@@ -4,11 +4,9 @@ import copy
 
 
 class Plant:
-    def __init__(self, pos: np.ndarray, r, r_min=0.1, r_max=30, growth_rate=0.1, dispersal_range=90, id=None, **kwargs):
+    def __init__(self, pos: np.ndarray, r: float, r_min: float, r_max: float, growth_rate: float, dispersal_range: float, **kwargs):
         self.pos = pos
         self.r = r
-
-        self.id = id
 
         self.d = 2*self.r
         self.area = np.pi*self.r**2
@@ -45,40 +43,29 @@ class Plant:
         self.is_dead = True
 
     def disperse(self, sim):
-        if self.species_germination_chance > 0 and not self.is_dead:
-            angle = np.random.uniform(0, 2*np.pi)
-            distance = np.random.lognormal(
-                mean=0, sigma=1.5) * self.dispersal_range
-            new_pos = self.pos + \
-                np.array([np.cos(angle), np.sin(angle)]) * distance
+        n = sim.spawn_rate * sim.time_step
+        decimal_part = n % 1
+        if np.random.rand() < decimal_part:
+            n = int(n) + 1
+        else:
+            n = int(n)
 
-            dispersal_chance = sim.local_density(
-                new_pos) * sim.precipitation(sim.t) * self.species_germination_chance
+        new_plants = []
+        for _ in range(n):
+            if self.species_germination_chance > 0 and not self.is_dead:
+                angle = np.random.uniform(0, 2*np.pi)
+                distance = np.random.lognormal(
+                    mean=0, sigma=1.5) * self.dispersal_range
+                new_pos = self.pos + \
+                    np.array([np.cos(angle), np.sin(angle)]) * distance
 
-            if dispersal_chance <= 0:
-                return
-            elif dispersal_chance > np.random.uniform(0, 1 - sim.land_quality):
-                sim.add(Plant(new_pos, r=self.r_min, r_min=self.r_min, r_max=self.r_max,
-                        growth_rate=self.growth_rate, dispersal_range=self.dispersal_range))
+                dispersal_chance = max(sim.land_quality, sim.local_density(
+                    new_pos) * sim.precipitation(sim.t) * self.species_germination_chance)
 
-    # def disperse_old(self, sim):
-    #     if self.species_germination_chance > 0 and not self.is_dead:
-    #         new_pos = self.pos + np.random.normal(
-    #             0, self.dispersal_range, size=2)
-
-    #         dispersal_chance = (sim.local_density(
-    #             new_pos) + sim.land_quality) * self.species_germination_chance
-
-    #         if dispersal_chance > np.random.uniform(0, 1):
-
-    #             new_plant_kwargs = self.kwargs.copy()
-    #             new_plant_kwargs['r_min'] = self.r_min
-    #             new_plant_kwargs['r'] = self.r_min
-    #             new_plant_kwargs['is_colliding'] = False
-    #             new_plant_kwargs['is_dead'] = False
-    #             new_plant_kwargs['generation'] = self.generation + 1
-
-    #             sim.add(Plant(new_pos, **new_plant_kwargs))
+                if dispersal_chance > np.random.uniform(0, 1):
+                    new_plants.append(Plant(new_pos, r=self.r_min, r_min=self.r_min, r_max=self.r_max,
+                                            growth_rate=self.growth_rate, dispersal_range=self.dispersal_range))
+        sim.add(new_plants)
 
     def compete(self, other_plant):
         if self.r < other_plant.r:

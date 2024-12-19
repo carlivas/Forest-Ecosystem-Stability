@@ -27,7 +27,6 @@ n_iter = 20000
 kwargs = {
     'L': L,
     'dispersal_range': dispersal_range,
-    'land_quality': 0.001,
     'precipitation': precipitation,
     'spawn_rate': 10,
 

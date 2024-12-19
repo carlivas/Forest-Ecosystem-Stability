@@ -84,8 +84,12 @@ class DensityFieldSPH:
             positions = np.array([plant.pos
                                   for plant in self.simulation.state])
             areas = np.array([plant.area for plant in self.simulation.state])
-            self.values = getDensity(
-                self.grid_points, positions, areas, self.bandwidthSq).reshape(self.resolution, self.resolution)
+            
+            if positions.shape[0] == 0:
+                self.values = np.zeros((self.resolution, self.resolution))
+            else:
+                self.values = getDensity(
+                    self.grid_points, positions, areas, self.bandwidthSq).reshape(self.resolution, self.resolution)
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
         if ax is None:

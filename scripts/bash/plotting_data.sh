@@ -7,7 +7,7 @@ cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit 1
 source ./scripts/bash/venv.sh
 
 # Run the plotting script
-path='Data\precipitation_experiments_L3000m\lognorm_disp30m\precipitation_1000e-4'
+path='Data\time_steps_experiment'
 
 echo "plotting.sh: Loading from $path"
 
