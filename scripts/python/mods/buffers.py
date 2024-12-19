@@ -31,6 +31,8 @@ class DataBuffer:
         self.length = self.length + 1
 
         if len(self.values) > self.size:
+            print(
+                f'\nDataBuffer.add(): !Warning! DataBuffer is full, previous data will be overwritten.')
             self.values.pop(0)
             self.length = self.size
 
@@ -137,7 +139,6 @@ class StateBuffer:
         self.states = []
         self.times = []
         self.preset_times = preset_times
-        self.kwargs = kwargs
 
         if data is not None:
             self.import_data(
@@ -219,10 +220,11 @@ class StateBuffer:
         states = []
         times = []
 
-        r_min = kwargs.get('r_min', 0.1)
-        r_max = kwargs.get('r_max', 30)
-        growth_rate = kwargs.get('growth_rate', 0.01)
-        
+        r_min = kwargs['r_min']
+        r_max = kwargs['r_max']
+        growth_rate = kwargs['growth_rate']
+        _m = kwargs['_m']
+
         for i in range(data.shape[0]):
             x, y, r, t = data.loc[i][:4]
             if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t):
@@ -235,7 +237,14 @@ class StateBuffer:
                     times.append(t)
 
                 states[-1].append(
-                    Plant(pos=np.array([x, y]), r=r, r_min=r_min, r_max=r_max, growth_rate=growth_rate, **kwargs))
+                    Plant(pos=np.array([x, y]),
+                          r=r,
+                          r_min=r_min,
+                          r_max=r_max,
+                          growth_rate=growth_rate,
+                          _m=_m
+                          )
+                )
 
         self.states = states
         self.times = times
@@ -260,7 +269,7 @@ class StateBuffer:
 
         if t is not None:
             t = float(round(t, 2))
-            ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
+            ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
 
         ax.set_xticks([])
         ax.set_yticks([])
@@ -349,7 +358,7 @@ class StateBuffer:
                 circle.center = plant.pos
                 circle.radius = plant.r
             t = float(round(times[i], 2))
-            time_text.set_text(f'{t = }')
+            time_text.set_text(f'{t=}')
             return ax, time_text
 
         ani = animation.FuncAnimation(
@@ -366,7 +375,6 @@ class FieldBuffer:
         self.skip = skip
         self.times = []
         self.preset_times = preset_times
-        self.kwargs = kwargs
 
         self.fields = np.full(
             (self.size, self.resolution, self.resolution), np.nan)
@@ -455,7 +463,7 @@ class FieldBuffer:
 
         if t is not None:
             t = float(round(t, 2))
-            ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
+            ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
 
         ax.set_xticks([])
         ax.set_yticks([])
@@ -542,7 +550,7 @@ class FieldBuffer:
         def animate(i):
             ax.clear()
             t = float(round(times[i], 2))
-            ax.set_title(f'{t = }')
+            ax.set_title(f'{t=}')
             ax.imshow(fields[i], origin='lower', cmap='Greys',
                       vmin=vmin, vmax=vmax, extent=extent)
             ax.set_xticks([])
