@@ -286,7 +286,6 @@ class StateBuffer:
         else:
             self.animate(fast=fast)
             return None, None
-        print(f'StateBuffer.plot(): {n_rows=}, {n_cols=}')
 
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
