@@ -15,6 +15,7 @@ grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
 path = sys.argv[1]
+save_plot = bool(sys.argv[2])
 if not os.path.exists(path):
     raise FileNotFoundError(f"The specified path does not exist: {path}")
 
@@ -131,7 +132,8 @@ for root, dirs, files in os.walk(load_folder):
 
     surfix = root.split('\\')[-1]
 
-    plt.savefig(f'{root}/_data_combined_{surfix}.png', dpi=300)
+    if save_plot:
+        plt.savefig(f'{root}/_data_combined_{surfix}.png', dpi=300)
 
     plt.show()
 print('plotting.py: Done.\n')

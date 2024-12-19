@@ -19,20 +19,20 @@ def convert_to_serializable(obj):
     """
     if isinstance(obj, np.ndarray):
         return obj.tolist()
-    if isinstance(obj, (np.integer, np.int32, np.int64)):
+    elif isinstance(obj, (np.integer, np.int32, np.int64)):
         return int(obj)
-    if isinstance(obj, (np.floating, np.float32, np.float64)):
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
         return float(obj)
-    if isinstance(obj, np.bool_):
+    elif isinstance(obj, np.bool_):
         return bool(obj)
-    if isinstance(obj, dict):
+    elif isinstance(obj, dict):
         return {k: convert_to_serializable(v) for k, v in obj.items()}
-    if isinstance(obj, list):
+    elif isinstance(obj, list):
         return [convert_to_serializable(i) for i in obj]
-    if isinstance(obj, type(lambda: None)):
+    elif isinstance(obj, type(lambda: None)):
         return obj.__name__
-    return obj
-
+    else:
+        return None
 
 def save_kwargs(kwargs, path):
     """

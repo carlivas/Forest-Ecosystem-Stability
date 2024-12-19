@@ -10,19 +10,19 @@ from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializab
 save_results = True
 plot_results = True
 
-num_plants = 2000
+num_plants = 1000
 
 kwargs = {
-    'L': 3000,
+    'L': 2000,
     'dispersal_range': 90,
-    'precipitation': 0.06,
+    'precipitation': 0.05,
     'spawn_rate': 1,
     'growth_rate': 0.1,
 
     'time_step': 0.1,
 
-    'buffer_size': 40,
-    'buffer_skip': 10
+    'buffer_size': 80,
+    'buffer_skip': 5,
 }
 save_folder = f'Data\\temp\\time_step{kwargs["time_step"]}'
 
@@ -33,11 +33,11 @@ print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
 
 sim.run(T=400)
 
-print_nested_dict(sim.kwargs)
+sim.print_kwargs(**kwargs)
 
 if save_results:
     surfix = time.strftime("%Y%m%d-%H%M%S")
-    save_kwargs(sim.kwargs, f'{save_folder}/kwargs_{surfix}')
+    save_kwargs(sim.__dict__, f'{save_folder}/kwargs_{surfix}')
     sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
     sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
     sim.density_field_buffer.save(

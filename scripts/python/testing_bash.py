@@ -16,23 +16,20 @@ print(f'testing.sh: Data will be saved in: {save_folder}')
 save_results = True
 plot_results = False
 
-L = int(sys.argv[2])
-num_plants = int(sys.argv[3])
-precipitation = float(sys.argv[4])
-dispersal_range = float(sys.argv[5])
+num_plants = int(sys.argv[2])
+precipitation = float(sys.argv[3])
 
-n_iter = 20000
+T = 20000
 
 # Initialize simulation
 kwargs = {
-    'L': L,
-    'dispersal_range': dispersal_range,
+    'T': T,
+    'L': 6000,
     'precipitation': precipitation,
-    'spawn_rate': 10,
-
-    'n_iter': n_iter,
-    'buffer_preset_times': np.linspace(0, n_iter, 40).astype(int),
-    'buffer_size': 40,
+    'spawn_rate': 1,
+    
+    'buffer_size': 400,
+    'buffer_skip': 50,
 }
 
 
@@ -41,7 +38,7 @@ print(f'Time: {time.strftime("%H:%M:%S")}')
 sim = Simulation(**kwargs)
 sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
 
-sim.run(n_iter=n_iter)
+sim.run(T=T)
 
 print_nested_dict(kwargs)
 
