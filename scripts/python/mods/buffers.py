@@ -358,7 +358,7 @@ class StateBuffer:
                 circle.center = plant.pos
                 circle.radius = plant.r
             t = float(round(times[i], 2))
-            time_text.set_text(f'{t=}')
+            time_text.set_text(f'{t = }')
             return ax, time_text
 
         ani = animation.FuncAnimation(
@@ -550,7 +550,7 @@ class FieldBuffer:
         def animate(i):
             ax.clear()
             t = float(round(times[i], 2))
-            ax.set_title(f'{t=}')
+            ax.set_title(f'{t = }')
             ax.imshow(fields[i], origin='lower', cmap='Greys',
                       vmin=vmin, vmax=vmax, extent=extent)
             ax.set_xticks([])

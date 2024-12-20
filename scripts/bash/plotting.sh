@@ -17,7 +17,7 @@ read -p "plotting.sh: Detailed plot? (might take longer...) (1/0): " detailed_pl
 print_kwargs=1
 plot_data=1
 plot_states=1
-plot_density_field=0
+plot_density_field=1
 detailed_plot=${detailed_plot:-0}
 
 converted_path=$(echo "$path" | sed 's|\\\\|/|g')
