@@ -42,6 +42,7 @@ class Plant:
     def die(self):
         self.is_dead = True
 
+    # Maybe move this to a simulation class
     def disperse(self, sim):
         n = sim.spawn_rate * sim.time_step
         decimal_part = n % 1
@@ -53,11 +54,8 @@ class Plant:
         new_plants = []
         for _ in range(n):
             if self.species_germination_chance > 0 and not self.is_dead:
-                angle = np.random.uniform(0, 2*np.pi)
-                distance = np.random.lognormal(
-                    mean=0, sigma=1.5) * self.dispersal_range
                 new_pos = self.pos + \
-                    np.array([np.cos(angle), np.sin(angle)]) * distance
+                    np.random.normal(0, self.dispersal_range, 2)
 
                 dispersal_chance = max(sim.land_quality, sim.local_density(
                     new_pos) * sim.precipitation(sim.t) * self.species_germination_chance)

@@ -63,7 +63,7 @@ class Simulation:
         kwargs['_m'] = self._m
         kwargs['r_min'] = kwargs.get('r_min', 0.1) * self._m
         kwargs['r_max'] = kwargs.get('r_max', 30) * self._m
-        kwargs['dispersal_range'] = kwargs['dispersal_range'] * self._m
+        kwargs['dispersal_range'] = kwargs.get('dispersal_range', 90) * self._m
         kwargs['growth_rate'] = kwargs.get(
             'growth_rate', 0.1) * self._m * self.time_step
 
@@ -77,7 +77,7 @@ class Simulation:
             'buffer_preset_times', (np.arange(buffer_size) * buffer_skip))
 
         self.data_buffer = DataBuffer(sim=self,
-                                      size=kwargs.get('n_iter', 10000),
+                                      size=int(np.floor(kwargs['T'] / kwargs['time_step']) + 1)
                                       )
 
         self.state_buffer = StateBuffer(
@@ -99,7 +99,7 @@ class Simulation:
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
-            check_radius=kwargs.get(
+            density_radius=kwargs.get(
                 'density_check_radius', 100 * self._m),
             resolution=kwargs.get('density_field_resolution', 100),
             simulation=self
@@ -166,7 +166,7 @@ class Simulation:
 
         if self.verbose:
             t = float(round(self.t, 2))
-            print(' '*30 + f'|  {t = :^8}  |  N = {population:<6}  |  B = {
+            print(' '*30 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {
                 np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
 
         prev_mod_state = prev_t % self.state_buffer.skip
@@ -225,55 +225,55 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
-    def spin_up(self, target_population: int, max_time: int = 1000, speed: float = 0.01) -> None:
-        """
-        Run the simulation until the population reaches a given maximum value.
+    # def spin_up(self, target_population: int, max_time: int = 1000, speed: float = 0.01) -> None:
+    #     """
+    #     Run the simulation until the population reaches a given maximum value.
 
-        Parameters:
-        -----------
-        target_population : int
-            The maximum population size to run the simulation until.
-        """
-        self.spinning_up = True
-        start_time = time.time()
-        land_quality = self.land_quality
-        spawn_rate = self.spawn_rate
-        if self.verbose:
-            print(f'Simulation.spin_up(): Simulating until population reaches {
-                target_population}...')
-        self.land_quality = 1
-        print(f'Simulation.spin_up(): !Warning! setting land_quality to {
-              self.land_quality}')
-        try:
-            while len(self.state) < target_population and self.t < max_time:
+    #     Parameters:
+    #     -----------
+    #     target_population : int
+    #         The maximum population size to run the simulation until.
+    #     """
+    #     self.spinning_up = True
+    #     start_time = time.time()
+    #     land_quality = self.land_quality
+    #     spawn_rate = self.spawn_rate
+    #     if self.verbose:
+    #         print(f'Simulation.spin_up(): Simulating until population reaches {
+    #             target_population}...')
+    #     self.land_quality = 1
+    #     print(f'Simulation.spin_up(): !Warning! setting land_quality to {
+    #           self.land_quality}')
+    #     try:
+    #         while len(self.state) < target_population and self.t < max_time:
 
-                drive = target_population*1.1 - len(self.state)
-                speed_temp = self.t / max_time
-                spin_up_rate = int(drive * speed_temp)
-                self.spawn_rate = max(
-                    1, spin_up_rate)  # * self.dt
-                print()
-                print(f'Simulation.spin_up(): {drive=} {speed_temp=}, {
-                      spin_up_rate=},{self.spawn_rate=} ')
-                self.step()
+    #             drive = target_population*1.1 - len(self.state)
+    #             speed_temp = self.t / max_time
+    #             spin_up_rate = int(drive * speed_temp)
+    #             self.spawn_rate = max(
+    #                 1, spin_up_rate)  # * self.dt
+    #             print()
+    #             print(f'Simulation.spin_up(): {drive=} {speed_temp=}, {
+    #                   spin_up_rate=},{self.spawn_rate=} ')
+    #             self.step()
 
-                if self.verbose:
-                    elapsed_time = time.time() - start_time
-                    hours, rem = divmod(elapsed_time, 3600)
-                    minutes, seconds = divmod(rem, 60)
-                    elapsed_time_str = f"{str(int(hours))}".rjust(
-                        2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
+    #             if self.verbose:
+    #                 elapsed_time = time.time() - start_time
+    #                 hours, rem = divmod(elapsed_time, 3600)
+    #                 minutes, seconds = divmod(rem, 60)
+    #                 elapsed_time_str = f"{str(int(hours))}".rjust(
+    #                     2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
 
-                    print(f'Elapsed time: {elapsed_time_str}', end='\r')
+    #                 print(f'Elapsed time: {elapsed_time_str}', end='\r')
 
-        except KeyboardInterrupt:
-            print('\nInterrupted by user...')
+    #     except KeyboardInterrupt:
+    #         print('\nInterrupted by user...')
 
-        self.land_quality = land_quality
-        self.spawn_rate = spawn_rate
-        self.spinning_up = False
-        print(f'Simulation.spin_up(): Done. Setting land_quality back to {
-              land_quality} and spawn_rate back to {spawn_rate}')
+    #     self.land_quality = land_quality
+    #     self.spawn_rate = spawn_rate
+    #     self.spinning_up = False
+    #     print(f'Simulation.spin_up(): Done. Setting land_quality back to {
+    #           land_quality} and spawn_rate back to {spawn_rate}')
 
     def attempt_spawn(self, n: int, **kwargs: Any) -> None:
 
