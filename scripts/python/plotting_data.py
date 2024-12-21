@@ -127,13 +127,16 @@ for root, dirs, files in os.walk(load_folder):
         cbar.ax.yaxis.set_tick_params(labelcolor=grey)
 
     fig.set_facecolor(darkgrey)
-    subpath = root.split('Data\\')[-1]
+    
+    subpath = root.split('Data/')[-1]
     fig.suptitle(f'{subpath}', color=white, fontsize=10)
 
-    surfix = root.split('\\')[-1]
+    surfix = root.split('/')[-1]
 
     if save_plot:
-        plt.savefig(f'{root}/_data_combined_{surfix}.png', dpi=300)
+        save_path = f'{root}/_data_combined_{surfix}.png'
+        print(f'Saving data plot in {save_path = }')
+        plt.savefig(save_path, dpi=300)
 
     plt.show()
-print('plotting.py: Done.\n')
+print('plotting_data.py: Done.\n')

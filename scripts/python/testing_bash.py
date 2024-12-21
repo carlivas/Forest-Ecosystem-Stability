@@ -19,7 +19,7 @@ plot_results = False
 num_plants = int(sys.argv[2])
 precipitation = float(sys.argv[3])
 
-T = 2000
+T = 20000
 
 # Initialize simulation
 kwargs = {
@@ -31,8 +31,10 @@ kwargs = {
     'dispersal_range': 90,
     
     
-    'buffer_size': 400,
-    'buffer_skip': 5,
+    'buffer_size': T,
+    'buffer_skip': 1,
+
+    'verbose': False,
 }
 
 
