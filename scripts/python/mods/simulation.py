@@ -164,11 +164,6 @@ class Simulation:
         data = np.array([biomass, population, precipitation])
         self.data_buffer.add(data=data, t=self.t)
 
-        if self.verbose:
-            t = float(round(self.t, 2))
-            print(' '*30 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {
-                np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
-
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
         do_save_state = prev_mod_state > mod_state
@@ -182,7 +177,7 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.get_values(), t=self.t)
 
-    def run(self, T: float, max_population: Optional[int] = 25_000) -> None:
+    def run(self, T: float, max_population: Optional[int] = 15_000) -> None:
         """
         Run the simulation for a given number of iterations.
 
@@ -203,24 +198,33 @@ class Simulation:
                 if (max_population is not None and l > max_population):
                     break
 
-                elapsed_time = time.time() - start_time
-                hours, rem = divmod(elapsed_time, 3600)
-                minutes, seconds = divmod(rem, 60)
-                elapsed_time_str = f"{str(int(hours))}".rjust(
-                    2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
+                if self.verbose:
+                    elapsed_time = time.time() - start_time
+                    hours, rem = divmod(elapsed_time, 3600)
+                    minutes, seconds = divmod(rem, 60)
+                    elapsed_time_str = f"{str(int(hours))}".rjust(
+                        2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
+    
+                    if _ % 3 == 0:
+                        dots = '.  '
+                    elif _ % 3 == 1:
+                        dots = '.. '
+                    else:
+                        dots = '...'
 
-                if _ % 3 == 0:
-                    dots = '.  '
-                elif _ % 3 == 1:
-                    dots = '.. '
-                else:
-                    dots = '...'
-
-                print(f'{dots} Elapsed time: {elapsed_time_str}', end='\r')
+                    data = self.data_buffer.get_data(data_idx=-1)
+                    t, biomass, population, precipitation = data
+                    t = float(round(t, 2))
+    
+                    print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
-
+            
+        elapsed_time = time.time() - start_time
+        hours, rem = divmod(elapsed_time, 3600)
+        minutes, seconds = divmod(rem, 60)
+        elapsed_time_str = f"{str(int(hours))}".rjust(2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
         print()
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()

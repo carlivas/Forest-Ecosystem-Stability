@@ -90,8 +90,10 @@ class DataBuffer:
         if data_idx is None:
             data_idx = list(range(0, self.length))
         elif isinstance(data_idx, int):
+            if data_idx < 0:
+                data_idx = self.length + data_idx
             data_idx = [data_idx]
-
+        
         data = self.values[np.ix_(data_idx, keys_idx)]
 
         return data if len(data_idx) > 1 else data[0]
