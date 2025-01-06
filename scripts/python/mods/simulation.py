@@ -166,10 +166,10 @@ class Simulation:
 
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
-        do_save_state = prev_mod_state > mod_state
+        do_save_state = prev_mod_state >= mod_state
         prev_mod_density_field = prev_t % self.density_field_buffer.skip
         mod_density_field = self.t % self.density_field_buffer.skip
-        do_save_density_field = prev_mod_density_field > mod_density_field
+        do_save_density_field = prev_mod_density_field >= mod_density_field
 
         if do_save_state:
             self.state_buffer.add(state=self.get_state(), t=self.t)
