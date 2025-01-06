@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=TREESDATAPLOT
+#SBATCH --job-name=trees
 #SBATCH --partition=modi_short
-#SBATCH --output=./slurm_out/TREESDATAPLOT_%j.out
+#SBATCH --output=./slurm_out/DATAPLOT_%j.out
 #SBATCH --exclusive
 
 # Run the plotting script
-path="../../Data/modi_ensemble_test"
+path="../../Data/modi_ensemble_L4500"
 
 echo "plotting.sh: Loading from $path"
 

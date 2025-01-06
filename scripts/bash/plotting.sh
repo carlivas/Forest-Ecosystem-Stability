@@ -1,28 +1,27 @@
 #!/bin/bash
-
-# Navigate to the vscode directory
-cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit 1
-
-# Activate the virtual environment
-source ./scripts/bash/venv.sh
+#SBATCH --job-name=trees
+#SBATCH --partition=modi_short
+#SBATCH --output=./slurm_out/PLOT_%j.out
+#SBATCH --exclusive
 
 # Run the plotting script
-path='Data\modi_ensemble_test\precipitation_10e-3'
+path='../../Data/modi_ensemble_test/precipitation_64e-3'
 
 echo "plotting.sh: Loading from $path"
-echo "plotting.sh: Please enter arguments:"
 
-read -p "plotting.sh: Detailed plot? (might take longer...) (1/0): " detailed_plot
+# echo "plotting.sh: Please enter arguments:"
+# read -p "plotting.sh: Detailed plot? (might take longer...) (1/0): " detailed_plot
+
 # Set default values
 print_kwargs=1
 plot_data=1
 plot_states=1
 plot_density_field=1
-detailed_plot=${detailed_plot:-0}
+detailed_plot=0
 
 converted_path=$(echo "$path" | sed 's|\\\\|/|g')
 
 echo -ne "\n------------------------------------------------------------\n"
 
 # Run the plotting Python script
-python scripts/python/plotting.py $converted_path $print_kwargs $plot_data $plot_states $plot_density_field $detailed_plot
+python ../python/plotting.py $converted_path $print_kwargs $plot_data $plot_states $plot_density_field $detailed_plot

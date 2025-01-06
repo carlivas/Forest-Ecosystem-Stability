@@ -19,12 +19,12 @@ plot_results = False
 num_plants = int(sys.argv[2])
 precipitation = float(sys.argv[3])
 
-T = 20000
+T = 30000
 
 # Initialize simulation
 kwargs = {
     'T': T,
-    'L': 6000,
+    'L': 4500,
     'precipitation': precipitation,
     'spawn_rate': 1,
     'time_step': 1,
@@ -43,7 +43,7 @@ print(f'Time: {time.strftime("%H:%M:%S")}')
 sim = Simulation(**kwargs)
 sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
 
-sim.run(T=T)
+sim.run(T=T, max_population=50_000)
 
 print_nested_dict(kwargs)
 
