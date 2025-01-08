@@ -10,29 +10,34 @@ from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializab
 save_results = True
 plot_results = True
 
-num_plants = 1000
+np.random.seed(0)
 
+num_plants = 3000
+T = 10000
 kwargs = {
-    'L': 2000,
+    'L': 4500,
+    'T': T,
     'dispersal_range': 90,
-    'precipitation': 0.05,
+    'precipitation': 6150e-5,
     'spawn_rate': 1,
     'growth_rate': 0.1,
 
-    'time_step': 0.1,
+    'time_step': 1,
+    
+    'density_field_resolution': 100,
 
-    'buffer_size': 80,
-    'buffer_skip': 5,
+    'buffer_size': T,
+    'buffer_skip': 1,
 }
 
-save_folder = f'Data\\temp\\time_step{kwargs["time_step"]}'
+save_folder = f'Data\\temp\\dfres_2_{kwargs['density_field_resolution']}'
 
 sim = Simulation(verbose=True, **kwargs,)
 sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
 
 print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
 
-sim.run(T=400)
+sim.run(T=T)
 
 print_nested_dict(sim.kwargs)
 

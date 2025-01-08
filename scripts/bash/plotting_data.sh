@@ -9,7 +9,7 @@ source ./scripts/bash/venv.sh
 read -p "plotting_data.sh: Save generated plots? (1/0): " save_plot
 
 # Run the plotting script
-path="Data\modi_ensemble"
+path="Data\MODI\modi_ensemble_L4500"
 
 echo "plotting.sh: Loading from $path"
 
