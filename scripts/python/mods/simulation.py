@@ -54,7 +54,7 @@ class Simulation:
     def __init__(self, **kwargs):
         self.__dict__.update(default_kwargs)
         self.__dict__.update(kwargs)
-
+        self.spinning_up = False
 
         self.t = 0
         self.state = []
