@@ -7,14 +7,16 @@ from mods.plant import Plant
 from mods.simulation import Simulation, _m_from_m2pp, _m_from_domain_sides
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 
-save_results = True
+save_results = False
 plot_results = True
 
-np.random.seed(0)
+seed = np.random.randint(0, 1_000_000_000)
+np.random.seed(seed)
 
-num_plants = 3000
-T = 10000
+num_plants = 300
+T = 600
 kwargs = {
+    'seed': seed,
     'L': 4500,
     'T': T,
     'dispersal_range': 90,
@@ -26,11 +28,11 @@ kwargs = {
     
     'density_field_resolution': 100,
 
-    'buffer_size': T,
-    'buffer_skip': 1,
+    'buffer_size': 20,
+    'buffer_skip': T//20,
 }
 
-save_folder = f'Data\\temp\\dfres_2_{kwargs['density_field_resolution']}'
+save_folder = f'Data/temp/kwarg_cleanup'
 
 sim = Simulation(verbose=True, **kwargs,)
 sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
@@ -39,11 +41,14 @@ print(f'\nSimulation initiated. Time: {time.strftime("%H:%M:%S")}')
 
 sim.run(T=T)
 
-print_nested_dict(sim.kwargs)
+
+
+sim.print_dict()
+sim.save_dict(path = f'{save_folder}/kwargs')
 
 if save_results:
     surfix = time.strftime("%Y%m%d-%H%M%S")
-    save_kwargs(sim.kwargs, f'{save_folder}/kwargs_{surfix}')
+    sim.save_dict(path = f'{save_folder}/kwargs')
     sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
     sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
     sim.density_field_buffer.save(
@@ -57,7 +62,7 @@ if plot_results:
     N0 = num_plants
     title = f'{L =}, $N_0$ = {N0}'
     sim.state_buffer.plot(title=f'{title}')
-    sim.density_field_buffer.plot(
-        title=f'{title}')
+    # sim.density_field_buffer.plot(
+    #     title=f'{title}')
     sim.data_buffer.plot(title=f'{title}')
     plt.show()

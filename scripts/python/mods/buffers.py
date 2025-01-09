@@ -139,7 +139,6 @@ class StateBuffer:
         self.states = []
         self.times = []
         self.preset_times = preset_times
-        self.kwargs = kwargs
 
         if data is not None:
             self.import_data(
@@ -221,9 +220,9 @@ class StateBuffer:
         states = []
         times = []
 
-        r_min = kwargs.get('r_min', 0.1)
-        r_max = kwargs.get('r_max', 30)
-        growth_rate = kwargs.get('growth_rate', 0.01)
+        r_min = kwargs.get('r_min')
+        r_max = kwargs.get('r_max')
+        growth_rate = kwargs.get('growth_rate')
         
         for i in range(data.shape[0]):
             x, y, r, t = data.loc[i][:4]
@@ -361,14 +360,13 @@ class StateBuffer:
 
 
 class FieldBuffer:
-    def __init__(self, sim=None, resolution=2, size=40, skip=10, preset_times=None, data=None, **kwargs):
+    def __init__(self, sim=None, resolution=10, size=20, skip=200, preset_times=None, data=None):
         self.sim = sim
         self.size = size    # estimated max number of fields to store
         self.resolution = resolution
         self.skip = skip
         self.times = []
         self.preset_times = preset_times
-        self.kwargs = kwargs
 
         self.fields = np.full(
             (self.size, self.resolution, self.resolution), np.nan)

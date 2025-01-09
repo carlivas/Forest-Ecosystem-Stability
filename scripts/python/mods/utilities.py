@@ -2,39 +2,47 @@ import os
 import json
 import numpy as np
 import time
-
+from mods.plant import Plant
+from mods.fields import DensityFieldSPH
+from mods.buffers import DataBuffer, StateBuffer, FieldBuffer
+from scipy.spatial import KDTree
 
 def convert_to_serializable(obj):
-    """
-    Convert various types of objects to a serializable format.
+    try:
+        json.dumps(obj)
+        return obj
+    except (TypeError, OverflowError):
+        val = obj
+        if isinstance(obj, Plant):
+            val = convert_to_serializable(obj.__dict__)
+        elif isinstance(obj, KDTree):
+            val = convert_to_serializable(obj.__dict__)
+        elif isinstance(obj, DensityFieldSPH):
+            val = convert_to_serializable(obj.__dict__)
+        elif isinstance(obj, DataBuffer):
+            val = convert_to_serializable(obj.__dict__)
+        elif isinstance(obj, StateBuffer):
+            val = convert_to_serializable(obj.__dict__)
+        elif isinstance(obj, FieldBuffer):
+            val = convert_to_serializable(obj.__dict__)
+        elif isinstance(obj, np.ndarray):
+            val = obj.tolist()
+        elif isinstance(obj, (np.integer, np.int32, np.int64)):
+            val = int(obj)
+        elif isinstance(obj, (np.floating, np.float32, np.float64)):
+            val = float(obj)
+        elif isinstance(obj, np.bool_):
+            val = bool(obj)
+        elif isinstance(obj, dict):
+            val = {k: convert_to_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            val = [convert_to_serializable(i) for i in obj]
+        elif isinstance(obj, type(lambda: None)):
+            val = obj.__name__
+        return val
+    return val
 
-    This function handles conversion of numpy arrays, numpy scalar types,
-    dictionaries, and lists to formats that can be easily serialized to JSON.
-
-    Parameters:
-    obj (any): The object to be converted to a serializable format.
-
-    Returns:
-    any: The converted object in a serializable format.
-    """
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    if isinstance(obj, (np.integer, np.int32, np.int64)):
-        return int(obj)
-    if isinstance(obj, (np.floating, np.float32, np.float64)):
-        return float(obj)
-    if isinstance(obj, np.bool_):
-        return bool(obj)
-    if isinstance(obj, dict):
-        return {k: convert_to_serializable(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [convert_to_serializable(i) for i in obj]
-    if isinstance(obj, type(lambda: None)):
-        return obj.__name__
-    return obj
-
-
-def save_kwargs(kwargs, path):
+def save_kwargs(kwargs, path, exclude=None):
     """
     Save keyword arguments to a JSON file.
 
@@ -55,6 +63,11 @@ def save_kwargs(kwargs, path):
     Example:
         save_kwargs({'param1': 10, 'param2': 'value'}, '/path/to/file')
     """
+    
+    if exclude is not None:
+        kwargs = {k: v for k, v in kwargs.items() if k not in exclude}
+    kwargs = dict(sorted(kwargs.items()))
+    
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path + '.json', 'w') as f:
         serializable_kwargs = convert_to_serializable(kwargs)
@@ -78,7 +91,7 @@ def get_max_depth(d, level=1):
     return max(get_max_depth(value, level + 1) for value in d.values())
 
 
-def print_nested_dict(d, indent=0):
+def print_nested_dict(d, indent=0, exclude=None):
     """
     Recursively prints a nested dictionary with indentation.
 
@@ -89,6 +102,11 @@ def print_nested_dict(d, indent=0):
     Returns:
         None
     """
+    if exclude is not None:
+        d = {k: v for k, v in d.items() if k not in exclude
+                and not isinstance(v, type(lambda: None))}
+    d = dict(sorted(d.items()))
+    
     dict_depth = get_max_depth(d)
     for key, value in d.items():
         if dict_depth > 2:

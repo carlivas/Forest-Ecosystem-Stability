@@ -4,7 +4,7 @@ import copy
 
 
 class Plant:
-    def __init__(self, pos: np.ndarray, r: float, r_min: float, r_max: float, growth_rate: float, dispersal_range: float, **kwargs):
+    def __init__(self, pos: np.ndarray, r: float, r_min: float, r_max: float, growth_rate: float, dispersal_range: float):
         self.pos = pos
         self.r = r
 
@@ -18,7 +18,7 @@ class Plant:
         self.species_germination_chance = 1
         self.dispersal_range = dispersal_range
 
-        self.age_max = (self.r_max - self.r_min)/self.growth_rate
+        # self.age_max = (self.r_max - self.r_min)/self.growth_rate
 
         # self.is_dead = kwargs.get('is_dead', False)
         # self.is_colliding = kwargs.get('is_colliding', False)
