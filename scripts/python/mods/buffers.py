@@ -4,11 +4,15 @@ import matplotlib.pyplot as plt
 import os
 import copy
 import warnings
+import json
 
 from mods.plant import Plant
 from matplotlib.colors import ListedColormap
 from matplotlib import animation
 
+path_kwargs = 'default_kwargs.json'
+with open(path_kwargs, 'r') as file:
+    default_kwargs = json.load(file)
 
 class DataBuffer:
     def __init__(self, sim=None, size=None, data=None, keys=None):
@@ -220,10 +224,20 @@ class StateBuffer:
         states = []
         times = []
 
-        r_min = kwargs.get('r_min')
-        r_max = kwargs.get('r_max')
-        growth_rate = kwargs.get('growth_rate')
-        
+        required_keys = ['L', 'time_step', 'r_min', 'r_max', 'growth_rate', 'dispersal_range']
+        for key in required_keys:
+            if key not in kwargs:
+                kwargs[key] = default_kwargs[key]
+                warnings.warn(f"StateBuffer.import_data(): Key '{key}' not found in kwargs. Using default value of {default_kwargs[key]} from default_kwargs.")
+
+        _m = 1/kwargs['L']
+        time_step = kwargs['time_step']
+        r_min = kwargs['r_min'] * _m
+        r_max = kwargs['r_max'] * _m
+        growth_rate = kwargs['growth_rate'] * _m * time_step
+        dispersal_range = kwargs['dispersal_range'] * _m
+        data = data.reset_index(drop=True)
+
         for i in range(data.shape[0]):
             x, y, r, t = data.loc[i][:4]
             if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t):
@@ -236,7 +250,15 @@ class StateBuffer:
                     times.append(t)
 
                 states[-1].append(
-                    Plant(pos=np.array([x, y]), r=r, r_min=r_min, r_max=r_max, growth_rate=growth_rate, **kwargs))
+                    Plant(
+                        pos=np.array([x, y]),
+                        r=r,
+                        r_min=r_min,
+                        r_max=r_max,
+                        growth_rate=growth_rate,
+                        dispersal_range=dispersal_range
+                    )
+                )
 
         self.states = states
         self.times = times

@@ -2,6 +2,7 @@ import time
 import copy
 from typing import *
 import numpy as np
+import json
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from matplotlib.colors import Normalize
@@ -11,6 +12,7 @@ from mods.plant import Plant
 from mods.fields import DensityFieldSPH as DensityField
 from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
+import warnings
 
 
 def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
@@ -35,19 +37,24 @@ def _m_from_domain_sides(L, S_bound=1) -> float:
     return S_bound / L
 
 
-default_kwargs = {
-    'dispersal_range': 90,
-    'spawn_rate': 1,
-    'growth_rate': 0.1,
-    'time_step': 1,
-    'density_field_resolution': 100,
-    'density_check_radius': 100,
-    'buffer_size': 20,
-    'buffer_skip': 20,
-    'r_min': 0.1,
-    'r_max': 30,
-    'verbose': True,
-}
+def sim_from_data(state_buffer_data: np.ndarray, kwargs: dict):
+    sim = Simulation(**kwargs)
+
+    last_state_data = state_buffer_data[state_buffer_data.iloc[:, -1]
+                                        == state_buffer_data.iloc[-1, -1]]
+    sim.state_buffer.import_data(last_state_data, kwargs)
+    sim.state = sim.state_buffer.states[-1]
+    sim.t = sim.state_buffer.times[-1]
+    sim.state_buffer.reset()
+
+    sim.initiate()
+    sim.state_buffer.data = state_buffer_data
+    return sim
+
+
+path_kwargs = 'default_kwargs.json'
+with open(path_kwargs, 'r') as file:
+    default_kwargs = json.load(file)
 
 
 class Simulation:
@@ -59,7 +66,17 @@ class Simulation:
         self.t = 0
         self.state = []
         self.land_quality = 0.001
+
+        self.half_width = 0.5
+        self.half_height = 0.5
+
+        self._m = 1 / self.L
+        self.r_min = self.r_min * self._m
+        self.r_max = self.r_max * self._m
+        self.dispersal_range = self.dispersal_range * self._m
         self.spawn_rate = self.spawn_rate * self.time_step
+        self.growth_rate = self.growth_rate * self._m * self.time_step
+        self.density_check_radius = self.density_check_radius * self._m
 
         precipitation = self.precipitation
         if isinstance(precipitation, float):
@@ -71,22 +88,11 @@ class Simulation:
         else:
             raise ValueError('Precipitation must be a float, int or callable')
 
-        self.half_width = 0.5
-        self.half_height = 0.5
-
-        self._m = 1 / self.L
-        self.r_min = self.r_min * self._m
-        self.r_max = self.r_max * self._m
-        self.dispersal_range = self.dispersal_range * self._m
-        self.growth_rate = self.growth_rate * self._m * self.time_step
-        self.density_field_check_radius = self.density_check_radius * self._m
-
         self.kt = None
 
         if 'buffer_preset_times' in self.__dict__:
             self.buffer_preset_times = self.buffer_preset_times
         else:
-            # self.buffer_preset_times = np.linspace(1, kwargs.get('n_iter', 10000), buffer_size).astype(int)
             self.buffer_preset_times = np.arange(
                 self.buffer_size) * self.buffer_skip
 
@@ -147,9 +153,6 @@ class Simulation:
         for plant in self.state:
             plant.update(self)
 
-        n1 = len(self.state)
-        n_spawned = n1 - n0
-
         # Second Phase: Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
         new_plants = []
         for plant in self.state:
@@ -157,18 +160,13 @@ class Simulation:
                 new_plants.append(plant)
 
         self.state = new_plants
-        n2 = len(self.state)
-        n_dead = n1 - n2
-        # print(f'step(): {n_spawned=} {n_dead=}', end='\n')
 
         prev_t = self.t
         self.t += self.time_step
 
         # Update necessary data structures
         self.density_field.update()
-
-        if n_spawned > 0 or n_dead > 0:
-            self.update_kdtree()
+        self.update_kdtree()
 
         population = len(self.state)
         biomass = sum([plant.area for plant in self.state])
@@ -200,9 +198,10 @@ class Simulation:
         """
 
         start_time = time.time()
-        n_iter = int(T / self.time_step)
+        n_iter = int(np.ceil(T / self.time_step))
+        print(f'Simulation.run(): Running simulation for {n_iter} iterations...')
         try:
-            for _ in range(1, n_iter):
+            for _ in range(0, n_iter):
                 self.step()
 
                 # if the population exceeds the maximum allowed, stop the simulation
@@ -395,13 +394,13 @@ class Simulation:
 
         biomass = sum([plant.area for plant in self.state])
         population = len(self.state)
-        precipitation = self.precipitation(0)
+        precipitation = self.precipitation(t=self.t)
         data = np.array([biomass, population, precipitation])
 
-        self.data_buffer.add(data=data, t=0)
-        self.state_buffer.add(state=self.get_state(), t=0)
+        self.data_buffer.add(data=data, t=self.t)
+        self.state_buffer.add(state=self.get_state(), t=self.t)
         self.density_field_buffer.add(
-            field=self.density_field.get_values(), t=0)
+            field=self.density_field.get_values(), t=self.t)
 
     def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float) -> None:
         """
@@ -536,7 +535,9 @@ class Simulation:
         self.add(plants)
         self.initiate()
 
-    def save_dict(self, path: str, exclude: Optional[List[str]] = ['t', 'state', 'kt', 'state_buffer', 'data_buffer', 'density_field_buffer', 'density_field', 'buffer_preset_times', 'verbose', 'spinning_up', 'half_width', 'half_height', 'precipitation']) -> None:
+    exclude_default = ['T', 'state', 'kt', 'state_buffer', 'data_buffer', 'density_field_buffer', 'density_field', 'buffer_preset_times', 'verbose', 'spinning_up', 'half_width', 'half_height', 'precipitation']
+
+    def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default) -> None:
         """
         Save the keyword arguments of the simulation to a JSON file.
 
@@ -547,13 +548,34 @@ class Simulation:
         exclude : Optional[List[str]]
             A list of keys to exclude from the saved dictionary. Defaults to None.
         """
+        self.r_min = self.r_min / self._m
+        self.r_max = self.r_max / self._m
+        self.dispersal_range = self.dispersal_range / self._m
+        self.spawn_rate = self.spawn_rate / self.time_step
+        self.growth_rate = self.growth_rate / \
+            self._m / self.time_step
+        self.density_check_radius = self.density_check_radius / self._m
+        
         save_kwargs(self.__dict__, path, exclude=exclude)
 
-    def print_dict(self, exclude: Optional[List[str]] = ['t', 'state', 'kt', 'state_buffer', 'data_buffer', 'density_field_buffer', 'density_field', 'buffer_preset_times', 'verbose', 'spinning_up', 'half_width', 'half_height', 'precipitation']) -> None:
+
+    def print_dict(self, exclude: Optional[List[str]] = exclude_default) -> None:
         """
         Print the keyword arguments of the simulation.
         """
-        print_nested_dict(self.__dict__, exclude=exclude)
+        conversion_factors = {
+            'r_min': self._m,
+            'r_max': self._m,
+            'dispersal_range': self._m,
+            'spawn_rate': self.time_step,
+            'growth_rate': self._m * self.time_step,
+            'density_check_radius': self._m
+        }
+
+        dict_temp = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
+                     for key, value in self.__dict__.items()}
+        
+        print_nested_dict(dict_temp, exclude=exclude)
 
     def plot_state(self, state: List[Plant], title: Optional = None, t: Optional[int] = None, size: int = 2, fig: Optional[plt.Figure] = None, ax: Optional[plt.Axes] = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
         """
