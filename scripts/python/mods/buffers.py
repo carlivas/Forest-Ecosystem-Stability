@@ -14,6 +14,7 @@ path_kwargs = 'default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
+
 class DataBuffer:
     def __init__(self, sim=None, size=None, data=None, keys=None):
         if data is not None:
@@ -97,7 +98,7 @@ class DataBuffer:
             if data_idx < 0:
                 data_idx = self.length + data_idx
             data_idx = [data_idx]
-        
+
         data = self.values[np.ix_(data_idx, keys_idx)]
 
         return data if len(data_idx) > 1 else data[0]
@@ -343,15 +344,17 @@ class StateBuffer:
 
         return fig, ax
 
-    def animate(self, size=6, fast=False):
+    def animate(self, size=6, title=None, fast=False):
         print('StateBuffer.animation(): Animating StateBuffer...')
         states = self.get_states()
         times = self.get_times()
         time_step = times[1] - times[0]
         T = len(times)
 
+        if title is None:
+            title = 'StateBuffer Animation'
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        fig.suptitle('StateBuffer Animation', fontsize=10)
+        fig.suptitle(title, fontsize=10)
         fig.tight_layout()
 
         ax.set_xlim(-0.5, 0.5)
@@ -365,19 +368,16 @@ class StateBuffer:
         for circle in circles:
             ax.add_artist(circle)
 
-        time_text = ax.text(0.0, -0.6, '', ha='center', fontsize=7)
-
         def animate(i):
+            t = float(round(times[i], 2))
+            ax.set_title(f'{t = }', fontsize = 8)
             for circle, plant in zip(circles, states[i]):
                 circle.center = plant.pos
                 circle.radius = plant.r
-            t = float(round(times[i], 2))
-            time_text.set_text(f'{t = }')
-            return ax, time_text
+            return ax
 
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval=100 * time_step, repeat=True)
-        plt.show()
+            fig, animate, frames=T, interval= 10 * time_step, repeat=True)
         return ani
 
 
@@ -449,13 +449,13 @@ class FieldBuffer:
     def make_array(self):
         shape = self.fields.shape
         arr = self.get_fields().reshape(-1, shape[1]*shape[2])
+        times = np.array(self.get_times())
 
         # Find the first row with NaN values
         nan_index = np.where(np.isnan(arr).any(axis=1))[0]
         if nan_index.size > 0:
             arr = arr[:nan_index[0]]
 
-        times = np.array(self.get_times())
         return np.concatenate((times.reshape(-1, 1), arr), axis=1)
 
     def save(self, path):
@@ -549,6 +549,7 @@ class FieldBuffer:
         print('FieldBuffer.animation(): Animating FieldBuffer...')
         fields = self.get_fields()
         times = self.get_times()
+        time_step = times[1] - times[0]
         T = len(times)
 
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -572,6 +573,147 @@ class FieldBuffer:
             return ax
 
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval=60, repeat=True)
+            fig, animate, frames=T, interval= 10 * time_step, repeat=True)
         plt.show()
+        return ani
+
+
+class HistogramBuffer:
+    def __init__(self, size=1, bins=25, start=0, end=1, title='HistogramBuffer', data=None):
+        if data is not None:
+            self.import_data(data)
+            return
+        self.bins = bins
+        self.bin_vals = np.linspace(start, end, bins+1)
+        self.values = np.full((size, bins), np.nan)
+        self.times = np.full(size, np.nan)
+        self.start = start
+        self.end = end
+        self.title = title
+
+    def add(self, data, t):
+        hist, _ = np.histogram(data, bins=self.bin_vals)
+        self.values[t] = hist
+        self.times[t] = t
+
+    def get_values(self, t=None):
+        values = self.values[~np.isnan(self.values).all(axis=1)].copy()
+        if t is None:
+            return values
+        return values[t]
+    
+    def get_times(self):
+        return self.times[~np.isnan(self.times)].copy()
+
+    def save(self, path):
+        path = path + '.csv'
+        values = self.get_values()
+        times = self.get_times()
+        data = np.concatenate((times.reshape(-1, 1), values), axis=1)
+        
+        df = pd.DataFrame(data, columns=['t'] + [str(
+            self.bin_vals[i]) for i in range(self.bins)])
+        df.to_csv(path, index=False)
+
+    def import_data(self, data):
+        self.times = data.values[:, 0]
+        self.values = data.values[:, 1:]
+        self.bins = data.values[:, 1:].shape[1]
+        self.bin_vals = np.array([float(col) for col in data.columns[1:]])
+        self.start = self.bin_vals[0]
+        self.end = self.bin_vals[-1]
+        
+        print(f'HistogramBuffer.import_data(): Imported data with')
+        print(f'{self.values.shape = }')
+        print(f'{self.times = }')
+        print(f'{self.bins = }')
+        print(f'{self.bin_vals = }')
+
+    def plot(self, size=2, t=None, nplots=20, title=None, density=False, xscale=1, xlabel='x', ylabel='frequency'):
+        values = self.get_values()
+        start = self.start * xscale
+        end = self.end * xscale
+        xx = np.linspace(start, end, self.bins)
+        if density:
+            values = values / \
+                np.sum(values, axis=1)[:, np.newaxis]
+            ylabel = 'density'
+        ymax = np.nanmax(values)
+        if title is None:
+            title = self.title
+        if t is None:
+            tt = self.get_times()
+        elif isinstance(t, (int, float)):
+            tt = [t]
+
+        nrows = 5
+        ncols = nplots//nrows + bool(nplots % nrows)
+        fig, ax = plt.subplots(nrows, ncols, figsize=(size*nrows, size*ncols))
+        fig.suptitle(title, fontsize=10)
+        fig.subplots_adjust(hspace=0.5)
+        if nplots == 1:
+            ax = [ax]
+
+        if len(tt) > nplots:
+            tt = np.linspace(tt[0], tt[-1], nplots, dtype=int)
+
+        for i, ax_i in enumerate(ax.flatten()):
+            if i >= len(tt):
+                ax_i.axis('off')
+                continue
+            t = tt[i]
+            
+            ax_i.bar(xx, values[t], width=(
+                end - start) / self.bins, color='black', alpha=0.5)
+
+            xticks = (xx[0], xx[-1])
+            xticklabels = [f'{xt:.2e}' if isinstance(
+                xt, float) else str(xt) for xt in xticks]
+            ax_i.set_xticks(xticks)
+            ax_i.set_xticklabels(xticklabels)
+            ax_i.tick_params(axis='both', which='major', labelsize=7)
+            
+            ax_i.set_xlabel(xlabel, fontsize=7, labelpad=-8)
+            ax_i.set_ylim(0, ymax*1.1)
+            ax_i.set_ylabel(ylabel, fontsize=7)
+
+            t = float(round(t, 2))
+            ax_i.set_title(f'{t = }', fontsize=8)
+        fig.tight_layout()
+        return fig, ax
+
+    def animate(self, size=6, title=None, density=False, xscale=1, xlabel='x', ylabel='frequency'):
+        print('HistogramBuffer.animation(): Animating HistogramBuffer...')
+        tt = self.get_times()
+        time_step = tt[1] - tt[0]
+        values = self.get_values()
+        start = self.start * xscale
+        end = self.end * xscale
+        xx = np.linspace(start, end, self.bins)
+        if density:
+            values = values / \
+                np.sum(values, axis=1)[:, np.newaxis]
+            ylabel = 'density'
+        ymax = np.nanmax(values)
+        
+        if title is None:
+            title = self.title + ' Animation'
+        
+        fig, ax = plt.subplots(1, 1, figsize=(size, 2*size//3))
+        # fig.tight_layout()
+
+        def animate(i):
+            ax.clear()
+            ax.bar(xx, values[i], color='black', alpha=0.5, width=(
+                end - start) / self.bins)
+            ax.set_ylim(0, ymax*1.1)
+            t = tt[i]
+            t = float(round(t, 2))
+            ax.set_title(title + f' at {t = }', fontsize=12)
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            return ax
+
+        ani = animation.FuncAnimation(
+            fig, animate, frames=len(tt), interval=10 * time_step, repeat=True)
         return ani

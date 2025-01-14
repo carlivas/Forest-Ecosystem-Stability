@@ -10,7 +10,7 @@ from scipy.stats import gaussian_kde
 
 from mods.plant import Plant
 from mods.fields import DensityFieldSPH as DensityField
-from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer, HistogramBuffer
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 import warnings
 
@@ -77,6 +77,7 @@ class Simulation:
         self.spawn_rate = self.spawn_rate * self.time_step
         self.growth_rate = self.growth_rate * self._m * self.time_step
         self.density_check_radius = self.density_check_radius * self._m
+        self.kt = None
 
         precipitation = self.precipitation
         if isinstance(precipitation, float):
@@ -88,7 +89,13 @@ class Simulation:
         else:
             raise ValueError('Precipitation must be a float, int or callable')
 
-        self.kt = None
+        self.density_field = DensityField(
+            half_width=self.half_width,
+            half_height=self.half_height,
+            density_radius=self.density_check_radius,
+            resolution=self.density_field_resolution,
+            simulation=self
+        )
 
         if 'buffer_preset_times' in self.__dict__:
             self.buffer_preset_times = self.buffer_preset_times
@@ -115,12 +122,11 @@ class Simulation:
             preset_times=self.buffer_preset_times,
         )
 
-        self.density_field = DensityField(
-            half_width=self.half_width,
-            half_height=self.half_height,
-            density_radius=self.density_check_radius,
-            resolution=self.density_field_resolution,
-            simulation=self
+        self.biomass_buffer = HistogramBuffer(
+            size=int(np.floor(self.T / self.time_step)) + 1, start=0, end=self.r_max**2 * np.pi, title='Biomass'
+        )
+        self.size_buffer = HistogramBuffer(
+            size=int(np.floor(self.T / self.time_step)) + 1, start=self.r_min, end=self.r_max, title='Sizes'
         )
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]) -> None:
@@ -168,11 +174,15 @@ class Simulation:
         self.density_field.update()
         self.update_kdtree()
 
+        sizes = np.array([plant.r for plant in self.state])
+        biomass = np.array([plant.area for plant in self.state])
+        biomass_total = sum(biomass)
         population = len(self.state)
-        biomass = sum([plant.area for plant in self.state])
         precipitation = self.precipitation(self.t)
-        data = np.array([biomass, population, precipitation])
+        data = np.array([biomass_total, population, precipitation])
         self.data_buffer.add(data=data, t=self.t)
+        self.biomass_buffer.add(data=biomass, t=self.t)
+        self.size_buffer.add(data=sizes, t=self.t)
 
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
@@ -392,15 +402,20 @@ class Simulation:
         self.update_kdtree()
         self.density_field.update()
 
-        biomass = sum([plant.area for plant in self.state])
+        sizes = np.array([plant.r for plant in self.state])
+        biomass = np.array([plant.area for plant in self.state])
+        biomass_total = sum(biomass)
         population = len(self.state)
         precipitation = self.precipitation(t=self.t)
-        data = np.array([biomass, population, precipitation])
+        data = np.array([biomass_total, population, precipitation])
 
         self.data_buffer.add(data=data, t=self.t)
+        self.biomass_buffer.add(data=biomass, t=self.t)
+        self.size_buffer.add(data=sizes, t=self.t)
         self.state_buffer.add(state=self.get_state(), t=self.t)
         self.density_field_buffer.add(
             field=self.density_field.get_values(), t=self.t)
+        print(f'\nSimulation.initiate(). Time: {time.strftime("%H:%M:%S")}')
 
     def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float) -> None:
         """
@@ -535,7 +550,20 @@ class Simulation:
         self.add(plants)
         self.initiate()
 
-    exclude_default = ['T', 'state', 'kt', 'state_buffer', 'data_buffer', 'density_field_buffer', 'density_field', 'buffer_preset_times', 'verbose', 'spinning_up', 'half_width', 'half_height', 'precipitation']
+    exclude_default = ['state',
+                       'kt',
+                       'state_buffer',
+                       'data_buffer',
+                       'density_field_buffer',
+                       'density_field',
+                       'biomass_buffer',
+                       'size_buffer',
+                       'buffer_preset_times',
+                       'verbose',
+                       'spinning_up',
+                       'half_width',
+                       'half_height',
+                       'precipitation']
 
     def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default) -> None:
         """
@@ -555,9 +583,8 @@ class Simulation:
         self.growth_rate = self.growth_rate / \
             self._m / self.time_step
         self.density_check_radius = self.density_check_radius / self._m
-        
-        save_kwargs(self.__dict__, path, exclude=exclude)
 
+        save_kwargs(self.__dict__, path, exclude=exclude)
 
     def print_dict(self, exclude: Optional[List[str]] = exclude_default) -> None:
         """
@@ -574,7 +601,7 @@ class Simulation:
 
         dict_temp = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
                      for key, value in self.__dict__.items()}
-        
+
         print_nested_dict(dict_temp, exclude=exclude)
 
     def plot_state(self, state: List[Plant], title: Optional = None, t: Optional[int] = None, size: int = 2, fig: Optional[plt.Figure] = None, ax: Optional[plt.Axes] = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
