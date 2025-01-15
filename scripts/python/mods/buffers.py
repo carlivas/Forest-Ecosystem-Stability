@@ -5,10 +5,12 @@ import os
 import copy
 import warnings
 import json
-
-from mods.plant import Plant
+import scipy
 from matplotlib.colors import ListedColormap
 from matplotlib import animation
+
+from mods.plant import Plant
+from mods.fields import DensityFieldSPH
 
 path_kwargs = 'default_kwargs.json'
 with open(path_kwargs, 'r') as file:
@@ -31,7 +33,7 @@ class DataBuffer:
         self.values = np.full((size+1, len(self.keys)), np.nan)
         self.length = 0
 
-    def add(self, data, t):
+    def add(self, data, t, i):
         self.values[self.length] = np.array([t, *data])
         self.length = self.length + 1
 
@@ -48,9 +50,9 @@ class DataBuffer:
         if keys is not None:
             self.keys = keys
         fig, ax = plt.subplots(
-            len(self.keys) - 1, 1,
+            len(self.keys), 1,
             figsize=(size,
-                     size * (len(self.keys) - 1) / 3),
+                     size * (len(self.keys)) / 3),
             sharex=True)
 
         if title is not None:
@@ -149,12 +151,12 @@ class StateBuffer:
             self.import_data(
                 data=data, kwargs=kwargs)
 
-    def add(self, state, t):
+    def add(self, state, t, i):
         if len(self.times) < self.size:
             self.states.append(state)
             self.times.append(t)
         elif len(self.times) == self.size:
-            removable_indices = [i for i, time in enumerate(
+            removable_indices = [l for l, time in enumerate(
                 self.times) if not any(np.isclose(time, preset_time) for preset_time in self.preset_times)]
             if removable_indices:
                 self.states.pop(removable_indices[0])
@@ -221,7 +223,7 @@ class StateBuffer:
         # Save the StateBuffer array object to the specified path as csv
         np.savetxt(path, state_buffer_array, delimiter=',')
 
-    def import_data(self, data, kwargs):
+    def import_data(self, data, **kwargs):
         states = []
         times = []
 
@@ -238,28 +240,27 @@ class StateBuffer:
         growth_rate = kwargs['growth_rate'] * _m * time_step
         dispersal_range = kwargs['dispersal_range'] * _m
         data = data.reset_index(drop=True)
-
+        
         for i in range(data.shape[0]):
             x, y, r, t = data.loc[i][:4]
-            if np.isnan(x) or np.isnan(y) or np.isnan(r) or np.isnan(t):
-                print(
-                    f'StateBuffer.import_data(): !Warning! Skipping NaN values at row {i}.')
+            if any(np.isnan([x, y, r, t])):
+                print(f'StateBuffer.import_data(): !Warning! Skipping NaN values at row {i}.')
                 continue
-            else:
-                if t not in times:
-                    states.append([])
-                    times.append(t)
+            
+            if t not in times:
+                states.append([])
+                times.append(t)
 
-                states[-1].append(
-                    Plant(
-                        pos=np.array([x, y]),
-                        r=r,
-                        r_min=r_min,
-                        r_max=r_max,
-                        growth_rate=growth_rate,
-                        dispersal_range=dispersal_range
-                    )
+            states[-1].append(
+                Plant(
+                    pos=np.array([x, y]),
+                    r=r,
+                    r_min=r_min,
+                    r_max=r_max,
+                    growth_rate=growth_rate,
+                    dispersal_range=dispersal_range
                 )
+            )
 
         self.states = states
         self.times = times
@@ -267,9 +268,6 @@ class StateBuffer:
     def plot_state(self, state, t=None, size=2, fig=None, ax=None, half_width=0.5, half_height=0.5, fast=False):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        # ax.set_title('State')
-        # ax.set_xlabel('Width (u)')
-        # ax.set_ylabel('Height (u)')
         ax.set_xlim(-half_width, half_width)
         ax.set_ylim(-half_height, half_height)
         ax.set_aspect('equal', 'box')
@@ -379,6 +377,35 @@ class StateBuffer:
         ani = animation.FuncAnimation(
             fig, animate, frames=T, interval= 10 * time_step, repeat=True)
         return ani
+    
+    def binned_population(self, bins=20, distance_upper_bound=None):
+        values = np.full((len(self.times), (bins)**2), np.nan)
+        states = self.get_states()
+        times = self.get_times()
+        print(f'StateBuffer.binned_population(): {len(states) = } {len(times) = }')
+        xx = np.linspace(-0.5, 0.5, bins)
+        X, Y = np.meshgrid(xx, xx)
+        grid_points = np.vstack([X.ravel(), Y.ravel()]).T
+        KDTree = scipy.spatial.KDTree(grid_points)
+        
+        if distance_upper_bound is None:
+            distance_upper_bound = 1/bins
+            
+        
+        for i, state in enumerate(states):
+            positions = np.array([plant.pos for plant in state])
+            dist, idx = KDTree.query(positions, k=100, distance_upper_bound=distance_upper_bound)
+            idx = idx[idx < bins*bins]
+            idx_2d = np.unravel_index(idx, (bins, bins))
+            hist, _, _ = np.histogram2d(idx_2d[0], idx_2d[1], bins=bins, range=[[0, bins], [0, bins]])
+            values[i] = hist.ravel()
+            
+        return values
+    
+        
+    
+
+        
 
 
 class FieldBuffer:
@@ -394,24 +421,22 @@ class FieldBuffer:
             (self.size, self.resolution, self.resolution), np.nan)
 
         if data is not None:
-            fields, times = self.import_data(
+            self.import_data(
                 data=data)
-            self.fields = fields
-            self.times = times
 
-    def add(self, field, t):
+    def add(self, field, t, i):
         if len(self.times) < self.size:
             self.fields[len(self.times)] = field
             self.times.append(t)
         elif len(self.times) == self.size:
-            for i, time in enumerate(self.times):
+            for l, time in enumerate(self.times):
                 if not any(np.isclose(time, preset_time) for preset_time in self.preset_times):
                     fields = self.get_fields()
-                    B = np.roll(fields[i:], -1, axis=0)
+                    B = np.roll(fields[l:], -1, axis=0)
                     fields = np.concatenate(
-                        (fields[:i], B), axis=0)
+                        (fields[:l], B), axis=0)
                     self.fields = fields
-                    self.times.pop(i)
+                    self.times.pop(l)
                     break
             self.fields[-1] = field
             self.times.append(t)
@@ -443,8 +468,21 @@ class FieldBuffer:
 
         self.resolution = int(np.sqrt(data.values.shape[-1]))
         fields = fields_arr.reshape(-1, self.resolution, self.resolution)
-
-        return fields, times
+        
+        self.fields = fields
+        self.times = times
+    
+    def from_state_buffer(self, state_buffer, resolution=None, **kwargs):
+        if resolution is not None:
+            self.resolution = resolution
+            self.fields = np.full((self.size, self.resolution, self.resolution), np.nan)
+        states = state_buffer.get_states()
+        times = state_buffer.get_times()
+        density_field = DensityFieldSPH(half_height=0.5, half_width=0.5, density_radius=kwargs['density_check_radius']*kwargs['_m'], resolution=self.resolution)
+        for i, state in enumerate(states):
+            density_field.update(state)
+            self.add(density_field.values, times[i], i)
+        return
 
     def make_array(self):
         shape = self.fields.shape
@@ -545,15 +583,18 @@ class FieldBuffer:
 
         return fig, ax
 
-    def animate(self, size=6, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+    def animate(self, title=None, size=6, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         print('FieldBuffer.animation(): Animating FieldBuffer...')
         fields = self.get_fields()
         times = self.get_times()
         time_step = times[1] - times[0]
         T = len(times)
 
+        if title is None:
+            title = 'FieldBuffer Animation'
+
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        fig.suptitle('FieldBuffer Animation', fontsize=10)
+        fig.suptitle(title, fontsize=10)
         fig.tight_layout()
         cax = fig.add_axes([0.05, 0.05, 0.9, 0.02])
         norm = plt.Normalize(vmin=vmin, vmax=vmax)
@@ -591,10 +632,10 @@ class HistogramBuffer:
         self.end = end
         self.title = title
 
-    def add(self, data, t):
+    def add(self, data, t, i):
         hist, _ = np.histogram(data, bins=self.bin_vals)
-        self.values[t] = hist
-        self.times[t] = t
+        self.values[i] = hist
+        self.times[i] = t
 
     def get_values(self, t=None):
         values = self.values[~np.isnan(self.values).all(axis=1)].copy()
