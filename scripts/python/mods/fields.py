@@ -51,8 +51,9 @@ def getDensity(r, pos, m, hSq):
 
 
 class DensityFieldSPH:
-    def __init__(self, half_width, half_height, density_radius, resolution, simulation=None):
+    def __init__(self, half_width, half_height, density_radius, resolution, state=None):
         print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
+        
         dx = 1 / resolution
         dy = 1 / resolution
         xx = np.linspace(-half_width + dx/2,
@@ -67,8 +68,6 @@ class DensityFieldSPH:
 
         self.bandwidthSq = density_radius**2
         self.values = np.zeros((resolution, resolution))
-
-        self.simulation = simulation
 
     def query(self, pos):
         # Find the nearest neighbors using KDTree

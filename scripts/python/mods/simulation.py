@@ -2,6 +2,7 @@ import time
 import copy
 from typing import *
 import numpy as np
+import pandas as pd
 import json
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
@@ -10,7 +11,7 @@ from scipy.stats import gaussian_kde
 
 from mods.plant import Plant
 from mods.fields import DensityFieldSPH as DensityField
-from mods.buffers import DataBuffer, FieldBuffer, StateBuffer, HistogramBuffer, rewrite_state_buffer_data
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer, HistogramBuffer, rewrite_state_buffer_data, rewrite_hist_buffer_data, rewrite_density_field_buffer_data
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 import warnings
 
@@ -36,29 +37,117 @@ def _m_from_m2pp(m2pp, num_plants, A_bound=1) -> float:
 def _m_from_domain_sides(L, S_bound=1) -> float:
     return S_bound / L
 
-def sim_from_data(state_buffer_df, density_field_buffer_df=None, times_to_load='last', **kwargs):
-    sim = Simulation(**kwargs)
+
+def load_sim_data(load_folder, surfix):
+    biomass_buffer_df = pd.read_csv(
+        f'{load_folder}/biomass_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
     
-    if 'id' not in state_buffer_df.keys():
+    if 't' not in biomass_buffer_df.iloc[0,:].values:
+        biomass_buffer_df, note = rewrite_hist_buffer_data(biomass_buffer_df)
+        save_permission = input(f"Biomass buffer data at '{load_folder}' with surfix '{
+                                surfix}' needs rewriting. Do you want to rewrite and save it? (Y/n): ")
+        if save_permission.lower() == 'y':
+            biomass_buffer_df.to_csv(
+                f'{load_folder}/biomass_buffer_{surfix}.csv', index=False, header=True)
+            with open(f'{load_folder}/biomass_buffer_{surfix}.csv', 'w') as file:
+                file.write(f"# {note.replace('\n', '\n# ')}\n")  # Add '#' at the beginning of each line of the note
+                biomass_buffer_df.to_csv(file, index=False)
+    if biomass_buffer_df.iloc[0, 0] == 't':
+        biomass_buffer_df = pd.read_csv(
+            f'{load_folder}/biomass_buffer_{surfix}.csv', header=0, comment='#')
+    
+    
+    data_buffer_df = pd.read_csv(
+        f'{load_folder}/data_buffer_{surfix}.csv', header=0, comment='#')
+    
+    
+    density_field_buffer_df = pd.read_csv(
+        f'{load_folder}/density_field_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+    if 't' not in density_field_buffer_df.iloc[0,:].values:
+        density_field_buffer_df = rewrite_density_field_buffer_data(density_field_buffer_df)
+        save_permission = input(f"Density field buffer data at '{load_folder}' with surfix '{
+                                surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
+        if save_permission.lower() == 'y':
+            density_field_buffer_df.to_csv(
+                f'{load_folder}/density_field_buffer_{surfix}.csv', index=False, header=True)    
+    if density_field_buffer_df.iloc[0, 0] == 't':
+        density_field_buffer_df = pd.read_csv(
+            f'{load_folder}/density_field_buffer_{surfix}.csv', header=0, comment='#')
+    
+    kwargs = json.load(open(f'{load_folder}/kwargs_{surfix}.json'))
+    
+    
+    size_buffer_df = pd.read_csv(
+        f'{load_folder}/size_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+   
+    if 't' not in size_buffer_df.iloc[0,:].values:
+        size_buffer_df, note = rewrite_hist_buffer_data(size_buffer_df)
+        save_permission = input(f"Size buffer data at '{load_folder}' with surfix '{
+                                surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
+        if save_permission.lower() == 'y':
+            size_buffer_df.to_csv(
+                f'{load_folder}/size_buffer_{surfix}.csv', index=False, header=True)
+            with open(f'{load_folder}/size_buffer_{surfix}.csv', 'w') as file:
+                file.write(f"# {note.replace('\n', '\n# ')}\n")  # Add '#' at the beginning of each line of the note
+                size_buffer_df.to_csv(file, index=False)
+    if size_buffer_df.iloc[0, 0] == 't':
+        size_buffer_df = pd.read_csv(
+            f'{load_folder}/size_buffer_{surfix}.csv', header=0, comment='#')
+    
+    
+    state_buffer_df = pd.read_csv(
+        f'{load_folder}/state_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+    if 'id' != state_buffer_df.iloc[0, 0]:
+        # Rewrite and ask for permission to save
         state_buffer_df = rewrite_state_buffer_data(state_buffer_df)
+        save_permission = input(f"State buffer data at '{load_folder}' with surfix '{
+                                surfix}' is missing 'id'. Do you want to rewrite and save it? (Y/n): ")
+        if save_permission.lower() == 'y':
+            state_buffer_df.to_csv(
+                f'{load_folder}/state_buffer_{surfix}.csv', index=False, header=True)
+    if state_buffer_df.loc[0, 0] == 'id':
+        state_buffer_df = pd.read_csv(
+            f'{load_folder}/state_buffer_{surfix}.csv', header=0, comment='#')
     
-    state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
-    sim.state_buffer = state_buffer
+    return state_buffer_df, density_field_buffer_df, data_buffer_df, biomass_buffer_df, size_buffer_df, kwargs
+
+
+def sim_from_data(sim_data, times_to_load='last'):
+    state_buffer_df, density_field_buffer_df, data_buffer_df, biomass_buffer_df, size_buffer_df, kwargs = sim_data
+    times = state_buffer_df['t'].unique()
+    if times_to_load == 'last':
+        times_to_load = [times[-1]]
+    elif times_to_load == 'all':
+        times_to_load = times
+    elif isinstance(times_to_load, (int, list, np.ndarray)):
+        times_to_load = [t for t in times if t in times_to_load]
+    else:
+        raise ValueError(
+            "times_to_load must be 'last', 'all', an integer, or a list of values")
+    
+    state_buffer_df = state_buffer_df[state_buffer_df['t'].isin(times_to_load)]
+    density_field_buffer_df = density_field_buffer_df[density_field_buffer_df['t'].isin(times_to_load)]
+    data_buffer_df = data_buffer_df[data_buffer_df['Time'].isin(times_to_load)]
+    biomass_buffer_df = biomass_buffer_df[biomass_buffer_df['t'].isin(times_to_load)]
+    size_buffer_df = size_buffer_df[size_buffer_df['t'].isin(times_to_load)]
+            
+    sim = Simulation(**kwargs)
+
+    sim.state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
     sim.state = sim.state_buffer.states[-1]
     sim.t = sim.state_buffer.times[-1]
-    
-    if density_field_buffer_df is not None:
-        density_field_buffer = FieldBuffer(data = density_field_buffer_df)
-        sim.density_field_buffer = density_field_buffer
-        sim.density_field = DensityField(
-            half_width=sim.half_width,
-            half_height=sim.half_height,
-            density_radius=sim.density_check_radius,
-            resolution=sim.density_field_resolution,
-            simulation=sim
-        )
-        sim.density_field.update(sim.state)
 
+    if density_field_buffer_df is not None:
+        sim.density_field_buffer = FieldBuffer(data=density_field_buffer_df)
+        sim.density_field = DensityField(half_height=sim.half_height, half_width=sim.half_width,
+                                         density_radius=sim.density_check_radius, resolution=sim.density_field_resolution)
+        sim.density_field.update(sim.state)
+    if data_buffer_df is not None:
+        sim.data_buffer = DataBuffer(data=data_buffer_df)
+    if biomass_buffer_df is not None:
+        sim.biomass_buffer = HistogramBuffer(data=biomass_buffer_df, start=0, end=sim.r_max**2 * np.pi, title='Biomass')
+    if size_buffer_df is not None:
+        sim.size_buffer = HistogramBuffer(data=size_buffer_df, start=sim.r_min, end=sim.r_max, title='Sizes')
 
     sim.initiate()
     return sim
@@ -96,7 +185,6 @@ class Simulation:
             half_height=self.half_height,
             density_radius=self.density_check_radius,
             resolution=self.density_field_resolution,
-            simulation=self
         )
 
         if 'buffer_preset_times' in self.__dict__:
@@ -211,7 +299,8 @@ class Simulation:
 
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
-        print(f'Simulation.run(): Running simulation for {n_iter} iterations...')
+        print(f'Simulation.run(): Running simulation for {
+              n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
                 self.step()
@@ -404,14 +493,13 @@ class Simulation:
         self.update_kdtree(self.state)
         self.density_field.update(self.state)
         print(f'\nSimulation.initiate(). Time: {time.strftime("%H:%M:%S")}')
-    
+
     def collect_data(self):
         sizes = np.array([plant.r for plant in self.state])
         biomass = np.array([plant.area for plant in self.state])
         biomass_total = sum(biomass)
         population = len(self.state)
-        precipitation = self.precipitation
-        data = np.array([biomass_total, population, precipitation])
+        data = np.array([biomass_total, population])
 
         self.data_buffer.add(data=data, t=self.t)
         self.biomass_buffer.add(data=biomass, t=self.t)
@@ -449,8 +537,6 @@ class Simulation:
         self.add(plants)
         self.initiate()
         self.collect_data()
-    
-
 
     def initiate_uniform_radii(self, n: int, r_min: float, r_max: float) -> None:
         """

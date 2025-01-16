@@ -27,6 +27,32 @@ def rewrite_state_buffer_data(state_buffer_df: pd.DataFrame) -> pd.DataFrame:
     state_buffer_df = state_buffer_df[['id', 'x', 'y', 'r', 't']]
     return state_buffer_df
 
+def rewrite_hist_buffer_data(hist_buffer_df: pd.DataFrame) -> pd.DataFrame:
+    if hist_buffer_df.iloc[0, 0] == 'bins':
+        hist_buffer_df = hist_buffer_df.drop(0)
+    
+    bin_in_keys = np.array(['bin' in key for key in hist_buffer_df.iloc[0].values])
+    if bin_in_keys.any():
+        return hist_buffer_df
+    
+    N_bins = int(hist_buffer_df.shape[1] - 1)
+    bin_range = (float(hist_buffer_df.iloc[0, 1]), float(hist_buffer_df.iloc[0, -1]))
+    note = f"{N_bins = }, {bin_range = } "
+    hist_buffer_df = hist_buffer_df.drop(1)
+    
+    keys = ['t'] + ['bin_' + str(i) for i in range(N_bins)]
+    hist_buffer_df.columns = keys    
+    hist_buffer_df = hist_buffer_df.reset_index(drop=True)
+    return hist_buffer_df, note
+
+def rewrite_density_field_buffer_data(density_field_buffer_df: pd.DataFrame) -> pd.DataFrame:
+    if 't' in density_field_buffer_df.keys():
+        print('Density field buffer already rewritten')
+        return density_field_buffer_df
+    keys = ['t'] + ['cell_' + str(i) for i in range(len(density_field_buffer_df.columns) - 1)]
+    density_field_buffer_df.columns = keys
+    return density_field_buffer_df
+
 class DataBuffer:
     def __init__(self, sim=None, size=None, data=None, keys=None):
         if data is not None:
@@ -36,7 +62,7 @@ class DataBuffer:
         if keys is not None:
             self.keys = list(str(key) for key in keys)
         else:
-            self.keys = ['Time', 'Biomass', 'Population', 'Precipitation']
+            self.keys = ['Time', 'Biomass', 'Population']
 
         self.sim = sim
         self.size = size+1
@@ -392,6 +418,7 @@ class StateBuffer:
 
         ani = animation.FuncAnimation(
             fig, animate, frames=T, interval= 10 * time_step, repeat=True)
+        plt.show()
         return ani
 
 
@@ -452,8 +479,8 @@ class FieldBuffer:
         return self.times.copy()
 
     def import_data(self, data):
-        times = data.loc[:, 0].values
-        fields_arr = data.loc[:, 1:].values
+        times = data.iloc[:, 0].values
+        fields_arr = data.iloc[:, 1:].values
 
         self.resolution = int(np.sqrt(data.values.shape[-1]))
         fields = fields_arr.reshape(-1, self.resolution, self.resolution)
@@ -594,16 +621,18 @@ class FieldBuffer:
 
 class HistogramBuffer:
     def __init__(self, size=10, bins=25, start=0, end=1, title='HistogramBuffer', data=None):
-        if data is not None:
-            self.import_data(data)
-            return
+        self.title = title
         self.bins = bins
         self.bin_vals = np.linspace(start, end, bins+1)
+        
+        if data is not None:
+            self.import_data(data, self.bin_vals)
+            return
+        
         self.values = np.full((size, bins), np.nan)
         self.times = np.full(size, np.nan)
         self.start = start
         self.end = end
-        self.title = title
         self.length = 0
 
     def add(self, data, t):
@@ -620,9 +649,9 @@ class HistogramBuffer:
 
     def get_values(self, t=None):
         values = self.values[~np.isnan(self.values).all(axis=1)].copy()
-        if t is None:
-            return values
-        return values[t]
+        if t is not None:
+            return values[t]
+        return values
     
     def get_times(self):
         return self.times[~np.isnan(self.times)].copy()
@@ -637,21 +666,16 @@ class HistogramBuffer:
             self.bin_vals[i]) for i in range(self.bins)])
         df.to_csv(path, index=False)
 
-    def import_data(self, data):
+    def import_data(self, data, bin_vals):
         self.times = data.values[:, 0]
         self.values = data.values[:, 1:]
         self.bins = data.values[:, 1:].shape[1]
-        self.bin_vals = np.array([float(col) for col in data.columns[1:]])
+        self.bin_vals = bin_vals
         self.start = self.bin_vals[0]
         self.end = self.bin_vals[-1]
+        self.length = self.values.shape[0]
         
-        print(f'HistogramBuffer.import_data(): Imported data with')
-        print(f'{self.values.shape = }')
-        print(f'{self.times = }')
-        print(f'{self.bins = }')
-        print(f'{self.bin_vals = }')
-
-    def plot(self, size=2, t=None, nplots=20, title=None, density=False, xscale=1, xlabel='x', ylabel='frequency'):
+    def plot(self, size=2, t=None, nplots=20, title=None, density=False, xscale=1, xlabel='', ylabel='frequency'):
         values = self.get_values()
         start = self.start * xscale
         end = self.end * xscale
@@ -667,6 +691,8 @@ class HistogramBuffer:
             tt = self.get_times()
         elif isinstance(t, (int, float)):
             tt = [t]
+        print(f'HistogramBuffer.plot(): {values.shape = }')
+        print(f'HistogramBuffer.plot(): {tt.shape = }')
 
         nrows = 5
         ncols = nplots//nrows + bool(nplots % nrows)
@@ -677,15 +703,19 @@ class HistogramBuffer:
             ax = [ax]
 
         if len(tt) > nplots:
-            tt = np.linspace(tt[0], tt[-1], nplots, dtype=int)
+            ii = np.linspace(0, len(tt)-1, nplots, dtype=int)
+            
+        print(f'HistogramBuffer.plot(): {tt = }')
+        print(f'HistogramBuffer.plot(): {ii = }')
 
         for i, ax_i in enumerate(ax.flatten()):
             if i >= len(tt):
                 ax_i.axis('off')
                 continue
-            t = tt[i]
+            idx = ii[i]
+            t = tt[idx]
             
-            ax_i.bar(xx, values[t], width=(
+            ax_i.bar(xx, values[idx], width=(
                 end - start) / self.bins, color='black', alpha=0.5)
 
             xticks = (xx[0], xx[-1])
