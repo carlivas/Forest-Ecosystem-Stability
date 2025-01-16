@@ -4,7 +4,8 @@ import copy
 
 
 class Plant:
-    def __init__(self, pos: np.ndarray, r: float, r_min: float, r_max: float, growth_rate: float, dispersal_range: float):
+    def __init__(self, id, pos, r, r_min, r_max, growth_rate, dispersal_range):
+        self.id = id
         self.pos = pos
         self.r = r
 

@@ -5,11 +5,10 @@
     "density_field_resolution": 100,
     "dispersal_range": 90,
     "growth_rate": 0.1,
-    "precipitation": 0.1,
     "r_max": 30,
     "r_min": 0.1,
+    "precipitation": -1,
     "spawn_rate": 1,
-    "t": 0,
     "time_step": 1,
     "verbose": true
 }

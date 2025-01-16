@@ -77,13 +77,13 @@ class DensityFieldSPH:
         idx_2d = np.unravel_index(idx, (self.resolution, self.resolution))
         return self.values[idx_2d]
 
-    def update(self):
-        if self.simulation.kt is None:
+    def update(self, state):
+        if len(state) == 0:
             self.values = np.zeros((self.resolution, self.resolution))
         else:
             positions = np.array([plant.pos
-                                  for plant in self.simulation.state])
-            areas = np.array([plant.area for plant in self.simulation.state])
+                                  for plant in state])
+            areas = np.array([plant.area for plant in state])
             
             if positions.shape[0] == 0:
                 self.values = np.zeros((self.resolution, self.resolution))

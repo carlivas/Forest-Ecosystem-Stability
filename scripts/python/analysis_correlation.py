@@ -7,6 +7,7 @@ from scipy.signal import correlate2d, detrend
 from matplotlib.animation import FuncAnimation
 
 from mods.simulation import Simulation, sim_from_data
+from mods.buffers import StateBuffer, rewrite_state_buffer_data
 from mods.fields import getDensity
 from mods.postprocessing import variance, autocorrelation, spatial_correlation
 
@@ -24,6 +25,7 @@ kwargs = json.load(open(f'{load_folder}/kwargs_{surfix}.json'))
 # size_buffer_df = pd.read_csv(f'{load_folder}/size_buffer_{surfix}.csv', header=0)
 state_buffer_df = pd.read_csv(
     f'{load_folder}/state_buffer_{surfix}.csv', header=None)
+
 
 times = state_buffer_df.iloc[:, -1].unique()
 time_step = times[1] - times[0]

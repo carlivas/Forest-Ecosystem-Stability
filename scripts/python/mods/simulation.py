@@ -10,7 +10,7 @@ from scipy.stats import gaussian_kde
 
 from mods.plant import Plant
 from mods.fields import DensityFieldSPH as DensityField
-from mods.buffers import DataBuffer, FieldBuffer, StateBuffer, HistogramBuffer
+from mods.buffers import DataBuffer, FieldBuffer, StateBuffer, HistogramBuffer, rewrite_state_buffer_data
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 import warnings
 
@@ -36,19 +36,31 @@ def _m_from_m2pp(m2pp, num_plants, A_bound=1) -> float:
 def _m_from_domain_sides(L, S_bound=1) -> float:
     return S_bound / L
 
-
-def sim_from_data(state_buffer_data: np.ndarray, kwargs: dict):
+def sim_from_data(state_buffer_df, density_field_buffer_df=None, times_to_load='last', **kwargs):
     sim = Simulation(**kwargs)
-
-    last_state_data = state_buffer_data[state_buffer_data.iloc[:, -1]
-                                        == state_buffer_data.iloc[-1, -1]]
-    sim.state_buffer.import_data(last_state_data, kwargs)
+    
+    if 'id' not in state_buffer_df.keys():
+        state_buffer_df = rewrite_state_buffer_data(state_buffer_df)
+    
+    state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
+    sim.state_buffer = state_buffer
     sim.state = sim.state_buffer.states[-1]
     sim.t = sim.state_buffer.times[-1]
-    sim.state_buffer.reset()
+    
+    if density_field_buffer_df is not None:
+        density_field_buffer = FieldBuffer(data = density_field_buffer_df)
+        sim.density_field_buffer = density_field_buffer
+        sim.density_field = DensityField(
+            half_width=sim.half_width,
+            half_height=sim.half_height,
+            density_radius=sim.density_check_radius,
+            resolution=sim.density_field_resolution,
+            simulation=sim
+        )
+        sim.density_field.update(sim.state)
+
 
     sim.initiate()
-    sim.state_buffer.data = state_buffer_data
     return sim
 
 
@@ -78,16 +90,6 @@ class Simulation:
         self.growth_rate = self.growth_rate * self._m * self.time_step
         self.density_check_radius = self.density_check_radius * self._m
         self.kt = None
-
-        precipitation = self.precipitation
-        if isinstance(precipitation, float):
-            self.precipitation = lambda t: precipitation
-        elif isinstance(precipitation, int):
-            self.precipitation = lambda t: precipitation
-        elif callable(precipitation):
-            self.precipitation = precipitation
-        else:
-            raise ValueError('Precipitation must be a float, int or callable')
 
         self.density_field = DensityField(
             half_width=self.half_width,
@@ -143,12 +145,12 @@ class Simulation:
             raise ValueError(
                 "Input must be a Plant object or an array_like of Plant objects")
 
-    def update_kdtree(self) -> None:
-        if len(self.state) == 0:
+    def update_kdtree(self, state) -> None:
+        if len(state) == 0:
             self.kt = None
         else:
             self.kt = KDTree(
-                [plant.pos for plant in self.state], leafsize=10)
+                [plant.pos for plant in state], leafsize=10)
 
     def step(self) -> None:
         n = self.spawn_rate
@@ -178,7 +180,7 @@ class Simulation:
         biomass = np.array([plant.area for plant in self.state])
         biomass_total = sum(biomass)
         population = len(self.state)
-        precipitation = self.precipitation(self.t)
+        precipitation = self.precipitation
         data = np.array([biomass_total, population, precipitation])
         self.data_buffer.add(data=data, t=self.t)
         self.biomass_buffer.add(data=biomass, t=self.t)
@@ -318,7 +320,7 @@ class Simulation:
         random_values = np.random.uniform(0, 1, n)
 
         probabilities = np.clip(
-            densities * self.precipitation(self.t), self.land_quality, 1)
+            densities * self.precipitation, self.land_quality, 1)
         # print(f'Simulation.attempt_spawn(): {np.mean(probabilities)=}')
 
         spawn_indices = np.where(
@@ -399,14 +401,16 @@ class Simulation:
 
         This method updates the KDTree, density field, and buffers with the initial state of the simulation.
         """
-        self.update_kdtree()
-        self.density_field.update()
-
+        self.update_kdtree(self.state)
+        self.density_field.update(self.state)
+        print(f'\nSimulation.initiate(). Time: {time.strftime("%H:%M:%S")}')
+    
+    def collect_data(self):
         sizes = np.array([plant.r for plant in self.state])
         biomass = np.array([plant.area for plant in self.state])
         biomass_total = sum(biomass)
         population = len(self.state)
-        precipitation = self.precipitation(t=self.t)
+        precipitation = self.precipitation
         data = np.array([biomass_total, population, precipitation])
 
         self.data_buffer.add(data=data, t=self.t)
@@ -415,7 +419,6 @@ class Simulation:
         self.state_buffer.add(state=self.get_state(), t=self.t)
         self.density_field_buffer.add(
             field=self.density_field.get_values(), t=self.t)
-        print(f'\nSimulation.initiate(). Time: {time.strftime("%H:%M:%S")}')
 
     def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float) -> None:
         """
@@ -445,6 +448,9 @@ class Simulation:
         ]
         self.add(plants)
         self.initiate()
+        self.collect_data()
+    
+
 
     def initiate_uniform_radii(self, n: int, r_min: float, r_max: float) -> None:
         """
@@ -476,6 +482,7 @@ class Simulation:
         ]
         self.add(new_plants)
         self.initiate()
+        self.collect_data()
 
     def initiate_dense_distribution(self, n: int) -> None:
         """
@@ -514,6 +521,7 @@ class Simulation:
         ]
         self.add(plants)
         self.initiate()
+        self.collect_data()
 
     def initiate_packed_distribution(self, r: float):
         """
@@ -562,8 +570,7 @@ class Simulation:
                        'verbose',
                        'spinning_up',
                        'half_width',
-                       'half_height',
-                       'precipitation']
+                       'half_height']
 
     def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default) -> None:
         """
