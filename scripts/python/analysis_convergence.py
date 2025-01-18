@@ -9,97 +9,92 @@ from scipy.signal import welch
 from mods.plant import Plant
 from mods.simulation import Simulation
 from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
+from mods.utilities import linear_regression
 
 
-def linear_regression(x, y, advanced=False):
-    """Calculates the linear regression of a dataset.
+load_folder = 'Data\MODI\modi_ensemble_L4500\precipitation_6300e-5'
+trend_windows = [3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
 
-    Args:
-        x (ndarray): (N, ) array of the independent variable.
-        y (ndarray): (N, ) array of the dependent variable.
+for trend_window in trend_windows:
+    print(f'Analysing trend for window: {trend_window}')
+    trend_threshold = 3
 
-    Returns:
-        tuple: A tuple containing the slope, intercept, regression line, residuals and R2 of the linear regression.
-    """
-    X = np.vstack([np.ones_like(x), x]).T
+    sim_nums = [f.split('_')[-1].split('.')[0]
+                for f in os.listdir(load_folder) if 'data_buffer' in f]
+    convergence_list = pd.DataFrame(
+        columns=['sim_num', 'guess was right', 'truth', 'convergence_factor'])
+    for idx, i in enumerate(sim_nums[:]):
+        kwargs = json.load(open(f'{load_folder}/kwargs_{i}.json'))
 
-    # Calculate theta using the equation
-    theta = np.linalg.inv(X.T @ X) @ X.T @ y
-    intercept, slope = theta
+        data_buffer_arr = pd.read_csv(
+            f'{load_folder}/data_buffer_{i}.csv')
+        data_buffer = DataBuffer(data=data_buffer_arr, keys=[
+                                 'Time', 'Biomass', 'Population'])
 
-    if advanced:
-        # Calculate the regression line using the calculated theta
-        regression_line = X @ theta
+        data_buffer.finalize()
+        data = data_buffer.get_data()
+        time = data[:, 0]
+        biomass = data[:, 1]
+        population = data[:, 2]
 
-        residuals = y - regression_line
-        # Calculate the sum of squared residuals
-        sum_squared_residuals = np.sum(residuals**2)
-        # regression_line = slope * X[:, 1] + intercept
-        # residuals = y - regression_line
-        return intercept, slope, regression_line, residuals, sum_squared_residuals
-    else:
-        return intercept, slope
+        window = np.min([trend_window, len(time)])
+        x = time[-window:]
+        y_B = biomass[-window:]
 
+        std_B = np.std(y_B)
+        if std_B == 0:
+            _, slope_norm_B, regression_line_norm_B, _, _ = linear_regression(
+                x, y_B, advanced=True)
+        else:
+            y_B_norm = (y_B - np.mean(y_B)) / np.std(y_B)
+            _, slope_norm_B, regression_line_norm_B, _, _ = linear_regression(
+                x, y_B_norm, advanced=True)
 
-load_folder = r'Data\lq_rc_ensemble_n100'
+        regression_line_B = regression_line_norm_B * np.std(y_B) + np.mean(y_B)
 
-trend_window = 5000
-trend_threshold = 1e-3
+        should_converge = True
+        if i in ['20241226-114456',
+                 '20241226-165931',
+                 '20241226-174701',
+                 '20241226-210538',
+                 '20241227-043326',
+                 '20241227-045519',
+                 '20241227-123221',
+                 '20241227-155101',
+                 '20241227-165826',
+                 '20241227-210928',
+                 '20241229-143128',
+                 '20250101-235727']:
+            should_converge = False
+        convergence_factor = np.abs(slope_norm_B) * trend_window - trend_threshold
+        did_converge_B = convergence_factor < 0
+        did_converge = did_converge_B
+        guess_was_right = did_converge == should_converge
+        convergence_list.loc[idx] = [i, guess_was_right,
+                                     should_converge, convergence_factor]
 
-sim_nums = [f.split('_')[-1].split('.')[0]
-            for f in os.listdir(load_folder) if 'data_buffer' in f]
+        # fig, ax = data_buffer.plot(keys=['biomass', 'population'])
 
-for idx, i in enumerate(sim_nums[:]):
-    kwargs = json.load(open(f'{load_folder}/kwargs_{i}.json'))
+        # c_B = 'k' if did_converge_B else 'r'
+        # c = 'k' if did_converge else 'r'
 
-    data_buffer_arr = pd.read_csv(
-        f'{load_folder}/data_buffer_{i}.csv')
-    data_buffer = DataBuffer(data=data_buffer_arr)
+        # ax[0].plot(x, regression_line_B, label=f'Convergence factor: {
+        #     convergence_factor:.2e}', linestyle='--', color=c_B)
+        # ax[0].set_ylabel('Biomass', fontsize=8)
+        # ax[0].legend(fontsize=8)
 
-    # time, population, biomass = data_buffer.get_data(
-    #     keys=['time', 'population', 'biomass'])
-    data_buffer.finalize()
-    data = data_buffer.get_data()
-    time = data[:, 0]
-    biomass = data[:, 1]
-    population = data[:, 2]
-    print(f'{time=}')
-    print(f'{population=}')
-    print(f'{biomass=}')
+        # ax[1].set_ylabel('Population', fontsize=8)
+        # ax[1].set_xlabel('Time', fontsize=8)
+        # ax[1].legend(fontsize=8)
+        # fig.suptitle(f'Trend analysis for sim {
+        #     i}\nConverged: {did_converge}, threshold: {trend_threshold:.2e}', color=c)
+        # plt.show()
 
-    window = np.min([trend_window, len(time)])
-    x = time[-window:]
-    y_B = biomass[-window:]
-    y_P = population[-window:]
-
-    _, slope_B, regression_line_B, _, _ = linear_regression(
-        x, y_B, advanced=True)
-    _, slope_P, regression_line_P, _, _ = linear_regression(
-        x, y_P, advanced=True)
-
-    fig, ax = data_buffer.plot(keys=['biomass', 'population'])
-
-    rel_slope_B = slope_B/y_B.max()
-    rel_slope_P = slope_P/y_P.max()
-
-    did_converge_B = np.abs(rel_slope_B) < trend_threshold
-    c_B = 'g' if did_converge_B else 'r'
-    did_converge_P = np.abs(rel_slope_P) < trend_threshold
-    c_P = 'g' if did_converge_P else 'r'
-    did_converge = did_converge_B and did_converge_P
-    c = 'g' if did_converge else 'r'
-
-    ax[0].plot(x, regression_line_B, label=f'relative slope: {
-               rel_slope_B:.5f}', linestyle='--', color=c_B)
-    ax[0].set_ylabel('Biomass', fontsize=8)
-    ax[0].legend(fontsize=8)
-
-    ax[1].plot(x, regression_line_P, label=f'relative slope: {
-               rel_slope_P:.5f}', linestyle='--', color=c_P)
-    ax[1].set_ylabel('Population', fontsize=8)
-    ax[1].set_xlabel('Time', fontsize=8)
-    ax[1].legend(fontsize=8)
-    fig.suptitle(f'Trend analysis for sim {
-                 i}\nConverged: {did_converge}', color=c)
-
-    plt.show()
+    n_wrong_guesses = len(
+        convergence_list[convergence_list['guess was right'] == False])
+    n_right_guesses = len(
+        convergence_list[convergence_list['guess was right'] == True])
+    print(f'Number of wrong guesses: {n_wrong_guesses}')
+    print(f'Number of right guesses: {n_right_guesses}')
+    convergence_list.to_csv(
+        f'{load_folder}/_convergence_list_{trend_window}.csv', index=False)

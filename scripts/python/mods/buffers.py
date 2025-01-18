@@ -11,7 +11,6 @@ from matplotlib.colors import ListedColormap
 from matplotlib import animation
 
 path_kwargs = 'default_kwargs.json'
-default_kwargs = None
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -22,8 +21,8 @@ def rewrite_state_buffer_data(state_buffer_df: pd.DataFrame) -> pd.DataFrame:
     
     state_buffer_df = pd.DataFrame(state_buffer_df.values, columns=['x', 'y', 'r', 't'])
     # generate id column and assign it to the dataframe
-    id = np.arange(len(state_buffer_df))
-    state_buffer_df = state_buffer_df.assign(id=id)
+    ids = np.arange(state_buffer_df.shape[0])
+    state_buffer_df = state_buffer_df.assign(id=ids)
     state_buffer_df = state_buffer_df[['id', 'x', 'y', 'r', 't']]
     return state_buffer_df
 
@@ -56,7 +55,7 @@ def rewrite_density_field_buffer_data(density_field_buffer_df: pd.DataFrame) -> 
 class DataBuffer:
     def __init__(self, sim=None, size=None, data=None, keys=None):
         if data is not None:
-            self.import_data(data)
+            self.import_data(data, keys)
             return
 
         if keys is not None:
@@ -77,6 +76,11 @@ class DataBuffer:
             print(f'\nDataBuffer.add(): !Warning! DataBuffer is full, previous data will be overwritten.')
             self.values.pop(0)
             self.length = self.size
+    
+    def extend(self, n):
+        self.size += n
+        self.values = np.concatenate((self.values, np.full((n, len(self.keys)), np.nan)), axis=0)
+                
 
     def finalize(self):
         self.values = self.values[:np.where(
@@ -84,12 +88,12 @@ class DataBuffer:
         self.length = self.values.shape[0]
 
     def plot(self, size=6, title='DataBuffer', keys=None):
-        if keys is not None:
-            self.keys = keys
+        if keys is None:
+            keys = [key for key in self.keys if key != 'Time']
         fig, ax = plt.subplots(
-            len(self.keys) - 1, 1,
+            len(keys), 1,
             figsize=(size,
-                     size * (len(self.keys) - 1) / 3),
+                     size * (len(keys)) / 3),
             sharex=True)
 
         if title is not None:
@@ -100,16 +104,16 @@ class DataBuffer:
         cmap = ListedColormap(
             ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
 
-        if keys is None:
-            keys = self.keys[1:]
-
+        
+        if isinstance(ax, plt.Axes):
+            ax = [ax]
         for i, key in enumerate(keys):
             x_data = self.values[:, 0]
             y_data = self.values[:, i+1]
 
             ax[i].plot(x_data, y_data,
-                       label=key, color=cmap((i + 1)/len(self.keys)))
-            ax[i].set_ylim(0, 1.1*np.nanmax(y_data))
+                       label=key, color=cmap((i + 1)/len(keys)))
+            ax[i].set_ylim(-0.1*np.nanmax(y_data), 1.1*np.nanmax(y_data))
             ax[i].grid()
             ax[i].legend()
         ax[-1].set_xlabel('Time')
@@ -152,9 +156,8 @@ class DataBuffer:
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         # Save the DataBuffer object to the specified path as csv with headers
-        header = ','.join(self.keys)
-        np.savetxt(path, self.values, delimiter=',',
-                   header=header, comments='')
+        data_buffer_df = pd.DataFrame(self.values, columns=self.keys)
+        data_buffer_df.to_csv(path, index=False)
 
     def import_data(self, data, keys=None):
         if isinstance(data, np.ndarray):
@@ -170,8 +173,10 @@ class DataBuffer:
             self.size = data.shape[0]
             self.values = data.to_numpy()
             self.length = data.shape[0]
-            self.keys = list(str(col) for col in data.columns)
-
+            if keys is not None:
+                self.keys = keys
+            else:
+                self.keys = list(data.columns)
         self.finalize()
 
 
@@ -209,6 +214,9 @@ class StateBuffer:
 
             self.states.append(state)
             self.times.append(t)
+            
+    def extend(self, n):
+        self.size += n
 
     def get_states(self, times=None):
         if times is None:
@@ -223,8 +231,8 @@ class StateBuffer:
     def get_times(self):
         return copy.deepcopy(self.times)
 
-    def make_array(self):
-        columns_per_plant = 4  # x, y, r, t
+    def make_dataframe(self):
+        columns_per_plant = 5  # id, x, y, r, t
 
         L = 0
 
@@ -241,24 +249,27 @@ class StateBuffer:
         while i < L:
             for t, state in zip(times, states):
                 for plant in state:
-                    state_buffer_array[i, 0] = plant.pos[0]
-                    state_buffer_array[i, 1] = plant.pos[1]
-                    state_buffer_array[i, 2] = plant.r
-                    state_buffer_array[i, 3] = t
+                    state_buffer_array[i, 0] = plant.id
+                    state_buffer_array[i, 1] = plant.pos[0]
+                    state_buffer_array[i, 2] = plant.pos[1]
+                    state_buffer_array[i, 3] = plant.r
+                    state_buffer_array[i, 4] = t
 
                     i += 1
-        return state_buffer_array
+        
+        state_buffer_df = pd.DataFrame(state_buffer_array, columns=['id', 'x', 'y', 'r', 't'])
+        return state_buffer_df
 
     def save(self, path):
-        path = path + '.csv'
+        if not path.endswith('.csv'):
+            path = path + '.csv'
 
         # Create the directory if it doesn't exist
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-        state_buffer_array = self.make_array()
-
-        # Save the StateBuffer array object to the specified path as csv
-        np.savetxt(path, state_buffer_array, delimiter=',')
+        # Save the StateBuffer dataframe to the specified path as csv
+        state_buffer_df = self.make_dataframe()
+        state_buffer_df.to_csv(path, index=False)
         
     def import_data(self, data, kwargs):
 
@@ -267,7 +278,7 @@ class StateBuffer:
 
         required_keys = ['L', 'time_step', 'r_min', 'r_max', 'growth_rate', 'dispersal_range']
         for key in required_keys:
-            if key not in kwargs:
+            if key not in kwargs.keys():
                 kwargs[key] = default_kwargs[key]
                 warnings.warn(f"StateBuffer.import_data(): Key '{key}' not found in kwargs. Using default value of {default_kwargs[key]} from default_kwargs.")
 
@@ -278,10 +289,10 @@ class StateBuffer:
         growth_rate = kwargs['growth_rate'] * _m * time_step
         dispersal_range = kwargs['dispersal_range'] * _m
 
-        # data = data.reset_index(drop=True)
+        state_buffer_df = data
         
-        for i in range(data.shape[0]):
-            id, x, y, r, t = data.loc[i]
+        for i in range(state_buffer_df.shape[0]):
+            id, x, y, r, t = state_buffer_df.iloc[i]
             if any(np.isnan([id, x, y, r, t])):
                 print(f'StateBuffer.import_data(): Skipping NaN(s) at row {i}.')
                 continue
@@ -291,9 +302,9 @@ class StateBuffer:
 
             states[-1].append(
                 Plant(
+                    id=id,
                     pos=np.array([x, y]),
                     r=r,
-                    id=id,
                     r_min=r_min,
                     r_max=r_max,
                     growth_rate=growth_rate,
@@ -463,6 +474,10 @@ class FieldBuffer:
             self.fields[-1] = field
             self.times.pop(0)
             self.times.append(t)
+    
+    def extend(self, n):
+        self.size += n
+        self.fields = np.concatenate((self.fields, np.full((n, self.resolution, self.resolution), np.nan)), axis=0)
 
     def get_fields(self, times=None):
         if times is None:
@@ -487,26 +502,28 @@ class FieldBuffer:
 
         return fields, times
 
-    def make_array(self):
+    def make_dataframe(self):
         shape = self.fields.shape
         arr = self.get_fields().reshape(-1, shape[1]*shape[2])
         times = np.array(self.get_times())
 
-        # Find the first row with NaN values
-        nan_index = np.where(np.isnan(arr).any(axis=1))[0]
-        if nan_index.size > 0:
-            arr = arr[:nan_index[0]]
-
-        return np.concatenate((times.reshape(-1, 1), arr), axis=1)
+        arr = arr[~np.isnan(arr).any(axis=1)]
+            
+        arr = np.concatenate((times.reshape(-1, 1), arr), axis=1)
+        field_buffer_df = pd.DataFrame(arr, columns=['t'] + [f'cell_{i}' for i in range(shape[1]*shape[2])])
+        
+        return field_buffer_df
 
     def save(self, path):
-        path = path + '.csv'
+        if not path.endswith('.csv'):
+            path = path + '.csv'
 
         # Create the directory if it doesn't exist
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         # Save the FieldBuffer array object to the specified path as csv
-        np.savetxt(path, self.make_array(), delimiter=',')
+        field_buffer_df = self.make_dataframe()
+        field_buffer_df.to_csv(path, index=False)
 
     def plot_field(self, field, t=None, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         if ax is None:
@@ -629,8 +646,8 @@ class HistogramBuffer:
             self.import_data(data, self.bin_vals)
             return
         
-        self.values = np.full((size, bins), np.nan)
-        self.times = np.full(size, np.nan)
+        self.values = np.full((size+1, bins), np.nan)
+        self.times = np.full(size+1, np.nan)
         self.start = start
         self.end = end
         self.length = 0
@@ -647,6 +664,10 @@ class HistogramBuffer:
             self.values.pop(0)
             self.length = size
 
+    def extend(self, n):
+        self.values = np.concatenate((self.values, np.full((n, self.bins), np.nan)), axis=0)
+        self.times = np.concatenate((self.times, np.full(n, np.nan)), axis=0)
+
     def get_values(self, t=None):
         values = self.values[~np.isnan(self.values).all(axis=1)].copy()
         if t is not None:
@@ -656,15 +677,21 @@ class HistogramBuffer:
     def get_times(self):
         return self.times[~np.isnan(self.times)].copy()
 
-    def save(self, path):
-        path = path + '.csv'
+    def make_dataframe(self):
         values = self.get_values()
         times = self.get_times()
         data = np.concatenate((times.reshape(-1, 1), values), axis=1)
         
-        df = pd.DataFrame(data, columns=['t'] + [str(
+        hist_buffer_df = pd.DataFrame(data, columns=['t'] + [str(
             self.bin_vals[i]) for i in range(self.bins)])
-        df.to_csv(path, index=False)
+        return hist_buffer_df
+
+    def save(self, path):
+        if not path.endswith('.csv'):
+            path = path + '.csv'
+            
+        hist_buffer_df = self.make_dataframe()
+        hist_buffer_df.to_csv(path, index=False)
 
     def import_data(self, data, bin_vals):
         self.times = data.values[:, 0]
@@ -691,8 +718,6 @@ class HistogramBuffer:
             tt = self.get_times()
         elif isinstance(t, (int, float)):
             tt = [t]
-        print(f'HistogramBuffer.plot(): {values.shape = }')
-        print(f'HistogramBuffer.plot(): {tt.shape = }')
 
         nrows = 5
         ncols = nplots//nrows + bool(nplots % nrows)
@@ -702,11 +727,8 @@ class HistogramBuffer:
         if nplots == 1:
             ax = [ax]
 
-        if len(tt) > nplots:
-            ii = np.linspace(0, len(tt)-1, nplots, dtype=int)
-            
-        print(f'HistogramBuffer.plot(): {tt = }')
-        print(f'HistogramBuffer.plot(): {ii = }')
+        ii = np.linspace(0, len(tt)-1, nplots, dtype=int)
+        ii = np.unique(ii)
 
         for i, ax_i in enumerate(ax.flatten()):
             if i >= len(tt):

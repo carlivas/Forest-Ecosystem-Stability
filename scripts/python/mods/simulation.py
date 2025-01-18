@@ -1,19 +1,22 @@
-import time
 import copy
+import json
+import time
+import warnings
+import os
 from typing import *
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import json
-import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
-from matplotlib.colors import Normalize
 from scipy.stats import gaussian_kde
 
-from mods.plant import Plant
+from mods.buffers import (DataBuffer, FieldBuffer, HistogramBuffer, StateBuffer,
+                          rewrite_density_field_buffer_data,
+                          rewrite_hist_buffer_data, rewrite_state_buffer_data)
 from mods.fields import DensityFieldSPH as DensityField
-from mods.buffers import DataBuffer, FieldBuffer, StateBuffer, HistogramBuffer, rewrite_state_buffer_data, rewrite_hist_buffer_data, rewrite_density_field_buffer_data
-from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
-import warnings
+from mods.plant import Plant
+from mods.utilities import print_nested_dict, save_kwargs, convert_to_serializable, linear_regression
 
 
 def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
@@ -38,78 +41,202 @@ def _m_from_domain_sides(L, S_bound=1) -> float:
     return S_bound / L
 
 
-def load_sim_data(load_folder, surfix):
-    biomass_buffer_df = pd.read_csv(
-        f'{load_folder}/biomass_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-    
-    if 't' not in biomass_buffer_df.iloc[0,:].values:
-        biomass_buffer_df, note = rewrite_hist_buffer_data(biomass_buffer_df)
-        save_permission = input(f"Biomass buffer data at '{load_folder}' with surfix '{
-                                surfix}' needs rewriting. Do you want to rewrite and save it? (Y/n): ")
-        if save_permission.lower() == 'y':
-            biomass_buffer_df.to_csv(
-                f'{load_folder}/biomass_buffer_{surfix}.csv', index=False, header=True)
-            with open(f'{load_folder}/biomass_buffer_{surfix}.csv', 'w') as file:
-                file.write(f"# {note.replace('\n', '\n# ')}\n")  # Add '#' at the beginning of each line of the note
-                biomass_buffer_df.to_csv(file, index=False)
-    if biomass_buffer_df.iloc[0, 0] == 't':
+def save_simulation_results(
+    sim,
+    save_folder,
+    surfix='test',
+    kwargs=False,
+    data_buffer=False,
+    size_buffer=False,
+    biomass_buffer=False,
+    state_buffer=False,
+    density_field_buffer=False,
+    save_all_buffers=True
+):
+    if save_all_buffers:
+        biomass_buffer = True
+        data_buffer = True
+        density_field_buffer = True
+        size_buffer = True
+        state_buffer = True
+        kwargs = True
+        
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+        
+    if kwargs:
+        sim.save_dict(path=f'{save_folder}/kwargs_{surfix}')
+    if data_buffer:
+        sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
+    if size_buffer:
+        sim.size_buffer.save(f'{save_folder}/size_buffer_{surfix}')
+    if biomass_buffer:
+        sim.biomass_buffer.save(f'{save_folder}/biomass_buffer_{surfix}')
+    if state_buffer:
+        sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
+    if density_field_buffer:
+        sim.density_field_buffer.save(
+            f'{save_folder}/density_field_buffer_{surfix}')
+    print('Data saved in folder:', save_folder)
+
+
+def plot_simulation_results(
+    sim,
+    title=None,
+    convergence=True,
+    state_buffer=False,
+    density_field_buffer=False,
+    data_buffer=False,
+    biomass_buffer=False,
+    size_buffer=False,
+    kwargs=False,
+    plot_all_buffers=True
+):
+
+    if plot_all_buffers:
+        biomass_buffer = True
+        data_buffer = True
+        density_field_buffer = True
+        size_buffer = True
+        state_buffer = True
+        kwargs = True
+
+    print('Plotting...')
+    L = sim.L
+    N0 = len(sim.state_buffer.states[0])
+    if title is None:
+        title = f'{L =}, $N_0$ = {N0}'
+    else:
+        title = title + '  ' + f'{L =}, $N_0$ = {N0}'
+    if kwargs:
+        sim.print_dict()
+    if state_buffer:
+        sim.state_buffer.plot(title=f'{title}')
+    if density_field_buffer:
+        sim.density_field_buffer.plot(title=f'{title}')
+    if data_buffer:
+        fig, ax = sim.data_buffer.plot(title=f'{title}')
+        if convergence & (sim.data_buffer.size > 1):
+            is_converged, convergence_factor, regression_line = sim.convergence_check()
+            time = sim.data_buffer.get_data(
+                keys=['Time'])[-len(regression_line):]
+            slope = (regression_line[-1] -
+                     regression_line[0]) / (time[-1] - time[0])
+            slope = slope[0]
+            color = 'g' if is_converged else 'r'
+            label = 'Converged' if is_converged else 'Not converged'
+            label += f' ({convergence_factor:.3e})'
+            ax[0].plot(time, regression_line, label=label,
+                       color=color, linestyle='--')
+            ax[0].legend()
+
+    if biomass_buffer:
+        sim.biomass_buffer.plot(title=f'Biomass')
+    if size_buffer:
+        sim.size_buffer.plot(title=f'Sizes')
+    plt.show()
+
+
+def load_sim_data(
+    load_folder,
+    surfix,
+    state_buffer=False,
+    density_field_buffer=False,
+    data_buffer=False,
+    biomass_buffer=False,
+    size_buffer=False,
+    kwargs=False,
+    load_all_buffers=True
+):
+    biomass_buffer_df = pd.DataFrame([])
+    data_buffer_df = pd.DataFrame([])
+    density_field_buffer_df = pd.DataFrame([])
+    size_buffer_df = pd.DataFrame([])
+    state_buffer_df = pd.DataFrame([])
+    kwargs_dict = {}
+
+    if load_all_buffers:
+        biomass_buffer = True
+        data_buffer = True
+        density_field_buffer = True
+        size_buffer = True
+        state_buffer = True
+        kwargs = True
+
+    if biomass_buffer:
         biomass_buffer_df = pd.read_csv(
-            f'{load_folder}/biomass_buffer_{surfix}.csv', header=0, comment='#')
-    
-    
-    data_buffer_df = pd.read_csv(
-        f'{load_folder}/data_buffer_{surfix}.csv', header=0, comment='#')
-    
-    
-    density_field_buffer_df = pd.read_csv(
-        f'{load_folder}/density_field_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-    if 't' not in density_field_buffer_df.iloc[0,:].values:
-        density_field_buffer_df = rewrite_density_field_buffer_data(density_field_buffer_df)
-        save_permission = input(f"Density field buffer data at '{load_folder}' with surfix '{
-                                surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
-        if save_permission.lower() == 'y':
-            density_field_buffer_df.to_csv(
-                f'{load_folder}/density_field_buffer_{surfix}.csv', index=False, header=True)    
-    if density_field_buffer_df.iloc[0, 0] == 't':
+            f'{load_folder}/biomass_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+        if 't' not in biomass_buffer_df.iloc[0, :].values:
+            biomass_buffer_df, note = rewrite_hist_buffer_data(
+                biomass_buffer_df)
+            save_permission = input(f"Biomass buffer data at '{load_folder}' with surfix '{
+                                    surfix}' needs rewriting. Do you want to rewrite and save it? (Y/n): ")
+            if save_permission.lower() == 'y':
+                biomass_buffer_df.to_csv(
+                    f'{load_folder}/biomass_buffer_{surfix}.csv', index=False, header=True)
+                with open(f'{load_folder}/biomass_buffer_{surfix}.csv', 'w') as file:
+                    file.write(f"# {note.replace('\n', '\n# ')}\n")
+                    biomass_buffer_df.to_csv(file, index=False)
+
+        if biomass_buffer_df.iloc[0, 0] == 't':
+            biomass_buffer_df = pd.read_csv(
+                f'{load_folder}/biomass_buffer_{surfix}.csv', header=0, comment='#')
+
+    if data_buffer:
+        data_buffer_df = pd.read_csv(
+            f'{load_folder}/data_buffer_{surfix}.csv', header=0, comment='#')
+
+    if density_field_buffer:
         density_field_buffer_df = pd.read_csv(
-            f'{load_folder}/density_field_buffer_{surfix}.csv', header=0, comment='#')
-    
-    kwargs = json.load(open(f'{load_folder}/kwargs_{surfix}.json'))
-    
-    
-    size_buffer_df = pd.read_csv(
-        f'{load_folder}/size_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-   
-    if 't' not in size_buffer_df.iloc[0,:].values:
-        size_buffer_df, note = rewrite_hist_buffer_data(size_buffer_df)
-        save_permission = input(f"Size buffer data at '{load_folder}' with surfix '{
-                                surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
-        if save_permission.lower() == 'y':
-            size_buffer_df.to_csv(
-                f'{load_folder}/size_buffer_{surfix}.csv', index=False, header=True)
-            with open(f'{load_folder}/size_buffer_{surfix}.csv', 'w') as file:
-                file.write(f"# {note.replace('\n', '\n# ')}\n")  # Add '#' at the beginning of each line of the note
-                size_buffer_df.to_csv(file, index=False)
-    if size_buffer_df.iloc[0, 0] == 't':
+            f'{load_folder}/density_field_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+        if 't' not in density_field_buffer_df.iloc[0, :].values:
+            density_field_buffer_df = rewrite_density_field_buffer_data(
+                density_field_buffer_df)
+            save_permission = input(f"Density field buffer data at '{load_folder}' with surfix '{
+                                    surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
+            if save_permission.lower() == 'y':
+                density_field_buffer_df.to_csv(
+                    f'{load_folder}/density_field_buffer_{surfix}.csv', index=False, header=True)
+        if density_field_buffer_df.iloc[0, 0] == 't':
+            density_field_buffer_df = pd.read_csv(
+                f'{load_folder}/density_field_buffer_{surfix}.csv', header=0, comment='#')
+
+    if kwargs:
+        with open(f'{load_folder}/kwargs_{surfix}.json', 'r') as file:
+            kwargs_dict = json.load(file)
+
+    if size_buffer:
         size_buffer_df = pd.read_csv(
-            f'{load_folder}/size_buffer_{surfix}.csv', header=0, comment='#')
-    
-    
-    state_buffer_df = pd.read_csv(
-        f'{load_folder}/state_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-    if 'id' != state_buffer_df.iloc[0, 0]:
-        # Rewrite and ask for permission to save
-        state_buffer_df = rewrite_state_buffer_data(state_buffer_df)
-        save_permission = input(f"State buffer data at '{load_folder}' with surfix '{
-                                surfix}' is missing 'id'. Do you want to rewrite and save it? (Y/n): ")
-        if save_permission.lower() == 'y':
-            state_buffer_df.to_csv(
-                f'{load_folder}/state_buffer_{surfix}.csv', index=False, header=True)
-    if state_buffer_df.loc[0, 0] == 'id':
+            f'{load_folder}/size_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+        if 't' not in size_buffer_df.iloc[0, :].values:
+            size_buffer_df, note = rewrite_hist_buffer_data(size_buffer_df)
+            save_permission = input(f"Size buffer data at '{load_folder}' with surfix '{
+                                    surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
+            if save_permission.lower() == 'y':
+                size_buffer_df.to_csv(
+                    f'{load_folder}/size_buffer_{surfix}.csv', index=False, header=True)
+                with open(f'{load_folder}/size_buffer_{surfix}.csv', 'w') as file:
+                    file.write(f"# {note.replace('\n', '\n# ')}\n")
+                    size_buffer_df.to_csv(file, index=False)
+        if size_buffer_df.iloc[0, 0] == 't':
+            size_buffer_df = pd.read_csv(
+                f'{load_folder}/size_buffer_{surfix}.csv', header=0, comment='#')
+
+    if state_buffer:
         state_buffer_df = pd.read_csv(
-            f'{load_folder}/state_buffer_{surfix}.csv', header=0, comment='#')
-    
-    return state_buffer_df, density_field_buffer_df, data_buffer_df, biomass_buffer_df, size_buffer_df, kwargs
+            f'{load_folder}/state_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
+        if 'id' != state_buffer_df.iloc[0, 0]:
+            state_buffer_df = rewrite_state_buffer_data(state_buffer_df)
+            save_permission = input(f"State buffer data at '{load_folder}' with surfix '{
+                                    surfix}' is missing 'id'. Do you want to rewrite and save it? (Y/n): ")
+            if save_permission.lower() == 'y':
+                state_buffer_df.to_csv(
+                    f'{load_folder}/state_buffer_{surfix}.csv', index=False, header=True)
+        if state_buffer_df.loc[0, 0] == 'id':
+            state_buffer_df = pd.read_csv(
+                f'{load_folder}/state_buffer_{surfix}.csv', header=0, comment='#')
+
+    return state_buffer_df, density_field_buffer_df, data_buffer_df, biomass_buffer_df, size_buffer_df, kwargs_dict
 
 
 def sim_from_data(sim_data, times_to_load='last'):
@@ -121,41 +248,61 @@ def sim_from_data(sim_data, times_to_load='last'):
         times_to_load = times
     elif isinstance(times_to_load, (int, list, np.ndarray)):
         times_to_load = [t for t in times if t in times_to_load]
+    elif isinstance(times_to_load, slice):
+        start = times_to_load.start if times_to_load.start is not None else 0
+        stop = times_to_load.stop if times_to_load.stop is not None else len(times)
+        step = times_to_load.step if times_to_load.step is not None else 1
+        times_to_load = times[start:stop:step]
     else:
         raise ValueError(
             "times_to_load must be 'last', 'all', an integer, or a list of values")
-    
-    state_buffer_df = state_buffer_df[state_buffer_df['t'].isin(times_to_load)]
-    density_field_buffer_df = density_field_buffer_df[density_field_buffer_df['t'].isin(times_to_load)]
-    data_buffer_df = data_buffer_df[data_buffer_df['Time'].isin(times_to_load)]
-    biomass_buffer_df = biomass_buffer_df[biomass_buffer_df['t'].isin(times_to_load)]
-    size_buffer_df = size_buffer_df[size_buffer_df['t'].isin(times_to_load)]
-            
     sim = Simulation(**kwargs)
-
-    sim.state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
-    sim.state = sim.state_buffer.states[-1]
-    sim.t = sim.state_buffer.times[-1]
+    
+    if state_buffer_df is not None:
+        state_buffer_df = state_buffer_df[state_buffer_df['t'].isin(times_to_load)]
+        sim.state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
+        sim.state = sim.state_buffer.states[-1]
+        sim.t = sim.state_buffer.times[-1]
 
     if density_field_buffer_df is not None:
+        density_field_buffer_df = density_field_buffer_df[density_field_buffer_df['t'].isin(
+            times_to_load)]
         sim.density_field_buffer = FieldBuffer(data=density_field_buffer_df)
         sim.density_field = DensityField(half_height=sim.half_height, half_width=sim.half_width,
                                          density_radius=sim.density_check_radius, resolution=sim.density_field_resolution)
-        sim.density_field.update(sim.state)
+        
     if data_buffer_df is not None:
+        data_buffer_df = data_buffer_df[data_buffer_df['Time'].isin(times_to_load)]
         sim.data_buffer = DataBuffer(data=data_buffer_df)
+        
     if biomass_buffer_df is not None:
-        sim.biomass_buffer = HistogramBuffer(data=biomass_buffer_df, start=0, end=sim.r_max**2 * np.pi, title='Biomass')
+        biomass_buffer_df = biomass_buffer_df[biomass_buffer_df['t'].isin(
+            times_to_load)]
+        sim.biomass_buffer = HistogramBuffer(
+            data=biomass_buffer_df, start=0, end=sim.r_max**2 * np.pi, title='Biomass')
+        
     if size_buffer_df is not None:
-        sim.size_buffer = HistogramBuffer(data=size_buffer_df, start=sim.r_min, end=sim.r_max, title='Sizes')
+        size_buffer_df = size_buffer_df[size_buffer_df['t'].isin(times_to_load)]
+        sim.size_buffer = HistogramBuffer(
+            data=size_buffer_df, start=sim.r_min, end=sim.r_max, title='Sizes')
 
     sim.initiate()
+    print(f'Simulation loaded at t = {sim.t}')
     return sim
 
 
 path_kwargs = 'default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
+
+
+class IDGenerator:
+    def __init__(self, start=0):
+        self.current_id = start
+
+    def get_next_id(self):
+        self.current_id += 1
+        return self.current_id
 
 
 class Simulation:
@@ -170,7 +317,7 @@ class Simulation:
 
         self.half_width = 0.5
         self.half_height = 0.5
-
+        
         self._m = 1 / self.L
         self.r_min = self.r_min * self._m
         self.r_max = self.r_max * self._m
@@ -179,6 +326,8 @@ class Simulation:
         self.growth_rate = self.growth_rate * self._m * self.time_step
         self.density_check_radius = self.density_check_radius * self._m
         self.kt = None
+
+        self.id_generator = IDGenerator()
 
         self.density_field = DensityField(
             half_width=self.half_width,
@@ -195,7 +344,8 @@ class Simulation:
 
         self.data_buffer = DataBuffer(sim=self,
                                       size=int(
-                                          np.floor(self.T / self.time_step) + 1)
+                                          np.floor(self.T / self.time_step) + 1),
+                                      keys=['Time', 'Biomass', 'Population']
                                       )
 
         self.state_buffer = StateBuffer(
@@ -219,7 +369,7 @@ class Simulation:
             size=int(np.floor(self.T / self.time_step)) + 1, start=self.r_min, end=self.r_max, title='Sizes'
         )
 
-    def add(self, plant: Union[Plant, List[Plant], np.ndarray]) -> None:
+    def add(self, plant: Union[Plant, List[Plant], np.ndarray]):
         if isinstance(plant, Plant):
             self.state.append(plant)
         elif isinstance(plant, (list, np.ndarray)):
@@ -233,14 +383,14 @@ class Simulation:
             raise ValueError(
                 "Input must be a Plant object or an array_like of Plant objects")
 
-    def update_kdtree(self, state) -> None:
+    def update_kdtree(self, state):
         if len(state) == 0:
             self.kt = None
         else:
             self.kt = KDTree(
-                [plant.pos for plant in state], leafsize=10)
+                [plant.pos for plant in state])
 
-    def step(self) -> None:
+    def step(self):
         n = self.spawn_rate
         self.attempt_spawn(n=n)
 
@@ -261,18 +411,10 @@ class Simulation:
         self.t += self.time_step
 
         # Update necessary data structures
-        self.density_field.update()
-        self.update_kdtree()
+        self.density_field.update(self.state)
+        self.update_kdtree(self.state)
 
-        sizes = np.array([plant.r for plant in self.state])
-        biomass = np.array([plant.area for plant in self.state])
-        biomass_total = sum(biomass)
-        population = len(self.state)
-        precipitation = self.precipitation
-        data = np.array([biomass_total, population, precipitation])
-        self.data_buffer.add(data=data, t=self.t)
-        self.biomass_buffer.add(data=biomass, t=self.t)
-        self.size_buffer.add(data=sizes, t=self.t)
+        self.collect_data()
 
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
@@ -287,27 +429,32 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.get_values(), t=self.t)
 
-    def run(self, T: float, max_population: Optional[int] = 15_000) -> None:
-        """
-        Run the simulation for a given number of iterations.
-
-        Parameters:
-        -----------
-        n_iter : Optional[int]
-            The number of iterations to run the simulation. If None, the value from kwargs is used.
-        """
-
+    def run(self, T, max_population=None, transient_period=None):
+        
         start_time = time.time()
+        sim_start_time = self.t
         n_iter = int(np.ceil(T / self.time_step))
+        self.extend_buffers(n_iter)
         print(f'Simulation.run(): Running simulation for {
               n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
                 self.step()
 
+                if transient_period is not None and self.t - sim_start_time < transient_period:
+                    is_converged = False
+                else:
+                    is_converged = self.convergence_check()[0]
+
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.state)
                 if (max_population is not None and l > max_population):
+                    print(
+                        f'Simulation.run(): Population exceeded {max_population}. Stopping simulation...')
+                    break
+                elif is_converged:
+                    print(
+                        f'Simulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
                     break
 
                 if self.verbose:
@@ -325,11 +472,11 @@ class Simulation:
                         dots = '...'
 
                     data = self.data_buffer.get_data(data_idx=-1)
-                    t, biomass, population, precipitation = data
+                    t, biomass, population = data
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 4):<6}', end='\r')
+                          population:<6}  |  B = {np.round(biomass, 4):<6}', end='\r')
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
@@ -343,7 +490,32 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
-    # def spin_up(self, target_population: int, max_time: int = 1000, speed: float = 0.01) -> None:
+    def convergence_check(self, trend_window=6000, trend_threshold=1):
+        data = self.data_buffer.get_data(keys=['Time', 'Biomass'])
+        time, biomass = data[:, 0], data[:, 1]
+        time_step = time[1] - time[0]
+        window = np.min([int(trend_window//time_step), len(time)])
+        x = time[-window:]
+        y = biomass[-window:]
+        σy = np.std(y)
+        μy = np.mean(y)
+        if σy == 0:
+            _, slope_norm, regression_line_norm, _, _ = linear_regression(
+                x, y, advanced=True)
+            regression_line = regression_line_norm
+        else:
+            y_norm = (y - μy) / σy
+            _, slope_norm, regression_line_norm, _, _ = linear_regression(
+                x, y_norm, advanced=True)
+            regression_line = regression_line_norm * σy + μy
+
+        convergence_factor = np.abs(slope_norm) * \
+            trend_window - trend_threshold
+        is_converged = bool(convergence_factor < 0) & bool(
+            self.t > trend_window)
+        return is_converged, convergence_factor, regression_line
+
+    # def spin_up(self, target_population: int, max_time: int = 1000, speed: float = 0.01):
     #     """
     #     Run the simulation until the population reaches a given maximum value.
 
@@ -393,7 +565,7 @@ class Simulation:
     #     print(f'Simulation.spin_up(): Done. Setting land_quality back to {
     #           land_quality} and spawn_rate back to {spawn_rate}')
 
-    def attempt_spawn(self, n: int) -> None:
+    def attempt_spawn(self, n: int):
 
         # Take care of the decimal part of n
         decimal_part = n - int(n)
@@ -410,13 +582,13 @@ class Simulation:
 
         probabilities = np.clip(
             densities * self.precipitation, self.land_quality, 1)
-        # print(f'Simulation.attempt_spawn(): {np.mean(probabilities)=}')
 
         spawn_indices = np.where(
             probabilities > random_values)[0]
 
         new_plants = [
             Plant(
+                id=self.id_generator.get_next_id(),
                 pos=new_positions[i],
                 r=self.r_min,
                 r_min=self.r_min,
@@ -484,7 +656,7 @@ class Simulation:
     def get_state(self):
         return copy.deepcopy(self.state)
 
-    def initiate(self) -> None:
+    def initiate(self):
         """
         Initialize the simulation by updating necessary data structures.
 
@@ -508,7 +680,7 @@ class Simulation:
         self.density_field_buffer.add(
             field=self.density_field.get_values(), t=self.t)
 
-    def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float) -> None:
+    def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float):
         """
         Initialize the simulation with plants having uniform lifetimes. This is only valid for the case where the growth rate is constant.
 
@@ -525,6 +697,7 @@ class Simulation:
         r_max = t_max * growth_rate
         plants = [
             Plant(
+                id=self.id_generator.get_next_id(),
                 pos=np.random.uniform(-self.half_width, self.half_width, 2),
                 r=np.random.uniform(r_min, r_max),
                 r_min=r_min,
@@ -538,7 +711,14 @@ class Simulation:
         self.initiate()
         self.collect_data()
 
-    def initiate_uniform_radii(self, n: int, r_min: float, r_max: float) -> None:
+    def extend_buffers(self, n):
+        self.data_buffer.extend(n)
+        self.size_buffer.extend(n)
+        self.biomass_buffer.extend(n)
+        self.density_field_buffer.extend(n)
+        self.state_buffer.extend(n)
+
+    def initiate_uniform_radii(self, n: int, r_min: float, r_max: float):
         """
         Initialize the simulation with plants having uniform radii. This is only valid for the case where the growth rate is constant.
 
@@ -557,6 +737,7 @@ class Simulation:
 
         new_plants = [
             Plant(
+                id=self.id_generator.get_next_id(),
                 pos=np.random.uniform(-self.half_width, self.half_width, 2),
                 r=np.random.uniform(r_min, r_max),
                 r_min=r_min,
@@ -570,7 +751,7 @@ class Simulation:
         self.initiate()
         self.collect_data()
 
-    def initiate_dense_distribution(self, n: int) -> None:
+    def initiate_dense_distribution(self, n: int):
         """
         Initialize the simulation with a dense distribution of plants. The distribution is based on empirical data taken from Cummings et al. (2002).
 
@@ -596,6 +777,7 @@ class Simulation:
         # Create the plants
         plants = [
             Plant(
+                id=self.id_generator.get_next_id(),
                 pos=np.random.uniform(-self.half_width, self.half_width, 2),
                 r=r,
                 r_min=self.r_min,
@@ -632,6 +814,7 @@ class Simulation:
                 pos = np.array([x, y])
                 plants.append(
                     Plant(
+                        id=self.id_generator.get_next_id(),
                         pos=pos,
                         r=r,
                         r_min=self.r_min,
@@ -656,9 +839,10 @@ class Simulation:
                        'verbose',
                        'spinning_up',
                        'half_width',
-                       'half_height']
+                       'half_height',
+                       'id_generator']
 
-    def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default) -> None:
+    def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default):
         """
         Save the keyword arguments of the simulation to a JSON file.
 
@@ -679,7 +863,7 @@ class Simulation:
 
         save_kwargs(self.__dict__, path, exclude=exclude)
 
-    def print_dict(self, exclude: Optional[List[str]] = exclude_default) -> None:
+    def print_dict(self, exclude = exclude_default):
         """
         Print the keyword arguments of the simulation.
         """
@@ -696,6 +880,16 @@ class Simulation:
                      for key, value in self.__dict__.items()}
 
         print_nested_dict(dict_temp, exclude=exclude)
+
+    def cleanup(self):
+        self.state = []
+        self.kt = None
+        self.state_buffer = None
+        self.data_buffer = None
+        self.density_field_buffer = None
+        self.density_field = None
+        self.biomass_buffer = None
+        self.size_buffer = None
 
     def plot_state(self, state: List[Plant], title: Optional = None, t: Optional[int] = None, size: int = 2, fig: Optional[plt.Figure] = None, ax: Optional[plt.Axes] = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
         """

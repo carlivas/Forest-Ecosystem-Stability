@@ -7,6 +7,35 @@ from mods.fields import DensityFieldSPH
 from mods.buffers import DataBuffer, StateBuffer, FieldBuffer
 from scipy.spatial import KDTree
 
+def linear_regression(x, y, advanced=False):
+    """Calculates the linear regression of a dataset.
+
+    Args:
+        x (ndarray): (N, ) array of the independent variable.
+        y (ndarray): (N, ) array of the dependent variable.
+
+    Returns:
+        tuple: A tuple containing the slope, intercept, regression line, residuals and R2 of the linear regression.
+    """
+    X = np.vstack([np.ones_like(x), x]).T
+
+    # Calculate theta using the equation
+    theta = np.linalg.inv(X.T @ X) @ X.T @ y
+    intercept, slope = theta
+
+    if advanced:
+        # Calculate the regression line using the calculated theta
+        regression_line = X @ theta
+
+        residuals = y - regression_line
+        # Calculate the sum of squared residuals
+        sum_squared_residuals = np.sum(residuals**2)
+        # regression_line = slope * X[:, 1] + intercept
+        # residuals = y - regression_line
+        return intercept, slope, regression_line, residuals, sum_squared_residuals
+    else:
+        return intercept, slope
+
 def convert_to_serializable(obj):
     try:
         json.dumps(obj)
@@ -131,3 +160,4 @@ def scientific_notation_parser(float_str):
         base, exponent = float_str.split('e')
         return float(base) * 10**int(exponent)
     return float(float_str)
+
