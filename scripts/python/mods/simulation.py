@@ -20,11 +20,16 @@ from mods.utilities import print_nested_dict, save_kwargs, convert_to_serializab
 
 
 def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
-    return np.sum((pos - plant.pos) ** 2) < plant.r ** 2
+    plant_pos = np.array([plant.x, plant.y])
+    return np.sum((pos - plant_pos) ** 2) < plant.r ** 2
 
 
 def check_collision(p1: Plant, p2: Plant) -> bool:
-    return np.sum((p1.pos - p2.pos) ** 2) < (p1.r + p2.r) ** 2
+    pos1 = np.array([p1.x, p1.y])
+    pos2 = np.array([p2.x, p2.y])
+    r1 = p1.r
+    r2 = p2.r
+    return np.sum((pos1 - pos2) ** 2) < (r1 + r2) ** 2
 
 
 def dbh_to_crown_radius(dbh: float) -> float:
@@ -60,10 +65,10 @@ def save_simulation_results(
         size_buffer = True
         state_buffer = True
         kwargs = True
-        
+
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
-        
+
     if kwargs:
         sim.save_dict(path=f'{save_folder}/kwargs_{surfix}')
     if data_buffer:
@@ -250,16 +255,18 @@ def sim_from_data(sim_data, times_to_load='last'):
         times_to_load = [t for t in times if t in times_to_load]
     elif isinstance(times_to_load, slice):
         start = times_to_load.start if times_to_load.start is not None else 0
-        stop = times_to_load.stop if times_to_load.stop is not None else len(times)
+        stop = times_to_load.stop if times_to_load.stop is not None else len(
+            times)
         step = times_to_load.step if times_to_load.step is not None else 1
         times_to_load = times[start:stop:step]
     else:
         raise ValueError(
             "times_to_load must be 'last', 'all', an integer, or a list of values")
     sim = Simulation(**kwargs)
-    
+
     if state_buffer_df is not None:
-        state_buffer_df = state_buffer_df[state_buffer_df['t'].isin(times_to_load)]
+        state_buffer_df = state_buffer_df[state_buffer_df['t'].isin(
+            times_to_load)]
         sim.state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
         sim.state = sim.state_buffer.states[-1]
         sim.t = sim.state_buffer.times[-1]
@@ -270,19 +277,21 @@ def sim_from_data(sim_data, times_to_load='last'):
         sim.density_field_buffer = FieldBuffer(data=density_field_buffer_df)
         sim.density_field = DensityField(half_height=sim.half_height, half_width=sim.half_width,
                                          density_radius=sim.density_check_radius, resolution=sim.density_field_resolution)
-        
+
     if data_buffer_df is not None:
-        data_buffer_df = data_buffer_df[data_buffer_df['Time'].isin(times_to_load)]
+        data_buffer_df = data_buffer_df[data_buffer_df['Time'].isin(
+            times_to_load)]
         sim.data_buffer = DataBuffer(data=data_buffer_df)
-        
+
     if biomass_buffer_df is not None:
         biomass_buffer_df = biomass_buffer_df[biomass_buffer_df['t'].isin(
             times_to_load)]
         sim.biomass_buffer = HistogramBuffer(
             data=biomass_buffer_df, start=0, end=sim.r_max**2 * np.pi, title='Biomass')
-        
+
     if size_buffer_df is not None:
-        size_buffer_df = size_buffer_df[size_buffer_df['t'].isin(times_to_load)]
+        size_buffer_df = size_buffer_df[size_buffer_df['t'].isin(
+            times_to_load)]
         sim.size_buffer = HistogramBuffer(
             data=size_buffer_df, start=sim.r_min, end=sim.r_max, title='Sizes')
 
@@ -306,18 +315,44 @@ class IDGenerator:
 
 
 class Simulation:
-    def __init__(self, **kwargs):
+    def __init__(self, folder, alias=None, override=False, **kwargs):
+        kwargs_path = f'{folder}/kwargs_{alias}.json'
+        data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
+        state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
+        density_field_buffer_path = f'{
+            folder}/density_field_buffer_{alias}.csv'
+
+        if override:
+            do_overwrite = input(
+                f'Simulation.__init__(): OVERRIDE existing files in folder {folder}? (Y/n):')
+            if do_overwrite.lower() != 'y':
+                raise ValueError('Simulation.__init__(): Aborted by user...')
+            else:
+                for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
+                    if os.path.exists(path):
+                        os.remove(path)
+
+        if os.path.exists(f'{folder}/kwargs_{alias}.json'):
+            print(f'Simulation.__init__(): Loading kwargs from {
+                  folder}/kwargs_{alias}.json')
+            with open(f'{folder}/kwargs_{alias}.json', 'r') as file:
+                kwargs = json.load(file)
+
         self.__dict__.update(default_kwargs)
         self.__dict__.update(kwargs)
-        self.spinning_up = False
+        self.folder = folder
+
+        if alias is None:
+            alias = 'test'
+        self.alias = alias
 
         self.t = 0
-        self.state = []
+        self.plants = []
         self.land_quality = 0.001
 
         self.half_width = 0.5
         self.half_height = 0.5
-        
+
         self._m = 1 / self.L
         self.r_min = self.r_min * self._m
         self.r_max = self.r_max * self._m
@@ -329,53 +364,34 @@ class Simulation:
 
         self.id_generator = IDGenerator()
 
+        self.data_buffer = DataBuffer(
+            file_path=f'{folder}/data_buffer_{alias}.csv')
+        self.state_buffer = StateBuffer(
+            file_path=f'{folder}/state_buffer_{alias}.csv')
+        self.density_field_buffer = FieldBuffer(file_path=f'{
+                                                folder}/density_field_buffer_{alias}.csv', resolution=self.density_field_resolution)
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
             density_radius=self.density_check_radius,
             resolution=self.density_field_resolution,
         )
-
-        if 'buffer_preset_times' in self.__dict__:
-            self.buffer_preset_times = self.buffer_preset_times
-        else:
-            self.buffer_preset_times = np.arange(
-                self.buffer_size) * self.buffer_skip
-
-        self.data_buffer = DataBuffer(sim=self,
-                                      size=int(
-                                          np.floor(self.T / self.time_step) + 1),
-                                      keys=['Time', 'Biomass', 'Population']
-                                      )
-
-        self.state_buffer = StateBuffer(
-            size=self.buffer_size,
-            skip=self.buffer_skip,
-            preset_times=self.buffer_preset_times
-        )
-
-        self.density_field_buffer = FieldBuffer(
-            sim=self,
-            resolution=self.density_field_resolution,
-            size=self.buffer_size,
-            skip=self.buffer_skip,
-            preset_times=self.buffer_preset_times,
-        )
-
-        self.biomass_buffer = HistogramBuffer(
-            size=int(np.floor(self.T / self.time_step)) + 1, start=0, end=self.r_max**2 * np.pi, title='Biomass'
-        )
-        self.size_buffer = HistogramBuffer(
-            size=int(np.floor(self.T / self.time_step)) + 1, start=self.r_min, end=self.r_max, title='Sizes'
-        )
+        
+        last_state_df = self.state_buffer.get_last_state()
+        if not last_state_df.empty:
+            self.plants = [Plant(id=id, x=x, y=y, r=r, **self.__dict__) for (id, x, y, r)
+                            in last_state_df[['id', 'x', 'y', 'r']].values]
+            self.t = last_state_df['t'].values[-1]
+        self.initiate()
+        
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]):
         if isinstance(plant, Plant):
-            self.state.append(plant)
+            self.plants.append(plant)
         elif isinstance(plant, (list, np.ndarray)):
             for p in plant:
                 if isinstance(p, Plant):
-                    self.state.append(p)
+                    self.plants.append(p)
                 else:
                     raise ValueError(
                         "All elements in the array must be Plant objects")
@@ -388,33 +404,33 @@ class Simulation:
             self.kt = None
         else:
             self.kt = KDTree(
-                [plant.pos for plant in state])
+                [(plant.x, plant.y) for plant in state])
 
     def step(self):
         n = self.spawn_rate
         self.attempt_spawn(n=n)
 
-        n0 = len(self.state)
+        n0 = len(self.plants)
         # First Phase: Update all plants based on the current state of the simulation
-        for plant in self.state:
+        for plant in self.plants:
             plant.update(self)
 
         # Second Phase: Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
         new_plants = []
-        for plant in self.state:
+        for plant in self.plants:
             if not plant.is_dead:
                 new_plants.append(plant)
 
-        self.state = new_plants
+        self.plants = new_plants
 
         prev_t = self.t
         self.t += self.time_step
 
         # Update necessary data structures
-        self.density_field.update(self.state)
-        self.update_kdtree(self.state)
+        self.density_field.update(self.plants)
+        self.update_kdtree(self.plants)
 
-        self.collect_data()
+        self.data_buffer.add(self.collect_data())
 
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
@@ -424,30 +440,29 @@ class Simulation:
         do_save_density_field = prev_mod_density_field >= mod_density_field
 
         if do_save_state:
-            self.state_buffer.add(state=self.get_state(), t=self.t)
+            self.state_buffer.add(plants=self.plants, t=self.t)
         if do_save_density_field:
             self.density_field_buffer.add(
-                field=self.density_field.get_values(), t=self.t)
+                field=self.density_field.values, t=self.t)
 
-    def run(self, T, max_population=None, transient_period=None):
-        
+    def run(self, T, max_population=None, transient_period=2):
+
         start_time = time.time()
         sim_start_time = self.t
         n_iter = int(np.ceil(T / self.time_step))
-        self.extend_buffers(n_iter)
         print(f'Simulation.run(): Running simulation for {
               n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
                 self.step()
-
-                if transient_period is not None and self.t - sim_start_time < transient_period:
+                sim_time_elapsed = self.t - sim_start_time
+                if sim_time_elapsed < transient_period:
                     is_converged = False
                 else:
                     is_converged = self.convergence_check()[0]
 
                 # if the population exceeds the maximum allowed, stop the simulation
-                l = len(self.state)
+                l = len(self.plants)
                 if (max_population is not None and l > max_population):
                     print(
                         f'Simulation.run(): Population exceeded {max_population}. Stopping simulation...')
@@ -471,8 +486,9 @@ class Simulation:
                     else:
                         dots = '...'
 
-                    data = self.data_buffer.get_data(data_idx=-1)
-                    t, biomass, population = data
+                    data = self.collect_data()
+                    t, biomass, population = data[[
+                        'Time', 'Biomass', 'Population']].values[0]
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
@@ -480,6 +496,8 @@ class Simulation:
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
+
+        self.finalize()
 
         elapsed_time = time.time() - start_time
         hours, rem = divmod(elapsed_time, 3600)
@@ -490,9 +508,18 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
+    def finalize(self):
+        self.data_buffer.finalize()
+        self.state_buffer.finalize()
+        self.density_field_buffer.finalize()
+        self.save_dict(path=f'{self.folder}/kwargs_{self.alias}')
+        print(f'Simulation.finalize(): Time: {time.strftime("%H:%M:%S")}')
+
     def convergence_check(self, trend_window=6000, trend_threshold=1):
-        data = self.data_buffer.get_data(keys=['Time', 'Biomass'])
-        time, biomass = data[:, 0], data[:, 1]
+        data = self.data_buffer.get_data()[['Time', 'Biomass']]
+        if len(data) < trend_window:
+            return False, 0, None
+        time, biomass = data['Time'].values, data['Biomass'].values
         time_step = time[1] - time[0]
         window = np.min([int(trend_window//time_step), len(time)])
         x = time[-window:]
@@ -514,56 +541,6 @@ class Simulation:
         is_converged = bool(convergence_factor < 0) & bool(
             self.t > trend_window)
         return is_converged, convergence_factor, regression_line
-
-    # def spin_up(self, target_population: int, max_time: int = 1000, speed: float = 0.01):
-    #     """
-    #     Run the simulation until the population reaches a given maximum value.
-
-    #     Parameters:
-    #     -----------
-    #     target_population : int
-    #         The maximum population size to run the simulation until.
-    #     """
-    #     self.spinning_up = True
-    #     start_time = time.time()
-    #     land_quality = self.land_quality
-    #     spawn_rate = self.spawn_rate
-    #     if self.verbose:
-    #         print(f'Simulation.spin_up(): Simulating until population reaches {
-    #             target_population}...')
-    #     self.land_quality = 1
-    #     print(f'Simulation.spin_up(): !Warning! setting land_quality to {
-    #           self.land_quality}')
-    #     try:
-    #         while len(self.state) < target_population and self.t < max_time:
-
-    #             drive = target_population*1.1 - len(self.state)
-    #             speed_temp = self.t / max_time
-    #             spin_up_rate = int(drive * speed_temp)
-    #             self.spawn_rate = max(
-    #                 1, spin_up_rate)  # * self.dt
-    #             print()
-    #             print(f'Simulation.spin_up(): {drive=} {speed_temp=}, {
-    #                   spin_up_rate=},{self.spawn_rate=} ')
-    #             self.step()
-
-    #             if self.verbose:
-    #                 elapsed_time = time.time() - start_time
-    #                 hours, rem = divmod(elapsed_time, 3600)
-    #                 minutes, seconds = divmod(rem, 60)
-    #                 elapsed_time_str = f"{str(int(hours))}".rjust(
-    #                     2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
-
-    #                 print(f'Elapsed time: {elapsed_time_str}', end='\r')
-
-    #     except KeyboardInterrupt:
-    #         print('\nInterrupted by user...')
-
-    #     self.land_quality = land_quality
-    #     self.spawn_rate = spawn_rate
-    #     self.spinning_up = False
-    #     print(f'Simulation.spin_up(): Done. Setting land_quality back to {
-    #           land_quality} and spawn_rate back to {spawn_rate}')
 
     def attempt_spawn(self, n: int):
 
@@ -589,7 +566,8 @@ class Simulation:
         new_plants = [
             Plant(
                 id=self.id_generator.get_next_id(),
-                pos=new_positions[i],
+                x=new_positions[i][0],
+                y=new_positions[i][1],
                 r=self.r_min,
                 r_min=self.r_min,
                 r_max=self.r_max,
@@ -619,9 +597,9 @@ class Simulation:
         collisions = []
         if self.kt is not None:
             indices = self.kt.query_ball_point(
-                x=plant.pos, r=plant.d, workers=-1)
+                x=(plant.x, plant.y), r=plant.d, workers=-1)
             for i in indices:
-                other_plant = self.state[i]
+                other_plant = self.plants[i]
                 if other_plant != plant:
                     if check_collision(plant, other_plant):
                         plant.is_colliding = True
@@ -635,26 +613,13 @@ class Simulation:
         return pos_in_box
 
     def local_density(self, pos: np.ndarray) -> float:
-        """
-        Get the quality of the land near a given position.
-
-        Parameters:
-        -----------
-        pos : np.ndarray
-            The position to check.
-
-        Returns:
-        --------
-        float
-            The quality of the land near the given position.
-        """
         if self.pos_in_box(pos):
             return self.density_field.query(pos)
         else:
             return 0
 
-    def get_state(self):
-        return copy.deepcopy(self.state)
+    # def get_plants(self):
+    #     return copy.deepcopy(self.plants)
 
     def initiate(self):
         """
@@ -662,83 +627,60 @@ class Simulation:
 
         This method updates the KDTree, density field, and buffers with the initial state of the simulation.
         """
-        self.update_kdtree(self.state)
-        self.density_field.update(self.state)
-        print(f'\nSimulation.initiate(). Time: {time.strftime("%H:%M:%S")}')
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+        print(f'\nSimulation.initiate(): Time: {time.strftime("%H:%M:%S")}')
 
     def collect_data(self):
-        sizes = np.array([plant.r for plant in self.state])
-        biomass = np.array([plant.area for plant in self.state])
+        sizes = np.array([plant.r for plant in self.plants])
+        biomass = np.array([plant.area for plant in self.plants])
         biomass_total = sum(biomass)
-        population = len(self.state)
-        data = np.array([biomass_total, population])
+        population = len(self.plants)
+        data = pd.DataFrame(
+            data={
+                'Time': [self.t],
+                'Biomass': [biomass_total],
+                'Population': [population],
+            }
+        )
+        return data
 
-        self.data_buffer.add(data=data, t=self.t)
-        self.biomass_buffer.add(data=biomass, t=self.t)
-        self.size_buffer.add(data=sizes, t=self.t)
-        self.state_buffer.add(state=self.get_state(), t=self.t)
-        self.density_field_buffer.add(
-            field=self.density_field.get_values(), t=self.t)
-
-    def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float):
-        """
-        Initialize the simulation with plants having uniform lifetimes. This is only valid for the case where the growth rate is constant.
-
-        Parameters:
-        -----------
-        n : int
-            The number of plants to initialize.
-        t_min : float
-            The minimum lifetime of the plants.
-        t_max : float
-            The maximum lifetime of the plants.
-        """
-        r_min = t_min * growth_rate
-        r_max = t_max * growth_rate
-        plants = [
-            Plant(
-                id=self.id_generator.get_next_id(),
-                pos=np.random.uniform(-self.half_width, self.half_width, 2),
-                r=np.random.uniform(r_min, r_max),
-                r_min=r_min,
-                r_max=r_max,
-                growth_rate=growth_rate,
-                dispersal_range=self.dispersal_range
-            )
-            for i in range(n)
-        ]
-        self.add(plants)
-        self.initiate()
-        self.collect_data()
-
-    def extend_buffers(self, n):
-        self.data_buffer.extend(n)
-        self.size_buffer.extend(n)
-        self.biomass_buffer.extend(n)
-        self.density_field_buffer.extend(n)
-        self.state_buffer.extend(n)
+    # def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float):
+        # if self.plants != []:
+        # raise ValueError(
+        #     "Simulation.initiate_uniform_lifetimes(): The simulation is not empty. Please initialize an empty simulation.")
+    #     r_min = t_min * growth_rate
+    #     r_max = t_max * growth_rate
+    #     plants = [
+    #         Plant(
+    #             id=self.id_generator.get_next_id(),
+    #             x=np.random.uniform(-self.half_width, self.half_width),
+    #             y=np.random.uniform(-self.half_height, self.half_height),
+    #             r=np.random.uniform(r_min, r_max),
+    #             r_min=r_min,
+    #             r_max=r_max,
+    #             growth_rate=growth_rate,
+    #             dispersal_range=self.dispersal_range
+    #         )
+    #         for i in range(n)
+    #     ]
+    #     self.add(plants)
+    #     self.initiate()
+        # self.data_buffer.add(data=self.collect_data())
+        # self.state_buffer.add(plants=self.plants, t=self.t)
 
     def initiate_uniform_radii(self, n: int, r_min: float, r_max: float):
-        """
-        Initialize the simulation with plants having uniform radii. This is only valid for the case where the growth rate is constant.
-
-        Parameters:
-        -----------
-        n : int
-            The number of plants to initialize.
-        r_min : float
-            The minimum radius of the plants.
-        r_max : float
-            The maximum radius of the plants.
-        """
-
+        if self.plants != []:
+            raise ValueError(
+                "Simulation.initiate_uniform_radii(): The simulation is not empty. Please initialize an empty simulation.")
         r_min = r_min * self._m
         r_max = r_max * self._m
 
         new_plants = [
             Plant(
                 id=self.id_generator.get_next_id(),
-                pos=np.random.uniform(-self.half_width, self.half_width, 2),
+                x=np.random.uniform(-self.half_width, self.half_width),
+                y=np.random.uniform(-self.half_height, self.half_height),
                 r=np.random.uniform(r_min, r_max),
                 r_min=r_min,
                 r_max=r_max,
@@ -749,98 +691,93 @@ class Simulation:
         ]
         self.add(new_plants)
         self.initiate()
-        self.collect_data()
+        self.data_buffer.add(data=self.collect_data())
+        self.state_buffer.add(plants=self.plants, t=self.t)
 
-    def initiate_dense_distribution(self, n: int):
-        """
-        Initialize the simulation with a dense distribution of plants. The distribution is based on empirical data taken from Cummings et al. (2002).
+    # def initiate_dense_distribution(self, n: int):
+        # if self.plants != []:
+        #     raise ValueError(
+        #         "Simulation.initiate_dense_distribution(): The simulation is not empty. Please initialize an empty simulation.")
+    #     mean_dbhs = np.array([0.05, 0.2, 0.4, 0.6, 0.85, 1.50])  # in m
+    #     mean_rs = dbh_to_crown_radius(mean_dbhs) * self._m
+    #     freqs = np.array([5800, 378.8, 50.98, 13.42, 5.62, 0.73])
 
-        Parameters:
-        -----------
-        n : int
-            The number of plants to initialize.
-        """
-        mean_dbhs = np.array([0.05, 0.2, 0.4, 0.6, 0.85, 1.50])  # in m
-        mean_rs = dbh_to_crown_radius(mean_dbhs) * self._m
-        freqs = np.array([5800, 378.8, 50.98, 13.42, 5.62, 0.73])
+    #     # Apply log transformation to the data
+    #     log_mean_rs = np.log(mean_rs)
 
-        # Apply log transformation to the data
-        log_mean_rs = np.log(mean_rs)
+    #     # Calculate the KDE of the log-transformed data
+    #     kde = gaussian_kde(log_mean_rs, weights=freqs, bw_method='silverman')
 
-        # Calculate the KDE of the log-transformed data
-        kde = gaussian_kde(log_mean_rs, weights=freqs, bw_method='silverman')
+    #     # Resample from the KDE and transform back to the original space
+    #     log_samples = kde.resample(n)[0]
+    #     samples = np.exp(log_samples)
 
-        # Resample from the KDE and transform back to the original space
-        log_samples = kde.resample(n)[0]
-        samples = np.exp(log_samples)
+    #     # Create the plants
+    #     plants = [
+    #         Plant(
+    #             id=self.id_generator.get_next_id(),
+    #               x = np.random.uniform(-self.half_width, self.half_width),
+    #               y = np.random.uniform(-self.half_height, self.half_height),
+    #             r=r,
+    #             r_min=self.r_min,
+    #             r_max=self.r_max,
+    #             growth_rate=self.growth_rate,
+    #             dispersal_range=self.dispersal_range
+    #         )
+    #         for i, r in enumerate(samples)
+    #     ]
+    #     self.add(plants)
+    #     self.initiate()
+    #     self.data_buffer.add(data=self.collect_data())
+    #     self.state_buffer.add(plants=state=self.plants, t=self.t)
 
-        # Create the plants
-        plants = [
-            Plant(
-                id=self.id_generator.get_next_id(),
-                pos=np.random.uniform(-self.half_width, self.half_width, 2),
-                r=r,
-                r_min=self.r_min,
-                r_max=self.r_max,
-                growth_rate=self.growth_rate,
-                dispersal_range=self.dispersal_range
-            )
-            for i, r in enumerate(samples)
-        ]
-        self.add(plants)
-        self.initiate()
-        self.collect_data()
+    # def initiate_packed_distribution(self, r: float):
+        # if self.plants != []:
+        #     raise ValueError(
+        #         "Simulation.initiate_packed_distribution(): The simulation is not empty. Please initialize an empty simulation.")
+    #     plants = []
+    #     dx = 2 * r
+    #     dy = np.sqrt(3) * r
 
-    def initiate_packed_distribution(self, r: float):
-        """
-        Initialize the simulation with a packed hexagonal grid of plants.
+    #     for i, x in enumerate(np.arange(-self.half_width + r, self.half_width - r, dx)):
+    #         for j, y in enumerate(np.arange(-self.half_height + r, self.half_height - r, dy)):
 
-        Parameters:
-        -----------
-        r : float
-            The radius of each plant.
-        """
-        plants = []
-        dx = 2 * r
-        dy = np.sqrt(3) * r
+    #             if j % 2 == 0:
+    #                 x += r
+    #             if j % 2 == 1:
+    #                 x -= r
+    #             pos = np.array([x, y])
+    #             plants.append(
+    #                 Plant(
+    #                     id=self.id_generator.get_next_id(),
+    #                     pos=pos,
+    #                     r=r,
+    #                     r_min=self.r_min,
+    #                     r_max=self.r_max,
+    #                     growth_rate=self.growth_rate,
+    #                     dispersal_range=self.dispersal_range
+    #                 )
+    #             )
 
-        for i, x in enumerate(np.arange(-self.half_width + r, self.half_width - r, dx)):
-            for j, y in enumerate(np.arange(-self.half_height + r, self.half_height - r, dy)):
-
-                if j % 2 == 0:
-                    x += r
-                if j % 2 == 1:
-                    x -= r
-                pos = np.array([x, y])
-                plants.append(
-                    Plant(
-                        id=self.id_generator.get_next_id(),
-                        pos=pos,
-                        r=r,
-                        r_min=self.r_min,
-                        r_max=self.r_max,
-                        growth_rate=self.growth_rate,
-                        dispersal_range=self.dispersal_range
-                    )
-                )
-
-        self.add(plants)
-        self.initiate()
-
-    exclude_default = ['state',
-                       'kt',
-                       'state_buffer',
-                       'data_buffer',
-                       'density_field_buffer',
-                       'density_field',
-                       'biomass_buffer',
-                       'size_buffer',
-                       'buffer_preset_times',
-                       'verbose',
-                       'spinning_up',
-                       'half_width',
-                       'half_height',
-                       'id_generator']
+    #     self.add(plants)
+    #     self.initiate()
+    exclude_default = [
+        'alias',
+        'biomass_buffer',
+        'buffer_preset_times',
+        'data_buffer',
+        'density_field',
+        'density_field_buffer',
+        'folder',
+        'half_height',
+        'half_width',
+        'id_generator',
+        'kt',
+        'size_buffer',
+        'plants',
+        'state_buffer',
+        'verbose'
+    ]
 
     def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default):
         """
@@ -853,17 +790,20 @@ class Simulation:
         exclude : Optional[List[str]]
             A list of keys to exclude from the saved dictionary. Defaults to None.
         """
-        self.r_min = self.r_min / self._m
-        self.r_max = self.r_max / self._m
-        self.dispersal_range = self.dispersal_range / self._m
-        self.spawn_rate = self.spawn_rate / self.time_step
-        self.growth_rate = self.growth_rate / \
-            self._m / self.time_step
-        self.density_check_radius = self.density_check_radius / self._m
+        conversion_factors = {
+            'r_min': self._m,
+            'r_max': self._m,
+            'dispersal_range': self._m,
+            'spawn_rate': self.time_step,
+            'growth_rate': self._m * self.time_step,
+            'density_check_radius': self._m
+        }
+        dict_temp = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
+                     for key, value in self.__dict__.items()}
 
-        save_kwargs(self.__dict__, path, exclude=exclude)
+        save_kwargs(dict_temp, path, exclude=exclude)
 
-    def print_dict(self, exclude = exclude_default):
+    def print_dict(self, exclude=exclude_default):
         """
         Print the keyword arguments of the simulation.
         """
@@ -875,143 +815,28 @@ class Simulation:
             'growth_rate': self._m * self.time_step,
             'density_check_radius': self._m
         }
-
         dict_temp = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
                      for key, value in self.__dict__.items()}
 
         print_nested_dict(dict_temp, exclude=exclude)
 
     def cleanup(self):
-        self.state = []
+        self.plants = []
         self.kt = None
         self.state_buffer = None
         self.data_buffer = None
         self.density_field_buffer = None
         self.density_field = None
-        self.biomass_buffer = None
-        self.size_buffer = None
 
-    def plot_state(self, state: List[Plant], title: Optional = None, t: Optional[int] = None, size: int = 2, fig: Optional[plt.Figure] = None, ax: Optional[plt.Axes] = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
-        """
-        Plot a simulation state.
-
-        Parameters:
-        -----------
-        state : List[Plant]
-            The state of the simulation to plot. This parameter is required.
-        t : Optional[int]
-            The time step to display in the plot title. Defaults to None.
-        size : int
-            The size of the plot. Defaults to 2.
-        fig : Optional[plt.Figure]
-            The figure to plot on. If None, a new figure is created. Defaults to None.
-        ax : Optional[plt.Axes]
-            The axes to plot on. If None, new axes are created. Defaults to None.
-        highlight : Optional[List[int]]
-            A list of plant IDs to highlight in the plot. Defaults to None.
-
-        Returns:
-        --------
-        Tuple[plt.Figure, plt.Axes]
-            The figure and axes of the plot.
-        """
-        if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        ax.set_xlim(-self.half_width, self.half_width)
-        ax.set_ylim(-self.half_height, self.half_height)
-        ax.set_aspect('equal', 'box')
-        if t is not None:
-            t = round(t, 2)
-            ax.set_title(f'{t=}', fontsize=7)
-        else:
-            ax.set_title('')
-        for plant in state:
-            color = 'green'
-            density = self.density_field.query(plant.pos)
-            ax.add_artist(plt.Circle(plant.pos, plant.r,
-                          color=color, fill=True, transform=ax.transData))
-
-        ax.set_xticks([])
-        ax.set_yticks([])
-        if title is not None:
-            ax.set_title(title, fontsize=7)
-        return fig, ax
-
-    def plot(self, size: int = 2, title: Optional = None, t: Optional = None, highlight: Optional[List[int]] = None) -> Tuple[plt.Figure, plt.Axes]:
-        """
-        Plot the current state of the simulation.
-
-        Parameters:
-        -----------
-        size : int
-            The size of the plot. Defaults to 2.
-        t : int
-            The time step to display in the plot title. Defaults to self.t.
-        highlight : Optional[List[int]]
-            A list of plant IDs to highlight in the plot. Defaults to None.
-
-        Returns:
-        --------
-        Tuple[plt.Figure, plt.Axes]
-            The figure and axes of the plot.
-        """
-        if t is None:
-            t = self.t
-        fig, ax = self.plot_state(
-            self.get_state(), title=title, t=t, size=size, highlight=highlight)
-        return fig, ax
-
-    def plot_states(self, states: List[List[Plant]], times: Optional[List[int]] = None, size: int = 2) -> Tuple[plt.Figure, plt.Axes]:
-        """
-        Plot multiple states of the simulation.
-
-        Parameters:
-        -----------
-        states : List[List[Plant]]
-            A list of states to plot.
-        times : Optional[List[int]]
-            A list of time steps corresponding to the states. Defaults to None.
-        size : int
-            The size of the plot. Defaults to 2.
-
-        Returns:
-        --------
-        Tuple[plt.Figure, plt.Axes]
-            The figure and axes of the plot.
-        """
-        l = len(states)
-        n_rows = int(np.floor(l / np.sqrt(l)))
-        n_cols = (l + 1) // n_rows + (l % n_rows > 0)
-        print(f'simulation.plot_states(): {n_rows=}, {n_cols=}')
-
-        fig, ax = plt.subplots(n_rows, n_cols, figsize=(
-            size * n_cols, size * n_rows))
-        fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95,
-                            top=0.95, wspace=0.05, hspace=0.05)
-        fig.tight_layout()
-        if len(states) == 1:
-            self.plot_state(states[0], t=times[0], size=size, ax=ax)
-        else:
-            i = 0
-            while i < len(states):
-                state = states[i]
-                if n_rows == 1:
-                    k = i
-                    self.plot_state(
-                        state=state, t=times[i], size=size, fig=fig, ax=ax[k])
-                else:
-                    l = i // n_cols
-                    k = i % n_cols
-                    self.plot_state(
-                        state=state, t=times[i], size=size, fig=fig, ax=ax[l, k])
-                i += 1
-        if len(states) < n_rows * n_cols:
-            for j in range(len(states), n_rows * n_cols):
-                if n_rows == 1:
-                    ax[j].axis('off')
-                else:
-                    l = j // n_cols
-                    k = j % n_cols
-                    ax[l, k].axis('off')
-
-        return fig, ax
+    def plot_buffers(self, title=None, convergence=True, n_plots=20, fast=False):
+        self.data_buffer.plot(title=title)
+        self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
+        self.density_field_buffer.plot(title=title, n_plots=n_plots)
+    
+    def plot(self):
+        state = pd.DataFrame([[p.id, p.x, p.y, p.r, self.t] for p in self.plants], columns=['id', 'x', 'y', 'r', 't'])
+        field = self.density_field.values
+        
+        StateBuffer.plot_state(size=6, state=state)
+        FieldBuffer.plot_field(size=6, field=field)
+    

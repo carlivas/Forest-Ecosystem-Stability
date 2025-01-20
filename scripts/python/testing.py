@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
+import pandas as pd
 import time
 
 from mods.plant import Plant
@@ -11,45 +12,46 @@ from mods.buffers import StateBuffer, DataBuffer, FieldBuffer, HistogramBuffer
 save_results = True
 plot_results = True
 
+T = 100
+num_plants = 1000
 
-T = 30000
-for _ in range(10):
-    seed = np.random.randint(0, 1_000_000_000)
-    np.random.seed(seed)
-    num_plants = np.random.randint(50, 300)
-    kwargs = {
-        'seed': seed,
-        'L': 1000,
-        'T': T,
-        'dispersal_range': 90,
-        'precipitation': 7000e-5,
-        'spawn_rate': 1,
-        'growth_rate': 0.1,
+seed = np.random.randint(0, 1_000_000_000)
+np.random.seed(seed)
+kwargs = {
+    'L': 2500,
+    'T': T,
+    'precipitation': 6500e-5,
+    'seed': seed,
+}
 
-        'time_step': 1,
-        
-        'density_field_resolution': 100,
+surfix = 'test2'
+folder = f'Data/temp/new_buffers_test'
 
-        'buffer_size': T + 1,
-        'buffer_skip': 1,
-        
-        'verbose': True,
-    }
-
-    save_folder = f'Data/temp/convergence_test'
-    sim = Simulation(**kwargs)
-    sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
-
-    sim.run(T=T)
-
-    sim.print_dict()
-
-    if save_results:
-        save_simulation_results(sim, save_folder, surfix=f'{seed}')
+print(seed)
+sim = Simulation(folder=folder, alias=surfix, **kwargs)
+print(sim.seed)
+# sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
+sim.run(T=T)
+sim.plot_buffers()
+plt.show()
 
 
-    if plot_results:
-        plot_simulation_results(sim, convergence=True)
 
-    sim.cleanup()
-    del sim
+#### THINK ABOUT THIS
+# field = pd.DataFrame([[x, y, d] for (x, y), d in zip(self.density_field.positions, self.density_field.values)], columns=['x', 'y', 'd'])
+
+
+
+
+
+
+
+
+
+
+
+# if plot_results:
+#     sim.plot()
+
+# sim.cleanup()
+# del sim

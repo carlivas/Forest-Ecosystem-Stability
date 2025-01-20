@@ -4,9 +4,10 @@ import copy
 
 
 class Plant:
-    def __init__(self, id, pos, r, r_min, r_max, growth_rate, dispersal_range):
+    def __init__(self, id, x, y, r, r_min, r_max, growth_rate, dispersal_range, **kwargs):
         self.id = id
-        self.pos = pos
+        self.x = x
+        self.y = y
         self.r = r
 
         self.d = 2*self.r
@@ -52,7 +53,7 @@ class Plant:
         new_plants = []
         for _ in range(n):
             if self.species_germination_chance > 0 and not self.is_dead:
-                new_pos = self.pos + \
+                new_pos = np.array([self.x, self.y]) + \
                     np.random.normal(0, self.dispersal_range, 2)
 
                 dispersal_chance = max(sim.land_quality, sim.local_density(
@@ -62,7 +63,8 @@ class Plant:
                     new_plants.append(
                         Plant(
                             id=sim.id_generator.get_next_id(),
-                            pos=new_pos,
+                            x=new_pos[0],
+                            y=new_pos[1],
                             r=self.r_min,
                             r_min=self.r_min,
                             r_max=self.r_max,
@@ -94,8 +96,7 @@ class Plant:
 
         collisions = sim.get_collisions(self)
         self.resolve_collisions(collisions)
-        if not sim.spinning_up:
-            self.disperse(sim)
+        self.disperse(sim)
         self.mortality()
         return
 
