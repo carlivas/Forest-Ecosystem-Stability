@@ -4,7 +4,3 @@
 scripts/python/trees_venv
 scripts/python/mods/__pycache__
 scripts/python/mods/build
-scripts/bash/.ipynb_checkpoints/
-scripts/bash/slurm_out/
-scripts/python/.ipynb_checkpoints/
-scripts/python/mods/.ipynb_checkpoints/

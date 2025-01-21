@@ -300,7 +300,7 @@ def sim_from_data(sim_data, times_to_load='last'):
     return sim
 
 
-path_kwargs = '../../default_kwargs.json'
+path_kwargs = 'default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -445,7 +445,7 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.values, t=self.t)
 
-    def run(self, T, max_population=None, transient_period=6000):
+    def run(self, T, max_population=None, transient_period=2):
 
         start_time = time.time()
         sim_start_time = self.t
@@ -457,9 +457,9 @@ class Simulation:
                 self.step()
                 sim_time_elapsed = self.t - sim_start_time
                 if sim_time_elapsed < transient_period:
-                    is_converged, convergence_factor = False, -1
+                    is_converged = False
                 else:
-                    is_converged, convergence_factor = self.convergence_check()[:2]
+                    is_converged = self.convergence_check()[0]
 
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
@@ -492,7 +492,7 @@ class Simulation:
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 4):<6}', end='\r')
+                          population:<6}  |  B = {np.round(biomass, 4):<6}', end='\r')
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
@@ -518,7 +518,7 @@ class Simulation:
     def convergence_check(self, trend_window=6000, trend_threshold=1):
         data = self.data_buffer.get_data()[['Time', 'Biomass']]
         if len(data) < trend_window:
-            return False, -1, None
+            return False, 0, None
         time, biomass = data['Time'].values, data['Biomass'].values
         time_step = time[1] - time[0]
         window = np.min([int(trend_window//time_step), len(time)])
@@ -829,19 +829,9 @@ class Simulation:
         self.density_field = None
 
     def plot_buffers(self, title=None, convergence=True, n_plots=20, fast=False):
-        figs = []
-        axs = []
-        fig1, ax1 = self.data_buffer.plot(title=title)
-        figs.append(fig1)
-        axs.append(ax1)
-        fig2, ax2 = self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
-        figs.append(fig2)
-        axs.append(ax2)
-        fig3, ax3 = self.density_field_buffer.plot(title=title, n_plots=n_plots)
-        figs.append(fig3)
-        axs.append(ax3)
-        return figs, axs
-            
+        self.data_buffer.plot(title=title)
+        self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
+        self.density_field_buffer.plot(title=title, n_plots=n_plots)
     
     def plot(self):
         state = pd.DataFrame([[p.id, p.x, p.y, p.r, self.t] for p in self.plants], columns=['id', 'x', 'y', 'r', 't'])

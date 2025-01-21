@@ -10,7 +10,7 @@ from mods.plant import Plant
 from matplotlib.colors import ListedColormap
 from matplotlib import animation
 
-path_kwargs = '../../default_kwargs.json'
+path_kwargs = 'C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code/default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -152,31 +152,23 @@ class DataBuffer:
         cmap = ListedColormap(
             ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
 
-        data = self.get_data()
-        if data.shape[0] < 1:
-            print(f'DataBuffer.plot(): No data to plot...')
-            return
-        else:
-            if isinstance(ax, plt.Axes):
-                ax = [ax]
-            for i, key in enumerate(keys):
-                x_data = data['Time']
-                y_data = data[key]
-    
-                ax[i].plot(x_data, y_data,
-                           label=key, color=cmap((i + 1) / len(keys)))
-                y_max = np.nanmax(y_data)
-                if y_max != 0:
-                    ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
-                ax[i].grid()
-                ax[i].legend()
-                
-            ax[-1].set_xlabel('Time')
-    
-            for ax_i in ax:
-                ax_i.grid()
-                ax_i.legend()
-            return fig, ax
+        if isinstance(ax, plt.Axes):
+            ax = [ax]
+        for i, key in enumerate(keys):
+            x_data = self.get_data()['Time']
+            y_data = self.get_data()[key]
+
+            ax[i].plot(x_data, y_data,
+                       label=key, color=cmap((i + 1) / len(keys)))
+            ax[i].set_ylim(-0.1 * np.nanmax(y_data), 1.1 * np.nanmax(y_data))
+            ax[i].grid()
+            ax[i].legend()
+        ax[-1].set_xlabel('Time')
+
+        for ax_i in ax:
+            ax_i.grid()
+            ax_i.legend()
+        return fig, ax
 
 
 class StateBuffer:
@@ -215,9 +207,6 @@ class StateBuffer:
             [[plant.id, plant.x, plant.y, plant.r, t] for plant in plants],
             columns=['id', 'x', 'y', 'r', 't']
         )
-        if new_data.empty:
-            return
-        
         if self.buffer.empty:
             self.buffer = new_data
         else:
@@ -247,13 +236,9 @@ class StateBuffer:
     
     def get_last_state(self):
         data = self.get_data()
-        if data.shape[0] < 1:
-            print('StateBuffer.get_last_state(): No data in buffer...')
-            return
-        else:
-            last_t = data['t'].unique()[-1]
-            last_state = data[data['t'] == last_t]
-            return last_state
+        last_t = data['t'].unique()[-1]
+        last_state = data[data['t'] == last_t]
+        return last_state
     
     def override_data(self, data):
         with open(self.file_path, 'w', newline='') as f:
@@ -306,28 +291,24 @@ class StateBuffer:
                 'StateBuffer.plot(): Faster plotting is enabled, some elements might be missing in the plots.')
             title += ' (Fast)'
         data = self.get_data()
-        if data.shape[0] < 1:
-            print(f'StateBuffer.plot(): No data to plot...')
-            return
-        else:
-            times_unique = data['t'].unique()
-            times = times_unique[::max(1, len(times_unique) // n_plots)]
-            T = len(times)
-            n_cols = max(1, int(np.ceil(np.sqrt(T))))
-            n_rows = max(1, int(np.ceil(T / n_cols)))
-    
-            fig, ax = plt.subplots(
-                n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
-            fig.tight_layout()
-            fig.suptitle(title, fontsize=8)
-            for i, a in enumerate(ax.flatten()):
-                if i >= T:
-                    a.axis('off')
-                    continue
-                state = data[data['t'] == times[i]]
-                # plot_state(state=state, size=size, ax=a, fast=fast)
-                self.plot_state(state=state, size=size, ax=a, fast=fast)
-            return fig, ax
+        times_unique = data['t'].unique()
+        times = times_unique[::max(1, len(times_unique) // n_plots)]
+        T = len(times)
+        n_cols = int(np.ceil(np.sqrt(T)))
+        n_rows = int(np.ceil(T / n_cols))
+
+        fig, ax = plt.subplots(
+            n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
+        fig.tight_layout()
+        fig.suptitle(title, fontsize=8)
+        for i, a in enumerate(ax.flatten()):
+            if i >= T:
+                a.axis('off')
+                continue
+            state = data[data['t'] == times[i]]
+            # plot_state(state=state, size=size, ax=a, fast=fast)
+            self.plot_state(state=state, size=size, ax=a, fast=fast)
+        return fig, ax
 
     def animate(self, size=6, title=None, fast=False):
         print('StateBuffer.animation(): Animating StateBuffer...')
@@ -606,7 +587,7 @@ class HistogramBuffer:
         fig, ax = plt.subplots(nrows, ncols, figsize=(size*nrows, size*ncols))
         fig.suptitle(title, fontsize=10)
         fig.subplots_adjust(hspace=0.5)
-        if isinstance(ax, plt.Axes):
+        if nplots == 1:
             ax = [ax]
 
         ii = np.linspace(0, len(tt)-1, nplots, dtype=int)
