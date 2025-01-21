@@ -36,7 +36,7 @@ def getPairwiseSeparations(ri, rj):
 
 
 @njit(parallel=True)
-def getDensity(r, pos, m, hSq):
+def getDensity(r, pos, m, hSq, dist_max=np.inf):
     M = r.shape[0]
     N = pos.shape[0]
 
@@ -45,14 +45,15 @@ def getDensity(r, pos, m, hSq):
     rho = np.zeros(M)
     for i in prange(M):
         for j in prange(N):
-            rho[i] += m[j] * W(dx[i, j], dy[i, j], hSq)
+            if dx[i, j]**2 + dy[i, j]**2 <= dist_max:
+                rho[i] += m[j] * W(dx[i, j], dy[i, j], hSq)
 
     return rho.reshape((M, 1))
 
-
 class DensityFieldSPH:
-    def __init__(self, half_width, half_height, density_radius, resolution, simulation=None):
+    def __init__(self, half_width, half_height, density_radius, resolution, state=None):
         print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
+
         dx = 1 / resolution
         dy = 1 / resolution
         xx = np.linspace(-half_width + dx/2,
@@ -66,9 +67,8 @@ class DensityFieldSPH:
         self.KDTree = KDTree(self.grid_points)
 
         self.bandwidthSq = density_radius**2
+        self.dist_max = 1.6424 * density_radius
         self.values = np.zeros((resolution, resolution))
-
-        self.simulation = simulation
 
     def query(self, pos):
         # Find the nearest neighbors using KDTree
@@ -77,19 +77,19 @@ class DensityFieldSPH:
         idx_2d = np.unravel_index(idx, (self.resolution, self.resolution))
         return self.values[idx_2d]
 
-    def update(self):
-        if self.simulation.kt is None:
+    def update(self, state):
+        if len(state) == 0:
             self.values = np.zeros((self.resolution, self.resolution))
         else:
-            positions = np.array([plant.pos
-                                  for plant in self.simulation.state])
-            areas = np.array([plant.area for plant in self.simulation.state])
-            
+            positions = np.array([(plant.x, plant.y)
+                                  for plant in state])
+            areas = np.array([plant.area for plant in state])
+
             if positions.shape[0] == 0:
                 self.values = np.zeros((self.resolution, self.resolution))
             else:
                 self.values = getDensity(
-                    self.grid_points, positions, areas, self.bandwidthSq).reshape(self.resolution, self.resolution)
+                    self.grid_points, positions, areas, self.bandwidthSq, self.dist_max).reshape(self.resolution, self.resolution)
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
         if ax is None:

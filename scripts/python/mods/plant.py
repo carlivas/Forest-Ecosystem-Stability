@@ -4,8 +4,10 @@ import copy
 
 
 class Plant:
-    def __init__(self, pos: np.ndarray, r: float, r_min: float, r_max: float, growth_rate: float, dispersal_range: float, **kwargs):
-        self.pos = pos
+    def __init__(self, id, x, y, r, r_min, r_max, growth_rate, dispersal_range, **kwargs):
+        self.id = id
+        self.x = x
+        self.y = y
         self.r = r
 
         self.d = 2*self.r
@@ -18,7 +20,7 @@ class Plant:
         self.species_germination_chance = 1
         self.dispersal_range = dispersal_range
 
-        self.age_max = (self.r_max - self.r_min)/self.growth_rate
+        # self.age_max = (self.r_max - self.r_min)/self.growth_rate
 
         # self.is_dead = kwargs.get('is_dead', False)
         # self.is_colliding = kwargs.get('is_colliding', False)
@@ -36,9 +38,6 @@ class Plant:
         if self.r > self.r_max:
             self.die()
 
-    def copy(self):
-        return Plant(**self.__dict__)
-
     def die(self):
         self.is_dead = True
 
@@ -54,15 +53,25 @@ class Plant:
         new_plants = []
         for _ in range(n):
             if self.species_germination_chance > 0 and not self.is_dead:
-                new_pos = self.pos + \
+                new_pos = np.array([self.x, self.y]) + \
                     np.random.normal(0, self.dispersal_range, 2)
 
                 dispersal_chance = max(sim.land_quality, sim.local_density(
-                    new_pos) * sim.precipitation(sim.t) * self.species_germination_chance)
+                    new_pos) * sim.precipitation * self.species_germination_chance)
 
                 if dispersal_chance > np.random.uniform(0, 1):
-                    new_plants.append(Plant(new_pos, r=self.r_min, r_min=self.r_min, r_max=self.r_max,
-                                            growth_rate=self.growth_rate, dispersal_range=self.dispersal_range))
+                    new_plants.append(
+                        Plant(
+                            id=sim.id_generator.get_next_id(),
+                            x=new_pos[0],
+                            y=new_pos[1],
+                            r=self.r_min,
+                            r_min=self.r_min,
+                            r_max=self.r_max,
+                            growth_rate=self.growth_rate,
+                            dispersal_range=self.dispersal_range
+                        )
+                    )
         sim.add(new_plants)
 
     def compete(self, other_plant):
@@ -87,8 +96,7 @@ class Plant:
 
         collisions = sim.get_collisions(self)
         self.resolve_collisions(collisions)
-        if not sim.spinning_up:
-            self.disperse(sim)
+        self.disperse(sim)
         self.mortality()
         return
 
