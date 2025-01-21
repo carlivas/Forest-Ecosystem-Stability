@@ -8,32 +8,36 @@ from mods.plant import Plant
 from mods.simulation import Simulation, _m_from_m2pp, _m_from_domain_sides, save_simulation_results, plot_simulation_results
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 from mods.buffers import StateBuffer, DataBuffer, FieldBuffer, HistogramBuffer
+import shutil
+import os
 
 save_results = True
 plot_results = True
 
-T = 100
-num_plants = 1000
+T = 100_000
+num_plants = 3000
 
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 2500,
+    'L': 4500,
     'T': T,
     'precipitation': 6500e-5,
     'seed': seed,
 }
 
-surfix = 'test2'
-folder = f'Data/temp/new_buffers_test'
+surfix = str(seed)
+folder = f'../../Data/starting_contenders'
 
-print(seed)
 sim = Simulation(folder=folder, alias=surfix, **kwargs)
-print(sim.seed)
-# sim.initiate_uniform_radii(n=num_plants, r_min=0.1, r_max=30)
+sim.initiate_uniform_radii(n=num_plants, r_min=sim.r_min/sim._m, r_max=sim.r_max/sim._m)
 sim.run(T=T)
-sim.plot_buffers()
-plt.show()
+
+
+figs, axs = sim.plot_buffers()
+for i, fig in enumerate(figs):
+    fig.savefig(f'{folder}/figures/fig_{seed}_{i}.png', dpi=600)
+# plt.show()
 
 
 
