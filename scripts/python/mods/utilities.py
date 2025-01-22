@@ -72,33 +72,14 @@ def convert_to_serializable(obj):
     return val
 
 def save_kwargs(kwargs, path, exclude=None):
-    """
-    Save keyword arguments to a JSON file.
-
-    This function takes a dictionary of keyword arguments and saves it to a specified
-    file path in JSON format. If the directory does not exist, it will be created.
-
-    Args:
-        kwargs (dict): The keyword arguments to save.
-        path (str): The file path where the JSON file will be saved (without the .json extension).
-
-    Returns:
-        None
-
-    Raises:
-        OSError: If the file cannot be created or written to.
-        TypeError: If the keyword arguments contain non-serializable data.
-
-    Example:
-        save_kwargs({'param1': 10, 'param2': 'value'}, '/path/to/file')
-    """
-    
     if exclude is not None:
         kwargs = {k: v for k, v in kwargs.items() if k not in exclude}
     kwargs = dict(sorted(kwargs.items()))
-    
+
+    if not path.endswith('.json'):
+            path = path + '.json'
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path + '.json', 'w') as f:
+    with open(path, 'w') as f:
         serializable_kwargs = convert_to_serializable(kwargs)
         json.dump(serializable_kwargs, f, indent=4)
     print('Kwargs saved.')

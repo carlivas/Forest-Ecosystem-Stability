@@ -332,10 +332,9 @@ class Simulation:
                     if os.path.exists(path):
                         os.remove(path)
 
-        if os.path.exists(f'{folder}/kwargs_{alias}.json'):
-            print(f'Simulation.__init__(): Loading kwargs from {
-                  folder}/kwargs_{alias}.json')
-            with open(f'{folder}/kwargs_{alias}.json', 'r') as file:
+        if os.path.exists(kwargs_path):
+            print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
+            with open(kwargs_path, 'r') as file:
                 kwargs = json.load(file)
 
         self.__dict__.update(default_kwargs)
@@ -364,12 +363,10 @@ class Simulation:
 
         self.id_generator = IDGenerator()
 
-        self.data_buffer = DataBuffer(
-            file_path=f'{folder}/data_buffer_{alias}.csv')
-        self.state_buffer = StateBuffer(
-            file_path=f'{folder}/state_buffer_{alias}.csv')
-        self.density_field_buffer = FieldBuffer(file_path=f'{
-                                                folder}/density_field_buffer_{alias}.csv', resolution=self.density_field_resolution)
+        self.save_dict(path=kwargs_path)
+        self.data_buffer = DataBuffer(file_path=data_buffer_path)
+        self.state_buffer = StateBuffer(file_path=state_buffer_path)
+        self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
@@ -445,32 +442,16 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.values, t=self.t)
 
-    def run(self, T, max_population=None, transient_period=6000):
+    def run(self, T, max_population=None, transient_period=2):
 
         start_time = time.time()
-        sim_start_time = self.t
         n_iter = int(np.ceil(T / self.time_step))
         print(f'Simulation.run(): Running simulation for {
               n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
                 self.step()
-                sim_time_elapsed = self.t - sim_start_time
-                if sim_time_elapsed < transient_period:
-                    is_converged, convergence_factor = False, -1
-                else:
-                    is_converged, convergence_factor = self.convergence_check()[:2]
-
-                # if the population exceeds the maximum allowed, stop the simulation
-                l = len(self.plants)
-                if (max_population is not None and l > max_population):
-                    print(
-                        f'Simulation.run(): Population exceeded {max_population}. Stopping simulation...')
-                    break
-                elif is_converged:
-                    print(
-                        f'Simulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
-                    break
+                is_converged, convergence_factor = self.convergence_check()[:2]
 
                 if self.verbose:
                     elapsed_time = time.time() - start_time
@@ -488,11 +469,22 @@ class Simulation:
 
                     data = self.collect_data()
                     t, biomass, population = data[[
-                        'Time', 'Biomass', 'Population']].values[0]
+                        'Time', 'Biomass', 'Population']].values.reshape(-1)
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 4):<6}', end='\r')
+                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 8):<10}', end='\r')
+                # if the population exceeds the maximum allowed, stop the simulation
+                l = len(self.plants)
+                if (max_population is not None and l > max_population):
+                    print(
+                        f'\nSimulation.run(): Population exceeded {max_population}. Stopping simulation...')
+                    break
+                elif is_converged:
+                    print(
+                        f'\nSimulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
+                    break
+
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
@@ -517,9 +509,10 @@ class Simulation:
 
     def convergence_check(self, trend_window=6000, trend_threshold=1):
         data = self.data_buffer.get_data()[['Time', 'Biomass']]
-        if len(data) < trend_window:
+        if data.shape[0] < 2:
             return False, -1, None
-        time, biomass = data['Time'].values, data['Biomass'].values
+        time = data['Time'].values
+        biomass = data['Biomass'].values
         time_step = time[1] - time[0]
         window = np.min([int(trend_window//time_step), len(time)])
         x = time[-window:]
@@ -780,16 +773,6 @@ class Simulation:
     ]
 
     def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default):
-        """
-        Save the keyword arguments of the simulation to a JSON file.
-
-        Parameters:
-        -----------
-        path : str
-            The file path to save the JSON file to.
-        exclude : Optional[List[str]]
-            A list of keys to exclude from the saved dictionary. Defaults to None.
-        """
         conversion_factors = {
             'r_min': self._m,
             'r_max': self._m,

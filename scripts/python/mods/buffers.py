@@ -249,7 +249,7 @@ class StateBuffer:
         data = self.get_data()
         if data.shape[0] < 1:
             print('StateBuffer.get_last_state(): No data in buffer...')
-            return
+            return pd.DataFrame(columns=self.columns)
         else:
             last_t = data['t'].unique()[-1]
             last_state = data[data['t'] == last_t]

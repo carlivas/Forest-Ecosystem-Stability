@@ -14,8 +14,9 @@ darkgrey = np.array([30,  30,  30, 255])/255
 grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
-path = sys.argv[1]
-save_plot = bool(sys.argv[2])
+path = '../../Data/starting_contenders'
+save_plot = True
+
 if not os.path.exists(path):
     raise FileNotFoundError(f"The specified path does not exist: {path}")
 

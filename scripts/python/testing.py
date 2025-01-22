@@ -35,6 +35,7 @@ sim.run(T=T)
 
 
 figs, axs = sim.plot_buffers()
+os.makedirs(folder + '/figures', exist_ok=True)
 for i, fig in enumerate(figs):
     fig.savefig(f'{folder}/figures/fig_{seed}_{i}.png', dpi=600)
 # plt.show()
