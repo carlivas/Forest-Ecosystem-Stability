@@ -286,7 +286,7 @@ def sim_from_data(sim_data, times_to_load='last'):
     return sim
 
 
-path_kwargs = 'default_kwargs.json'
+path_kwargs = '../../default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -482,7 +482,7 @@ class Simulation:
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}', end='\r')
+                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 4):<6}', end='\r')
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')

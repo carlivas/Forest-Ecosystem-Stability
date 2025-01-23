@@ -10,7 +10,7 @@ from mods.plant import Plant
 from matplotlib.colors import ListedColormap
 from matplotlib import animation
 
-path_kwargs = 'C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code/default_kwargs.json'
+path_kwargs = '../../default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -308,7 +308,6 @@ class StateBuffer:
         times_unique = data['t'].unique()
         b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
         times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
-        # times = times_unique[::max(1, len(times_unique) // n_plots)]
         T = len(times)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
@@ -466,7 +465,6 @@ class FieldBuffer:
         times_unique = data['t'].unique()
         b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
         times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
-        # times = times_unique[::max(1, len(times_unique) // n_plots)]
         fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(self.resolution, self.resolution) for t in times])
         if vmax is None:
             vmax = np.nanmax(fields)
