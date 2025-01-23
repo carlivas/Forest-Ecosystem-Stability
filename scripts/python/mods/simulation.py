@@ -16,7 +16,7 @@ from mods.buffers import (DataBuffer, FieldBuffer, HistogramBuffer, StateBuffer,
                           rewrite_hist_buffer_data, rewrite_state_buffer_data)
 from mods.fields import DensityFieldSPH as DensityField
 from mods.plant import Plant
-from mods.utilities import print_nested_dict, save_kwargs, convert_to_serializable, linear_regression
+from mods.utilities import print_nested_dict, save_kwargs, convert_to_serializable, linear_regression, dbh_to_crown_radius
 
 
 def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
@@ -30,20 +30,6 @@ def check_collision(p1: Plant, p2: Plant) -> bool:
     r1 = p1.r
     r2 = p2.r
     return np.sum((pos1 - pos2) ** 2) < (r1 + r2) ** 2
-
-
-def dbh_to_crown_radius(dbh: float) -> float:
-    # everything in m
-    d = 1.42 + 28.17*dbh - 11.26*dbh**2
-    return d/2
-
-
-def _m_from_m2pp(m2pp, num_plants, A_bound=1) -> float:
-    return np.sqrt(A_bound/(m2pp*num_plants))
-
-
-def _m_from_domain_sides(L, S_bound=1) -> float:
-    return S_bound / L
 
 
 def save_simulation_results(
@@ -332,10 +318,10 @@ class Simulation:
                     if os.path.exists(path):
                         os.remove(path)
 
-        if os.path.exists(f'{folder}/kwargs_{alias}.json'):
+        if os.path.exists(kwargs_path):
             print(f'Simulation.__init__(): Loading kwargs from {
                   folder}/kwargs_{alias}.json')
-            with open(f'{folder}/kwargs_{alias}.json', 'r') as file:
+            with open(kwargs_path, 'r') as file:
                 kwargs = json.load(file)
 
         self.__dict__.update(default_kwargs)
@@ -365,25 +351,29 @@ class Simulation:
         self.id_generator = IDGenerator()
 
         self.data_buffer = DataBuffer(
-            file_path=f'{folder}/data_buffer_{alias}.csv')
+            file_path=data_buffer_path)
         self.state_buffer = StateBuffer(
-            file_path=f'{folder}/state_buffer_{alias}.csv')
-        self.density_field_buffer = FieldBuffer(file_path=f'{
-                                                folder}/density_field_buffer_{alias}.csv', resolution=self.density_field_resolution)
+            file_path=state_buffer_path)
+        self.density_field_buffer = FieldBuffer(
+            file_path=density_field_buffer_path, resolution=self.density_field_resolution)
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
             density_radius=self.density_check_radius,
             resolution=self.density_field_resolution,
         )
-        
+
         last_state_df = self.state_buffer.get_last_state()
         if not last_state_df.empty:
             self.plants = [Plant(id=id, x=x, y=y, r=r, **self.__dict__) for (id, x, y, r)
-                            in last_state_df[['id', 'x', 'y', 'r']].values]
+                           in last_state_df[['id', 'x', 'y', 'r']].values]
             self.t = last_state_df['t'].values[-1]
         self.initiate()
-        
+
+    def initiate(self):
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+        print(f'\nSimulation.initiate(): Time: {time.strftime("%H:%M:%S")}')
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]):
         if isinstance(plant, Plant):
@@ -508,6 +498,29 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
+    def set_path(self, folder, alias=None, overwrite=False):
+        self.folder = folder
+        self.alias = alias
+        data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
+        state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
+        density_field_buffer_path = f'{
+            folder}/density_field_buffer_{alias}.csv'
+        if overwrite:
+            for path in [data_buffer_path, state_buffer_path, density_field_buffer_path]:
+                if os.path.exists(path):
+                    os.remove(path)                    
+        self.data_buffer = DataBuffer(file_path=data_buffer_path)
+        self.state_buffer = StateBuffer(file_path=state_buffer_path)
+        self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)
+        
+        self.data_buffer.add(self.collect_data())
+        self.data_buffer._flush_buffer()
+        self.state_buffer.add(plants=self.plants, t=self.t)
+        self.state_buffer._flush_buffer()
+        self.density_field_buffer.add(
+                        field=self.density_field.values, t=self.t)
+        self.density_field_buffer._flush_buffer()
+
     def finalize(self):
         self.data_buffer.finalize()
         self.state_buffer.finalize()
@@ -617,19 +630,6 @@ class Simulation:
             return self.density_field.query(pos)
         else:
             return 0
-
-    # def get_plants(self):
-    #     return copy.deepcopy(self.plants)
-
-    def initiate(self):
-        """
-        Initialize the simulation by updating necessary data structures.
-
-        This method updates the KDTree, density field, and buffers with the initial state of the simulation.
-        """
-        self.update_kdtree(self.plants)
-        self.density_field.update(self.plants)
-        print(f'\nSimulation.initiate(): Time: {time.strftime("%H:%M:%S")}')
 
     def collect_data(self):
         sizes = np.array([plant.r for plant in self.plants])
@@ -832,11 +832,11 @@ class Simulation:
         self.data_buffer.plot(title=title)
         self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
         self.density_field_buffer.plot(title=title, n_plots=n_plots)
-    
+
     def plot(self):
-        state = pd.DataFrame([[p.id, p.x, p.y, p.r, self.t] for p in self.plants], columns=['id', 'x', 'y', 'r', 't'])
+        state = pd.DataFrame([[p.id, p.x, p.y, p.r, self.t]
+                             for p in self.plants], columns=['id', 'x', 'y', 'r', 't'])
         field = self.density_field.values
-        
+
         StateBuffer.plot_state(size=6, state=state)
         FieldBuffer.plot_field(size=6, field=field)
-    

@@ -5,7 +5,7 @@ import pandas as pd
 import time
 
 from mods.plant import Plant
-from mods.simulation import Simulation, _m_from_m2pp, _m_from_domain_sides, save_simulation_results, plot_simulation_results
+from mods.simulation import Simulation, save_simulation_results, plot_simulation_results
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 from mods.buffers import StateBuffer, DataBuffer, FieldBuffer, HistogramBuffer
 

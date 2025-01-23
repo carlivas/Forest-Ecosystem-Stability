@@ -129,7 +129,10 @@ class DataBuffer:
         return pd.read_csv(self.file_path)
 
     def plot(self, size=6, title='DataBuffer', keys=None):
-        
+        data = self.get_data()
+        if len(data) < 2:
+            print(f'DataBuffer.plot(): Not enough data to plot ({len(data) = }).')
+            return
         # Specify which keys need to be plotted
         if keys is None:
             keys = [key for key in self.columns if key != 'Time']
@@ -153,14 +156,16 @@ class DataBuffer:
             ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
 
         if isinstance(ax, plt.Axes):
-            ax = [ax]
+            ax = np.array([ax])
         for i, key in enumerate(keys):
-            x_data = self.get_data()['Time']
-            y_data = self.get_data()[key]
+            x_data = data['Time']
+            y_data = data[key]
 
             ax[i].plot(x_data, y_data,
                        label=key, color=cmap((i + 1) / len(keys)))
-            ax[i].set_ylim(-0.1 * np.nanmax(y_data), 1.1 * np.nanmax(y_data))
+            y_max = np.nanmax(y_data)
+            if y_max != 0:
+                ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
             ax[i].grid()
             ax[i].legend()
         ax[-1].set_xlabel('Time')
@@ -286,13 +291,18 @@ class StateBuffer:
         return fig, ax
 
     def plot(self, size=2, title='StateBuffer', fast=False, n_plots=20):
+        data = self.get_data()
+        if data.empty:
+            print('StateBuffer.plot(): No data to plot.')
+            return
         if fast:
             print(
                 'StateBuffer.plot(): Faster plotting is enabled, some elements might be missing in the plots.')
             title += ' (Fast)'
-        data = self.get_data()
         times_unique = data['t'].unique()
-        times = times_unique[::max(1, len(times_unique) // n_plots)]
+        b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
+        times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
+        # times = times_unique[::max(1, len(times_unique) // n_plots)]
         T = len(times)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
@@ -301,6 +311,8 @@ class StateBuffer:
             n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
         fig.tight_layout()
         fig.suptitle(title, fontsize=8)
+        if isinstance(ax, plt.Axes):
+            ax = np.array([ax])
         for i, a in enumerate(ax.flatten()):
             if i >= T:
                 a.axis('off')
@@ -442,8 +454,13 @@ class FieldBuffer:
 
     def plot(self, size=2, n_plots=20, vmin=0, vmax=None, title='FieldBuffer', extent=[-0.5, 0.5, -0.5, 0.5]):
         data = self.get_data()
+        if data.empty:
+            print('FieldBuffer.plot(): No data to plot.')
+            return
         times_unique = data['t'].unique()
-        times = times_unique[::max(1, len(times_unique) // n_plots)]
+        b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
+        times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
+        # times = times_unique[::max(1, len(times_unique) // n_plots)]
         fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(self.resolution, self.resolution) for t in times])
         if vmax is None:
             vmax = np.nanmax(fields)
@@ -454,7 +471,7 @@ class FieldBuffer:
         fig, ax = plt.subplots(n_rows, n_cols, figsize=(size * n_cols, size * n_rows))
         fig.tight_layout()
         fig.suptitle(title, fontsize=8)
-        if T == 1:
+        if isinstance(ax, plt.Axes):
             ax = np.array([ax])
         for i, a in enumerate(ax.flatten()):
             if i >= T:
@@ -587,12 +604,11 @@ class HistogramBuffer:
         fig, ax = plt.subplots(nrows, ncols, figsize=(size*nrows, size*ncols))
         fig.suptitle(title, fontsize=10)
         fig.subplots_adjust(hspace=0.5)
-        if nplots == 1:
-            ax = [ax]
-
         ii = np.linspace(0, len(tt)-1, nplots, dtype=int)
         ii = np.unique(ii)
 
+        if isinstance(ax, plt.Axes):
+            ax = np.array([ax])
         for i, ax_i in enumerate(ax.flatten()):
             if i >= len(tt):
                 ax_i.axis('off')
