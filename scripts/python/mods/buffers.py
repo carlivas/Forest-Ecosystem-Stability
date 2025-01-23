@@ -244,12 +244,22 @@ class StateBuffer:
     
     def get_last_state(self):
         data = self.get_data()
+<<<<<<< HEAD
         if data.empty:
             print('StateBuffer.get_last_state(): No data to return.')
             return pd.DataFrame(columns=self.columns)
         last_t = data['t'].unique()[-1]
         last_state = data[data['t'] == last_t]
         return last_state
+=======
+        if data.shape[0] < 1:
+            print('StateBuffer.get_last_state(): No data in buffer...')
+            return pd.DataFrame(columns=self.columns)
+        else:
+            last_t = data['t'].unique()[-1]
+            last_state = data[data['t'] == last_t]
+            return last_state
+>>>>>>> origin/modi
     
     def override_data(self, data):
         with open(self.file_path, 'w', newline='') as f:
