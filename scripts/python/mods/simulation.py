@@ -309,9 +309,9 @@ class Simulation:
             folder}/density_field_buffer_{alias}.csv'
 
         if override:
-            do_overwrite = input(
+            do_override = input(
                 f'Simulation.__init__(): OVERRIDE existing files in folder {folder}? (Y/n):')
-            if do_overwrite.lower() != 'y':
+            if do_override.lower() != 'y':
                 raise ValueError('Simulation.__init__(): Aborted by user...')
             else:
                 for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
@@ -498,17 +498,22 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
-    def set_path(self, folder, alias=None, overwrite=False):
+    def set_path(self, folder, alias=None, override=False):
         self.folder = folder
         self.alias = alias
         data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
         state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
         density_field_buffer_path = f'{
             folder}/density_field_buffer_{alias}.csv'
-        if overwrite:
-            for path in [data_buffer_path, state_buffer_path, density_field_buffer_path]:
-                if os.path.exists(path):
-                    os.remove(path)                    
+        if override and os.path.exists(data_buffer_path):
+            do_override = input(
+                f'Simulation.set_path(): OVERRIDE existing files in folder {folder} with alias {alias}? (Y/n):')
+            if do_override.lower() != 'y':
+                for path in [data_buffer_path, state_buffer_path, density_field_buffer_path]:
+                    if os.path.exists(path):
+                        os.remove(path)       
+                else:
+                    raise ValueError('Simulation.set_path(): Aborted by user...')             
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
         self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)

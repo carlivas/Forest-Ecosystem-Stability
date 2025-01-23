@@ -212,6 +212,9 @@ class StateBuffer:
             [[plant.id, plant.x, plant.y, plant.r, t] for plant in plants],
             columns=['id', 'x', 'y', 'r', 't']
         )
+        if new_data.empty:
+            return
+        
         if self.buffer.empty:
             self.buffer = new_data
         else:
@@ -241,6 +244,9 @@ class StateBuffer:
     
     def get_last_state(self):
         data = self.get_data()
+        if data.empty:
+            print('StateBuffer.get_last_state(): No data to return.')
+            return pd.DataFrame(columns=self.columns)
         last_t = data['t'].unique()[-1]
         last_state = data[data['t'] == last_t]
         return last_state
