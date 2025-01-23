@@ -30,10 +30,6 @@ folder = f'../../Data/starting_contenders'
 sim = Simulation(folder=folder, alias=surfix, **kwargs)
 # sim.initiate_uniform_radii(n=num_plants, r_min=sim.r_min/sim._m, r_max=sim.r_max/sim._m)
 sim.run(T=T)
-<<<<<<< HEAD
-sim.plot_buffers()
-plt.show()
-=======
 
 
 figs, axs = sim.plot_buffers()
@@ -41,7 +37,6 @@ os.makedirs(folder + '/figures', exist_ok=True)
 for i, fig in enumerate(figs):
     fig.savefig(f'{folder}/figures/fig_{seed}_{i}.png', dpi=600)
 # plt.show()
->>>>>>> origin/modi
 
 
 

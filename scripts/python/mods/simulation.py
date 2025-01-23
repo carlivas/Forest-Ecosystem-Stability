@@ -319,12 +319,7 @@ class Simulation:
                         os.remove(path)
 
         if os.path.exists(kwargs_path):
-<<<<<<< HEAD
-            print(f'Simulation.__init__(): Loading kwargs from {
-                  folder}/kwargs_{alias}.json')
-=======
             print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
->>>>>>> origin/modi
             with open(kwargs_path, 'r') as file:
                 kwargs = json.load(file)
 
@@ -354,19 +349,10 @@ class Simulation:
 
         self.id_generator = IDGenerator()
 
-<<<<<<< HEAD
-        self.data_buffer = DataBuffer(
-            file_path=data_buffer_path)
-        self.state_buffer = StateBuffer(
-            file_path=state_buffer_path)
-        self.density_field_buffer = FieldBuffer(
-            file_path=density_field_buffer_path, resolution=self.density_field_resolution)
-=======
         self.save_dict(path=kwargs_path)
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
         self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)
->>>>>>> origin/modi
         self.density_field = DensityField(
             half_width=self.half_width,
             half_height=self.half_height,
@@ -455,26 +441,7 @@ class Simulation:
         try:
             for _ in range(0, n_iter):
                 self.step()
-<<<<<<< HEAD
-                sim_time_elapsed = self.t - sim_start_time
-                if sim_time_elapsed < transient_period:
-                    is_converged = False
-                else:
-                    is_converged = self.convergence_check()[0]
-
-                # if the population exceeds the maximum allowed, stop the simulation
-                l = len(self.plants)
-                if (max_population is not None and l > max_population):
-                    print(
-                        f'Simulation.run(): Population exceeded {max_population}. Stopping simulation...')
-                    break
-                elif is_converged:
-                    print(
-                        f'Simulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
-                    break
-=======
                 is_converged, convergence_factor = self.convergence_check()[:2]
->>>>>>> origin/modi
 
                 if self.verbose:
                     elapsed_time = time.time() - start_time
@@ -560,16 +527,10 @@ class Simulation:
 
     def convergence_check(self, trend_window=6000, trend_threshold=1):
         data = self.data_buffer.get_data()[['Time', 'Biomass']]
-<<<<<<< HEAD
-        if len(data) < trend_window:
-            return False, 0, None
-        time, biomass = data['Time'].values, data['Biomass'].values
-=======
         if data.shape[0] < 2:
             return False, -1, None
         time = data['Time'].values
         biomass = data['Biomass'].values
->>>>>>> origin/modi
         time_step = time[1] - time[0]
         window = np.min([int(trend_window//time_step), len(time)])
         x = time[-window:]
