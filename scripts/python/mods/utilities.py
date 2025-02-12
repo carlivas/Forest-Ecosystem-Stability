@@ -85,6 +85,12 @@ def save_kwargs(kwargs, path, exclude=None):
     print('Kwargs saved.')
 
 
+def dbh_to_crown_radius(dbh):
+    # diameter at breast height to crown radius
+    # everything in m
+    d = 1.42 + 28.17*dbh - 11.26*dbh**2
+    return d/2
+
 def get_max_depth(d, level=1):
     """
     Recursively finds the maximum depth of a nested dictionary.
