@@ -133,6 +133,8 @@ for root, dirs, files in os.walk(load_folder):
     fig.suptitle(f'{subpath}', color=white, fontsize=10)
 
     surfix = root.split('/')[-1]
+    
+    print(f'{surfix = }')
 
     if save_plot:
         save_path = f'{root}/_data_combined_{surfix}.png'
