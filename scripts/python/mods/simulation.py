@@ -308,7 +308,7 @@ class Simulation:
         density_field_buffer_path = f'{
             folder}/density_field_buffer_{alias}.csv'
 
-        if override:
+        if override and os.path.exists(folder):
             do_override = input(
                 f'Simulation.__init__(): OVERRIDE existing files in folder {folder}? (Y/n):')
             if do_override.lower() != 'y':
@@ -370,7 +370,7 @@ class Simulation:
     def initiate(self):
         self.update_kdtree(self.plants)
         self.density_field.update(self.plants)
-        print(f'\nSimulation.initiate(): Time: {time.strftime("%H:%M:%S")}')
+        print(f'\nSimulation.initiate(): Time: {time.strftime("%Y-%m-%d %H:%M:%S")}')
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]):
         if isinstance(plant, Plant):
@@ -432,7 +432,7 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.values, t=self.t)
 
-    def run(self, T, max_population=None, transient_period=2):
+    def run(self, T, max_population=None, transient_period=2, delta_p=0):
 
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
@@ -440,6 +440,8 @@ class Simulation:
               n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
+                if _ > transient_period:
+                    self.precipitation = max(0, self.precipitation + delta_p)
                 self.step()
                 is_converged, convergence_factor = self.convergence_check()[:2]
 
@@ -463,7 +465,7 @@ class Simulation:
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 8):<10}', end='\r')
+                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}  |  c = {np.round(convergence_factor, 8):<10}', end='\r')
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
                 if (max_population is not None and l > max_population):
@@ -550,7 +552,7 @@ class Simulation:
         convergence_factor = np.abs(slope_norm) * \
             trend_window - trend_threshold
         is_converged = bool(convergence_factor < 0) & bool(
-            self.t > trend_window)
+            (time[-1] - time[0]) > trend_window)
         return is_converged, convergence_factor, regression_line
 
     def attempt_spawn(self, n: int):
@@ -639,6 +641,7 @@ class Simulation:
                 'Time': [self.t],
                 'Biomass': [biomass_total],
                 'Population': [population],
+                'Precipitation': [self.precipitation],
             }
         )
         return data

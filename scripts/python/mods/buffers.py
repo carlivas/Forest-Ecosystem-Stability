@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib import animation
 import os
 import copy
 import warnings
 import json
 
 from mods.plant import Plant
-from matplotlib.colors import ListedColormap
-from matplotlib import animation
 
 path_kwargs = '../../default_kwargs.json'
 with open(path_kwargs, 'r') as file:
@@ -76,7 +76,7 @@ class DataBuffer:
             print(f'DataBuffer.__init__(): Loading data from already existing file {self.file_path}.')
             self.columns = list(pd.read_csv(self.file_path).keys())
         else:
-            self.columns = ['Time', 'Biomass', 'Population']
+            self.columns = ['Time', 'Biomass', 'Population', 'Precipitation']
             self._initialize_file()
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
@@ -243,15 +243,36 @@ class StateBuffer:
         return data
     
     def get_last_state(self):
-        data = self.get_data()
-        if data.shape[0] < 1:
-            print('StateBuffer.get_last_state(): No data in buffer...')
-            return pd.DataFrame(columns=self.columns)
-        else:
-            last_t = data['t'].unique()[-1]
-            last_state = data[data['t'] == last_t]
-            return last_state
-    
+        last_state_df = pd.DataFrame(columns=self.columns)
+        # Open the state buffer file in binary read mode
+        with open(self.file_path, 'rb') as f:
+
+            #### FIND THE LAST VALUE IN THE LAST ROW OF THE FILE ####
+            move_to_previous_line(f)
+
+            # Read the last line of the file and its last value
+            last_line = f.readline().decode().strip()
+            try:
+                last_val = float(last_line.split(',')[-1].strip())
+            except ValueError:
+                return last_state_df
+
+            val = last_val
+            i = 0
+            while val == last_val:
+                move_to_previous_line(f)
+                line = f.readline().decode().strip()
+                val = float(line.split(',')[-1].strip())
+                move_to_previous_line(f)
+
+                if val == last_val:
+                    last_state_df.loc[i] = [float(val)
+                                            for val in line.split(',')]
+                i += 1
+
+        last_state_df = last_state_df.iloc[::-1].reset_index(drop=True)
+        return last_state_df
+
     def override_data(self, data):
         with open(self.file_path, 'w', newline='') as f:
             data.to_csv(f, index=False, float_format='%.18e', header=True)
@@ -307,8 +328,10 @@ class StateBuffer:
                 'StateBuffer.plot(): Faster plotting is enabled, some elements might be missing in the plots.')
             title += ' (Fast)'
         times_unique = data['t'].unique()
-        b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
-        times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
+        b = np.linspace(times_unique.min(), times_unique.max(),
+                        min(len(times_unique), n_plots))
+        times = np.unique(
+            [times_unique[np.abs(times_unique - t).argmin()] for t in b])
         T = len(times)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
@@ -324,11 +347,13 @@ class StateBuffer:
                 a.axis('off')
                 continue
             state = data[data['t'] == times[i]]
-            # plot_state(state=state, size=size, ax=a, fast=fast)
-            self.plot_state(state=state, size=size, ax=a, fast=fast)
-        return fig, ax
+            StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast)
+            
+        title = title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
+        return fig, ax, title
 
-    def animate(self, size=6, title=None, fast=False):
+    @staticmethod
+    def animate(data, size=6, title=None, fast=False):
         print('StateBuffer.animation(): Animating StateBuffer...')
         data = self.get_data()
         times = data['t'].unique()
@@ -464,9 +489,11 @@ class FieldBuffer:
             print('FieldBuffer.plot(): No data to plot.')
             return
         times_unique = data['t'].unique()
-        b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
-        times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
-        fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(self.resolution, self.resolution) for t in times])
+        b = np.linspace(times_unique.min(), times_unique.max(),
+                        min(len(times_unique), n_plots))
+        times = np.unique([times_unique[np.abs(times_unique - t).argmin()] for t in b])
+        fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(
+            self.resolution, self.resolution) for t in times])
         if vmax is None:
             vmax = np.nanmax(fields)
         T = len(times)

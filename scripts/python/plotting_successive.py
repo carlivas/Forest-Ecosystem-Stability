@@ -14,7 +14,7 @@ darkgrey = np.array([30,  30,  30, 255])/255
 grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
-path = 'D:/695774818_finished'
+path = 'D:/'
 save_plot = True
 
 if not os.path.exists(path):
@@ -25,6 +25,8 @@ print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
     surfixes = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    surfixes = [s for s in surfixes if 'checkpoint' not in s]
+    surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
     if not surfixes:
         continue
     print(f'surfixes: {surfixes}')
@@ -59,7 +61,9 @@ for root, dirs, files in os.walk(load_folder):
         colors = ['#358A5C', '#7CBB95', '#C83E46', '#8f6949', '#643735', '#013E31']
         ax[0].plot(time, biomass, color=colors[i%len(colors)], alpha=1, lw=0.3)
         ax[1].plot(time, precipitation, color=colors[i%len(colors)], alpha=1, lw=2)
-        ax[0].text(time.iloc[-1], biomass.iloc[-1], str(num), fontsize=8, color=colors[i%len(colors)], verticalalignment='bottom')
+        
+        # Write the simulation number
+        # ax[0].text(time.iloc[-1], biomass.iloc[-1], str(num), fontsize=8, color=colors[i%len(colors)], verticalalignment='bottom')
         ax[1].text(time.iloc[-1], precipitation.iloc[-1], str(num), fontsize=8, color=colors[i%len(colors)], verticalalignment='bottom')
         
 
