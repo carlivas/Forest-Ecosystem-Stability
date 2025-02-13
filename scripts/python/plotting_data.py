@@ -14,7 +14,7 @@ darkgrey = np.array([30,  30,  30, 255])/255
 grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
-path = '../../Data/starting_contenders'
+path = '../../Data/starting_contenders/partial'
 save_plot = True
 
 if not os.path.exists(path):
@@ -24,10 +24,11 @@ load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    sim_nums = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
-    if not sim_nums:
+    aliases = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [n for n in aliases if 'checkpoint' not in n]
+    if not aliases:
         continue
-    print(f'sim_nums: {sim_nums}')
+    print(f'aliases: {aliases}')
 
     biomass_ylim = 0
     population_ylim = 0
@@ -36,7 +37,7 @@ for root, dirs, files in os.walk(load_folder):
     max_num_plants = 0
     kwargs_list = []
     data_buffer_list = []
-    for i, n in enumerate(sim_nums):
+    for i, n in enumerate(aliases):
         kwargs = pd.read_json(
             f'{root}/kwargs_{n}.json', typ='series').to_dict()
         data_buffer = pd.read_csv(f'{root}/data_buffer_{n}.csv')
@@ -67,13 +68,13 @@ for root, dirs, files in os.walk(load_folder):
             bin_colors), norm=norm))
 
     max_time = 0
-    for i, n in enumerate(sim_nums):
+    for i, n in enumerate(aliases):
         kwargs = kwargs_list[i]
         data_buffer_df = data_buffer_list[i]
         time = data_buffer_df['Time']
         biomass = data_buffer_df['Biomass']
         population = data_buffer_df['Population']
-        num_plants = population.iloc[0]
+        num_plants = population.iloc[1]
         if time.iloc[-1] > max_time:
             max_time = time.iloc[-1]
 
