@@ -5,7 +5,9 @@ import os
 from scipy.optimize import curve_fit
 from scipy.stats import f
 
-# Exponential function for fitting
+def lin_func(x, a, b):
+    return a * x + b
+
 def exp_func(x, a, b, c):
     return a * np.exp(b * x) + c
 
@@ -28,16 +30,19 @@ def calculate_fit_and_p_value(fit_func, x, y):
     
     return y_fit, p_value
 
-load_folder = 'D:/695774818_finished'
+folder = 'D:/'
+key = 'Population'
+save_fig = True
 
-if not os.path.exists(load_folder):
-    raise FileNotFoundError(f"The specified path does not exist: {load_folder}")
+if not os.path.exists(folder):
+    raise FileNotFoundError(f"The specified path does not exist: {folder}")
 
-load_folder = os.path.abspath(load_folder)
+load_folder = os.path.abspath(folder)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
     surfixes = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    surfixes = [s for s in surfixes if 'checkpoint' not in s]
     surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
     if not surfixes:
         continue
@@ -54,65 +59,79 @@ for root, dirs, files in os.walk(load_folder):
         kwargs_list.append(kwargs)
     
     time = pd.concat([data_buffer['Time'] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
-    biomass = pd.concat([data_buffer['Biomass'] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
-    # population = pd.concat([data_buffer['Population'] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
+    data = pd.concat([data_buffer[key] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
     precipitation = pd.concat([pd.DataFrame(kwargs['precipitation'] * np.ones_like(data_buffer['Time'])) for kwargs, data_buffer in zip(kwargs_list, data_buffer_list)], axis=0).reset_index(drop=True)
     time_prec = precipitation.index
     
-    time_range = (20_000, 220_000)
+    if root.split('\\')[-1] == '695774818_finished':
+        time_range = (20_000, 234_000)
+    elif root.split('\\')[-1] == '774322652_finished':
+        time_range = (20_000, 265_000)
+    elif root.split('\\')[-1] == 'partial48775395':
+        time_range = (60_000, 142_000)
+    
     time_slice = slice(*time_range)
     
-    window_size = 5000
-    step = window_size
+    window_size = 25000
+    step = 5000
     
-    # Detrend biomass data
-    biomass_analysis = biomass.iloc[time_slice]
-    biomass_analysis = biomass_analysis - biomass_analysis.rolling(window=window_size, center=True).mean()
-    biomass_analysis = biomass_analysis.dropna()
-    time_analysis = time.iloc[biomass_analysis.index]
+    data_analysis = data.iloc[time_slice].dropna()
+    
+    # # Detrend biomass data
+    # data_analysis = data_analysis - data_analysis.rolling(window=window_size, center=True).mean()
+    
+    time_analysis = time.iloc[data_analysis.index]
 
-    biomass_var = biomass_analysis.rolling(window=window_size, step=step, center=True).var().dropna()
-    time_var = time.iloc[biomass_var.index]
-    biomass_var_fit, p_value_var = calculate_fit_and_p_value(pow_func, time_var, biomass_var)
+    data_var = data_analysis.rolling(window=window_size, step=step, center=True).var().dropna()
+    time_var = time.iloc[data_var.index]
+    data_var_fit, p_value_var = calculate_fit_and_p_value(lin_func, time_var, data_var)
 
-    biomass_ac = biomass_analysis.rolling(window=window_size, step=step, center=True).apply(lambda x: x.autocorr(lag=1)).dropna()
-    time_ac = time.iloc[biomass_ac.index]
-    biomass_ac_fit, p_value_ac = calculate_fit_and_p_value(pow_func, time_ac, biomass_ac)
+    data_ac = data_analysis.rolling(window=window_size, step=step, center=True).apply(lambda x: x.autocorr(lag=1)).dropna()
+    time_ac = time.iloc[data_ac.index]
+    data_ac_fit, p_value_ac = calculate_fit_and_p_value(lin_func, time_ac, data_ac)
 
 
 
-    fig, ax = plt.subplots(5, 1, figsize=(8, 9), sharex=True)
-    ax[0].plot(time, biomass, color='tab:blue')
-    ax[0].set_ylabel('Biomass')
+    fig, ax = plt.subplots(4, 1, figsize=(8, 9), sharex=True)
+    ax[0].plot(time, data, color='tab:blue')
+    ax[0].set_ylabel(key)
 
     ax[1].plot(time_prec, precipitation, color='tab:green')
     ax[1].set_ylabel('Precipitation')
 
-    ax[2].plot(time_analysis, biomass_analysis, color='tab:blue')
-    ax[2].set_ylabel('Detrended Biomass')
+    ax[2].plot(time_var, data_var_fit, color='black', label=f'p-value: {p_value_var:.2e}')
+    ax[2].plot(time_var, data_var, color='tab:red', marker='o', markersize=5, ls='', markerfacecolor='none')
+    ax[2].set_ylabel(key + ' Variance')
+    ax[2].set_xlabel('Time')
+    
+    xlim = np.array(ax[2].get_xlim())
+    ylim = np.array(ax[2].get_ylim())
+    xOff = xlim.min() + (xlim.max() - xlim.min()) * 0.05
+    yOff = ylim.min() + (ylim.max() - ylim.min()) * 0.8
+    ax[2].errorbar(xOff, yOff, xerr=window_size, fmt='', color='black', ecolor='black', capsize=5, capthick=1.5)
+    ax[2].legend()
 
-    ax[3].plot(time_var, biomass_var_fit, color='black', label=f'p-value: {p_value_var:.2e}')
-    ax[3].plot(time_var, biomass_var, color='tab:red', marker='o', markersize=5, ls='', markerfacecolor='none')
-    ax[3].set_ylabel('Biomass Variance')
+    ax[3].plot(time_ac, data_ac_fit, color='black', label=f'p-value: {p_value_ac:.2e}')
+    ax[3].plot(time_ac, data_ac, color='tab:purple', marker='o', markersize=5, ls='', markerfacecolor='none')
+    ax[3].set_ylabel('Autocorrelation')
     ax[3].set_xlabel('Time')
-    # ax[3].set_ylim(1e-6, 3e-5)
     
     xlim = np.array(ax[3].get_xlim())
     ylim = np.array(ax[3].get_ylim())
     xOff = xlim.min() + (xlim.max() - xlim.min()) * 0.05
-    yOff = ylim.min() + (ylim.max() - ylim.min()) * 0.9
-    ax[3].errorbar(xOff, yOff, xerr=window_size, fmt='', color='black', ecolor='black', capsize=5, capthick=2)
+    yOff = ylim.min() + (ylim.max() - ylim.min()) * 0.8
+    ax[3].errorbar(xOff, yOff, xerr=window_size, fmt='', color='black', ecolor='black', capsize=5, capthick=1.5)
     ax[3].legend()
-
-    ax[4].plot(time_ac, biomass_ac_fit, color='black', label=f'p-value: {p_value_ac:.2e}')
-    ax[4].plot(time_ac, biomass_ac, color='tab:purple', marker='o', markersize=5, ls='', markerfacecolor='none')
-    ax[4].set_ylabel('Autocorrelation')
-    ax[4].set_xlabel('Time')
-    ax[4].legend()
     
     for a in ax:
         a.axvline(time_range[0], color='black', ls='--', alpha = 0.5)
         a.axvline(time_range[1], color='black', ls='--', alpha = 0.5)
     
-    plt.show()
+    sim_name = root.split('\\')[-1]
+    fig.suptitle(f'{key} Correlation {sim_name}')
+    
+    if save_fig:
+        fig_path = f'{root}/_{key.lower()}_correlation_{sim_name}.png'
+        fig.savefig(fig_path, dpi=600)
+plt.show()
     
