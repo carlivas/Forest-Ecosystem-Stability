@@ -160,13 +160,12 @@ def load_sim_data(
         if 't' not in biomass_buffer_df.iloc[0, :].values:
             biomass_buffer_df, note = rewrite_hist_buffer_data(
                 biomass_buffer_df)
-            save_permission = input(f"Biomass buffer data at '{load_folder}' with surfix '{
-                                    surfix}' needs rewriting. Do you want to rewrite and save it? (Y/n): ")
+            save_permission = input(f"Biomass buffer data at '{load_folder}' with surfix '{surfix}' needs rewriting. Do you want to rewrite and save it? (Y/n): ")
             if save_permission.lower() == 'y':
                 biomass_buffer_df.to_csv(
                     f'{load_folder}/biomass_buffer_{surfix}.csv', index=False, header=True)
                 with open(f'{load_folder}/biomass_buffer_{surfix}.csv', 'w') as file:
-                    file.write(f"# {note.replace('\n', '\n# ')}\n")
+                    # file.write(f"# {note.replace('\n', '\n# ')}\n")
                     biomass_buffer_df.to_csv(file, index=False)
 
         if biomass_buffer_df.iloc[0, 0] == 't':
@@ -183,8 +182,7 @@ def load_sim_data(
         if 't' not in density_field_buffer_df.iloc[0, :].values:
             density_field_buffer_df = rewrite_density_field_buffer_data(
                 density_field_buffer_df)
-            save_permission = input(f"Density field buffer data at '{load_folder}' with surfix '{
-                                    surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
+            save_permission = input(f"Density field buffer data at '{load_folder}' with surfix '{surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
             if save_permission.lower() == 'y':
                 density_field_buffer_df.to_csv(
                     f'{load_folder}/density_field_buffer_{surfix}.csv', index=False, header=True)
@@ -201,13 +199,12 @@ def load_sim_data(
             f'{load_folder}/size_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
         if 't' not in size_buffer_df.iloc[0, :].values:
             size_buffer_df, note = rewrite_hist_buffer_data(size_buffer_df)
-            save_permission = input(f"Size buffer data at '{load_folder}' with surfix '{
-                                    surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
+            save_permission = input(f"Size buffer data at '{load_folder}' with surfix '{surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
             if save_permission.lower() == 'y':
                 size_buffer_df.to_csv(
                     f'{load_folder}/size_buffer_{surfix}.csv', index=False, header=True)
                 with open(f'{load_folder}/size_buffer_{surfix}.csv', 'w') as file:
-                    file.write(f"# {note.replace('\n', '\n# ')}\n")
+                    # file.write(f"# {note.replace('\n', '\n# ')}\n")
                     size_buffer_df.to_csv(file, index=False)
         if size_buffer_df.iloc[0, 0] == 't':
             size_buffer_df = pd.read_csv(
@@ -218,8 +215,7 @@ def load_sim_data(
             f'{load_folder}/state_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
         if 'id' != state_buffer_df.iloc[0, 0]:
             state_buffer_df = rewrite_state_buffer_data(state_buffer_df)
-            save_permission = input(f"State buffer data at '{load_folder}' with surfix '{
-                                    surfix}' is missing 'id'. Do you want to rewrite and save it? (Y/n): ")
+            save_permission = input(f"State buffer data at '{load_folder}' with surfix '{surfix}' is missing 'id'. Do you want to rewrite and save it? (Y/n): ")
             if save_permission.lower() == 'y':
                 state_buffer_df.to_csv(
                     f'{load_folder}/state_buffer_{surfix}.csv', index=False, header=True)
@@ -305,8 +301,7 @@ class Simulation:
         kwargs_path = f'{folder}/kwargs_{alias}.json'
         data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
         state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
-        density_field_buffer_path = f'{
-            folder}/density_field_buffer_{alias}.csv'
+        density_field_buffer_path = f'{folder}/density_field_buffer_{alias}.csv'
 
         if override and os.path.exists(folder):
             do_override = input(
@@ -436,8 +431,7 @@ class Simulation:
 
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
-        print(f'Simulation.run(): Running simulation for {
-              n_iter} iterations...')
+        print(f'Simulation.run(): Running simulation for {n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
                 if _ > transient_period:
@@ -465,7 +459,7 @@ class Simulation:
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}  |  c = {np.round(convergence_factor, 8):<10}', end='\r')
+                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 8):<10}', end='\r')
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
                 if (max_population is not None and l > max_population):
@@ -497,8 +491,7 @@ class Simulation:
         self.alias = alias
         data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
         state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
-        density_field_buffer_path = f'{
-            folder}/density_field_buffer_{alias}.csv'
+        density_field_buffer_path = f'{folder}/density_field_buffer_{alias}.csv'
         if override and os.path.exists(data_buffer_path):
             do_override = input(
                 f'Simulation.set_path(): OVERRIDE existing files in folder {folder} with alias {alias}? (Y/n):')
@@ -820,14 +813,21 @@ class Simulation:
         self.density_field = None
 
     def plot_buffers(self, title=None, convergence=True, n_plots=20, fast=False):
-        self.data_buffer.plot(title=title)
-        self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
-        self.density_field_buffer.plot(title=title, n_plots=n_plots)
+        db_fig, db_ax = self.data_buffer.plot(title=title)
+        sb_fig, sb_ax = self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
+        dfb_fig, dfb_ax = self.density_field_buffer.plot(title=title, n_plots=n_plots)
+        figs = [db_fig, sb_fig, dfb_fig]
+        axs = [db_ax, sb_ax, dfb_ax]
+        return figs, axs
 
     def plot(self):
         state = pd.DataFrame([[p.id, p.x, p.y, p.r, self.t]
                              for p in self.plants], columns=['id', 'x', 'y', 'r', 't'])
         field = self.density_field.values
 
-        StateBuffer.plot_state(size=6, state=state)
-        FieldBuffer.plot_field(size=6, field=field)
+        sb_fig, sb_ax = StateBuffer.plot_state(size=6, state=state)
+        fb_fig, fb_ax = FieldBuffer.plot_field(size=6, field=field)
+
+        figs = [sb_fig, fb_fig]
+        axs = [sb_ax, fb_ax]
+        return figs, axs

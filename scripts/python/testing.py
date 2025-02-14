@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import os
 import time
 import os
 
@@ -20,8 +21,8 @@ kwargs = {
     'seed': seed,
 }
 
-surfix = str(seed)
-folder = f'../../Data/starting_contenders'
+surfix = 'partial'+str(seed)
+folder = f'../../Data/starting_contenders/partial'
 
 dp = -kwargs['precipitation']*1/T
 
@@ -32,7 +33,7 @@ sim.run(T=T, delta_p = dp)
 figs, axs = sim.plot_buffers()
 os.makedirs(folder + '/figures', exist_ok=True)
 for i, fig in enumerate(figs):
-    fig.savefig(f'{folder}/figures/fig_{seed}_{i}.png', dpi=600)
+    fig.savefig(f'{folder}/figures/{surfix}_fig{i}.png', dpi=600)
 # plt.show()
 
 

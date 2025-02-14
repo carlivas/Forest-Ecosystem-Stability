@@ -3,18 +3,23 @@ import matplotlib.pyplot as plt
 
 from mods.simulation import Simulation
 
-folder = 'Data/temp/load_save_test'
-surfix = '0'
+folder = '../../Data/starting_contenders/partial48775395' # REMEBER TO SET THE FOLDER
+surfix = '12' #REMEMBER TO CHECK ONLY KWARGS NUMBERS AS THERE MIGHT BE PREMATURELY STOPPED VALUES IN BUFFERS
+seed = folder.split('/')[-1]
+alias = seed + '-' + surfix
 
-T = 600
-sim = Simulation(folder=folder, alias=surfix)
-sim.run(T=T)
+sim = Simulation(folder=folder, alias=alias)
 
-for i in range(10):
-    new_surfix = str(int(surfix) + i + 1)
-    sim.set_path(folder, new_surfix)
+T = 100_000
+for i in range(int(surfix), 1000):
+    new_surfix = str(i + 1)
+    new_alias = seed + '-' + new_surfix
+    print(f'{new_surfix = }, {new_alias = }')
+    sim.set_path(folder, new_alias)
     sim.precipitation = sim.precipitation - 1e-4
     print(f'precipitation = {sim.precipitation}')
     sim.run(T=T)
+    if len(sim.plants) < 3:
+        break
 
-plt.show()
+# plt.show()

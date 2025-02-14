@@ -14,7 +14,7 @@ darkgrey = np.array([30,  30,  30, 255])/255
 grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
-path = 'D:/'
+path = 'D:/695774818_finished'
 save_plot = True
 
 if not os.path.exists(path):
