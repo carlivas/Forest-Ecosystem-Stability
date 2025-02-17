@@ -1,7 +1,4 @@
 import numpy as np
-import pandas as pd
-import os
-import time
 import os
 
 from mods.simulation import Simulation
@@ -30,13 +27,11 @@ sim = Simulation(folder=folder, alias=surfix, **kwargs, override=True)
 sim.initiate_uniform_radii(n=num_plants, r_min=sim.r_min/sim._m, r_max=sim.r_max/sim._m)
 sim.run(T=T, delta_p = dp)
 
-figs, axs = sim.plot_buffers()
+figs, axs, titles = sim.plot_buffers()
 os.makedirs(folder + '/figures', exist_ok=True)
-for i, fig in enumerate(figs):
-    fig.savefig(f'{folder}/figures/{surfix}_fig{i}.png', dpi=600)
+for i, (fig, title) in enumerate(zip(figs, titles)):
+    fig.savefig(f'{folder}/figures/_{title}.png', dpi=600)
 # plt.show()
-
-
 
 #### THINK ABOUT THIS
 # field = pd.DataFrame([[x, y, d] for (x, y), d in zip(self.density_field.positions, self.density_field.values)], columns=['x', 'y', 'd'])

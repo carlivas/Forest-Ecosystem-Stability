@@ -4,6 +4,7 @@ import time
 import warnings
 import os
 from typing import *
+import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -282,7 +283,7 @@ def sim_from_data(sim_data, times_to_load='last'):
     return sim
 
 
-path_kwargs = '../../default_kwargs.json'
+path_kwargs = 'default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -312,7 +313,10 @@ class Simulation:
                 for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
                     if os.path.exists(path):
                         os.remove(path)
+                if os.path.exists(figure_folder):
+                    shutil.rmtree(figure_folder)
 
+        os.makedirs(folder + '/figures', exist_ok=True)
         if os.path.exists(kwargs_path):
             print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
             with open(kwargs_path, 'r') as file:
@@ -438,6 +442,15 @@ class Simulation:
                     self.precipitation = max(0, self.precipitation + delta_p)
                 self.step()
                 is_converged, convergence_factor = self.convergence_check()[:2]
+                
+                if self.t == 1 or self.t % 100 == 0:
+                    figs, axs, titles = self.plot()
+                    for i, (fig, title) in enumerate(zip(figs, titles)):
+                        if fig is not None:
+                            if 'buffer' not in title.lower():
+                                title = title + f'_t{self.t}'
+                            fig.savefig(f'{self.folder}/figures/{title}.png', dpi=300)
+                            plt.close(fig)
 
                 if self.verbose:
                     elapsed_time = time.time() - start_time
@@ -454,8 +467,8 @@ class Simulation:
                         dots = '...'
 
                     data = self.collect_data()
-                    t, biomass, population = data[[
-                        'Time', 'Biomass', 'Population']].values.reshape(-1)
+                    t, biomass, population, precipitation = data[[
+                        'Time', 'Biomass', 'Population', 'Precipitation']].values.reshape(-1)
                     t = float(round(t, 2))
 
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
@@ -496,9 +509,11 @@ class Simulation:
             do_override = input(
                 f'Simulation.set_path(): OVERRIDE existing files in folder {folder} with alias {alias}? (Y/n):')
             if do_override.lower() != 'y':
-                for path in [data_buffer_path, state_buffer_path, density_field_buffer_path]:
+                for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
                     if os.path.exists(path):
-                        os.remove(path)       
+                        os.remove(path)
+                if os.path.exists(figure_folder):
+                    shutil.rmtree(figure_folder)
                 else:
                     raise ValueError('Simulation.set_path(): Aborted by user...')             
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
