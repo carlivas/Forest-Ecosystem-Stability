@@ -431,14 +431,14 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.values, t=self.t)
 
-    def run(self, T, max_population=None, transient_period=2, delta_p=0):
+    def run(self, T, max_population=None, transient_period=2, delta_p=0, convergence_stop=False):
 
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
         print(f'Simulation.run(): Running simulation for {n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
-                if _ > transient_period:
+                if convergence_stop and (_ > transient_period):
                     self.precipitation = max(0, self.precipitation + delta_p)
                 self.step()
                 is_converged, convergence_factor = self.convergence_check()[:2]
