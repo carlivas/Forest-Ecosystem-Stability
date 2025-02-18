@@ -149,10 +149,15 @@ class DataBuffer:
                 f'DataBuffer.plot(): Keys {keys} not found in {self.columns}.')
 
 
+        if isinstance(size, (tuple, list, np.ndarray)):
+            figsize = size
+        else:
+            figsize = (size, size * len(keys) / 3)
+        
         # Create the figure and axes
         fig, ax = plt.subplots(
             len(keys), 1,
-            figsize=(size, size * len(keys) / 3),
+            figsize=figsize,
             sharex=True)
         
         fig.suptitle(title, fontsize=10)
@@ -354,8 +359,13 @@ class StateBuffer:
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
 
+        if isinstance(size, (tuple, list, np.ndarray)):
+            figsize = size
+        else:
+            figsize = (size*n_cols, size*n_rows)
+        
         fig, ax = plt.subplots(
-            n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
+            n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
         fig.suptitle(title, fontsize=8)
         if isinstance(ax, plt.Axes):
@@ -525,8 +535,12 @@ class FieldBuffer:
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
 
-        fig, ax = plt.subplots(n_rows, n_cols, figsize=(
-            size * n_cols, size * n_rows))
+        if isinstance(size, (tuple, list, np.ndarray)):
+            figsize = size
+        else:
+            figsize = (size * n_cols, size * n_rows)
+
+        fig, ax = plt.subplots(n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
         fig.suptitle(title, fontsize=8)
         if isinstance(ax, plt.Axes):

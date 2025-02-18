@@ -283,7 +283,7 @@ def sim_from_data(sim_data, times_to_load='last'):
     return sim
 
 
-path_kwargs = 'default_kwargs.json'
+path_kwargs = '../../default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -438,20 +438,11 @@ class Simulation:
         print(f'Simulation.run(): Running simulation for {n_iter} iterations...')
         try:
             for _ in range(0, n_iter):
-                if convergence_stop and (_ > transient_period):
+                if _ > transient_period:
                     self.precipitation = max(0, self.precipitation + delta_p)
                 self.step()
                 is_converged, convergence_factor = self.convergence_check()[:2]
                 
-                if self.t == 1 or self.t % 100 == 0:
-                    figs, axs, titles = self.plot()
-                    for i, (fig, title) in enumerate(zip(figs, titles)):
-                        if fig is not None:
-                            if 'buffer' not in title.lower():
-                                title = title + f'_t{self.t}'
-                            fig.savefig(f'{self.folder}/figures/{title}.png', dpi=300)
-                            plt.close(fig)
-
                 if self.verbose:
                     elapsed_time = time.time() - start_time
                     hours, rem = divmod(elapsed_time, 3600)
@@ -479,7 +470,7 @@ class Simulation:
                     print(
                         f'\nSimulation.run(): Population exceeded {max_population}. Stopping simulation...')
                     break
-                elif is_converged:
+                elif convergence_stop and is_converged:
                     print(
                         f'\nSimulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
                     break

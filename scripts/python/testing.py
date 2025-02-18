@@ -6,7 +6,7 @@ from mods.simulation import Simulation
 save_results = True
 plot_results = True
 
-T = 100_000
+T = 30_000
 
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)

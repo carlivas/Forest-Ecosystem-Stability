@@ -30,8 +30,8 @@ def calculate_fit_and_p_value(fit_func, x, y):
     
     return y_fit, p_value
 
-folder = 'D:/'
-key = 'Population'
+folder = '../../Data/linear_precipitation/L500'
+key = 'Biomass'
 save_fig = True
 
 if not os.path.exists(folder):
@@ -43,7 +43,7 @@ print(f'load_folder: {load_folder}')
 for root, dirs, files in os.walk(load_folder):
     surfixes = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
     surfixes = [s for s in surfixes if 'checkpoint' not in s]
-    surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
+    # surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
     if not surfixes:
         continue
     print(f'surfixes: {surfixes}')
@@ -60,28 +60,22 @@ for root, dirs, files in os.walk(load_folder):
     
     time = pd.concat([data_buffer['Time'] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
     data = pd.concat([data_buffer[key] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
-    precipitation = pd.concat([pd.DataFrame(kwargs['precipitation'] * np.ones_like(data_buffer['Time'])) for kwargs, data_buffer in zip(kwargs_list, data_buffer_list)], axis=0).reset_index(drop=True)
+    precipitation = pd.concat([data_buffer['Precipitation'] for data_buffer in data_buffer_list], axis=0).reset_index(drop=True)
     time_prec = precipitation.index
-    
-    if root.split('\\')[-1] == '695774818_finished':
-        time_range = (20_000, 234_000)
-    elif root.split('\\')[-1] == '774322652_finished':
-        time_range = (20_000, 265_000)
-    elif root.split('\\')[-1] == 'partial48775395':
-        time_range = (60_000, 142_000)
-    
+
+    time_range = (1000, 27500)
     time_slice = slice(*time_range)
     
-    window_size = 25000
-    step = 5000
+    window_size = 1000
+    step = window_size//2
     
     data_analysis = data.iloc[time_slice].dropna()
     
-    # # Detrend biomass data
+    # # Detrend data
     # data_analysis = data_analysis - data_analysis.rolling(window=window_size, center=True).mean()
     
     time_analysis = time.iloc[data_analysis.index]
-
+    
     data_var = data_analysis.rolling(window=window_size, step=step, center=True).var().dropna()
     time_var = time.iloc[data_var.index]
     data_var_fit, p_value_var = calculate_fit_and_p_value(lin_func, time_var, data_var)
@@ -92,7 +86,8 @@ for root, dirs, files in os.walk(load_folder):
 
 
 
-    fig, ax = plt.subplots(4, 1, figsize=(8, 9), sharex=True)
+    fig, ax = plt.subplots(2, 2, figsize=(12, 4), sharex=True)
+    ax = ax.T.flatten()
     ax[0].plot(time, data, color='tab:blue')
     ax[0].set_ylabel(key)
 
@@ -126,12 +121,17 @@ for root, dirs, files in os.walk(load_folder):
     for a in ax:
         a.axvline(time_range[0], color='black', ls='--', alpha = 0.5)
         a.axvline(time_range[1], color='black', ls='--', alpha = 0.5)
+
+    sim_name = root.split('/')[-1]
     
-    sim_name = root.split('\\')[-1]
+    if len(surfixes) == 1:
+        sim_name += '_' + surfixes[0]
+        
     fig.suptitle(f'{key} Correlation {sim_name}')
+    fig.tight_layout()
     
     if save_fig:
-        fig_path = f'{root}/_{key.lower()}_correlation_{sim_name}.png'
+        fig_path = f'{root}/figures/_{key.lower()}_correlation_{sim_name}.png'
         fig.savefig(fig_path, dpi=600)
 plt.show()
     

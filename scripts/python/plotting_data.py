@@ -37,15 +37,20 @@ for root, dirs, files in os.walk(load_folder):
     max_num_plants = 0
     kwargs_list = []
     data_buffer_list = []
+    new_aliases = []
     for i, n in enumerate(aliases):
         kwargs = pd.read_json(
             f'{root}/kwargs_{n}.json', typ='series').to_dict()
         data_buffer = pd.read_csv(f'{root}/data_buffer_{n}.csv')
+        if data_buffer.empty:
+            continue
         data_buffer_list.append(data_buffer)
         kwargs_list.append(kwargs)
         num_plants = data_buffer['Population'].iloc[0]
         max_num_plants = max(max_num_plants, num_plants)
+        new_aliases.append(n)
 
+    aliases = new_aliases
     fig, ax = plt.subplots(2, 1, figsize=(8, 6))
 
     teal = np.array([0, 128, 128, 255])/255
