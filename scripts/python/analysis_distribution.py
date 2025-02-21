@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit
 def power_law(x, a, b):
     return a * x ** b
 
-folder = 'Data/small_domain/small_test1000' # Path to the folder containing the buffers
+folder = 'Data/starting_point_parameter_shift/L1000_shifted' # Path to the folder containing the buffers
 save_fig = True
 
 if not os.path.exists(folder):

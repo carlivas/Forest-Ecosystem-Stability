@@ -4,7 +4,7 @@ import copy
 
 
 class Plant:
-    def __init__(self, id, x, y, r, r_min, r_max, growth_rate, dispersal_range, **kwargs):
+    def __init__(self, id, x, y, r, r_min, r_max, growth_rate, dispersal_range, maturity_size, **kwargs):
         self.id = id
         self.x = x
         self.y = y
@@ -17,6 +17,7 @@ class Plant:
         self.r_max = r_max
         self.growth_rate = growth_rate
 
+        self.maturity_size = maturity_size
         self.species_germination_chance = 1
         self.dispersal_range = dispersal_range
 
@@ -69,7 +70,9 @@ class Plant:
                             r_min=self.r_min,
                             r_max=self.r_max,
                             growth_rate=self.growth_rate,
-                            dispersal_range=self.dispersal_range
+                            species_germination_chance=self.species_germination_chance,
+                            dispersal_range=self.dispersal_range,
+                            maturity_size=self.maturity_size,
                         )
                     )
         sim.add(new_plants)
@@ -87,16 +90,10 @@ class Plant:
             else:
                 other_plant.die()
 
-    def resolve_collisions(self, collisions):
-        for other_plant in collisions:
-            self.compete(other_plant)
-
     def update(self, sim):
         self.grow()
-
-        collisions = sim.get_collisions(self)
-        self.resolve_collisions(collisions)
-        self.disperse(sim)
+        if self.r >= self.maturity_size:
+            self.disperse(sim)
         self.mortality()
         return
 

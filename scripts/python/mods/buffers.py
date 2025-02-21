@@ -85,7 +85,7 @@ class DataBuffer:
             self.columns = list(pd.read_csv(self.file_path).keys())
         else:
             self.columns = ['Time', 'Biomass', 'Population', 'Precipitation']
-            self._initialize_file()
+            # self._initialize_file()
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -124,7 +124,8 @@ class DataBuffer:
             self.buffer, columns=self.columns, dtype=np.float64)
         print(
             f'\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-
+        if not os.path.exists(self.file_path):
+            self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
 
@@ -141,15 +142,16 @@ class DataBuffer:
             data = pd.read_csv(self.file_path)
         return data # returns an empty dataframe if the file does not exist
 
-    def plot(self, size=6, title='', keys=None, drop_first = True):
+    @staticmethod
+    def plot(data, size=6, title='', keys=None, drop_first = True):
         title = 'DataBuffer ' + title
 
         # Specify which keys need to be plotted
         if keys is None:
-            keys = [key for key in self.columns if key != 'Time']
-        elif not all(key in self.columns for key in keys):
+            keys = [key for key in data.columns if key != 'Time']
+        elif not all(key in data.columns for key in keys):
             raise ValueError(
-                f'DataBuffer.plot(): Keys {keys} not found in {self.columns}.')
+                f'DataBuffer.plot(): Keys {keys} not found in {data.columns}.')
 
 
         if isinstance(size, (tuple, list, np.ndarray)):
@@ -166,8 +168,7 @@ class DataBuffer:
         fig.suptitle(title, fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
         
-        data = self.get_data()
-        if len(data) < 2:
+        if len(data) == 0:
             print(
                 f'DataBuffer.plot(): Not enough data to plot ({len(data)=}).')
             return fig, ax, title
@@ -188,15 +189,13 @@ class DataBuffer:
             y_max = np.nanmax(y_data)
             if y_max != 0:
                 ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
-            ax[i].grid()
-            ax[i].legend()
         ax[-1].set_xlabel('Time')
 
         for ax_i in ax:
             ax_i.grid()
             ax_i.legend()
         
-        title = title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
+        title = title
         return fig, ax, title
 
 
@@ -210,6 +209,8 @@ class StateBuffer:
         if os.path.exists(self.file_path):
             print(
                 f'StateBuffer.__init__(): StateBuffer succesfully conected to already existing file {self.file_path}.')
+        # else:
+        #     self._initialize_file()
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -252,7 +253,8 @@ class StateBuffer:
             self.buffer, columns=self.columns, dtype=np.float64)
         print(
             f'\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-
+        if not os.path.exists(self.file_path):
+            self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
@@ -331,7 +333,7 @@ class StateBuffer:
     def plot_state(state, size=2, fig=None, ax=None, title='', half_width=0.5, half_height=0.5, fast=False):
         if state.empty:
             print('StateBuffer.plot_state(): No data to plot.')
-            return fig, ax, title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
+            return fig, ax, title
         
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -358,7 +360,7 @@ class StateBuffer:
         ax.set_xticks([])
         ax.set_yticks([])
         
-        title = title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
+        title = title
         return fig, ax, title
 
     @staticmethod
@@ -399,7 +401,7 @@ class StateBuffer:
             state = data[data['t'] == times[i]]
             StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast)
             
-        title = title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
+        title = title
         return fig, ax, title
 
     @staticmethod
@@ -409,30 +411,30 @@ class StateBuffer:
         states = [data[data['t'] == t] for t in times]
         time_step = times[1] - times[0]
         T = len(times)
-        print(f'StateBuffer.animate(): {T=}')
 
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
         fig.suptitle(title, fontsize=15)
         fig.tight_layout()
-
-        ax.set_xlim(-0.5, 0.5)
-        ax.set_ylim(-0.5, 0.5)
-        ax.set_aspect('equal', 'box')
-        ax.set_xticks([])
-        ax.set_yticks([])
-
+        
         circles = [plt.Circle((x, y), r, color='green',
                               fill=not fast) for x, y, r in states[0][['x', 'y', 'r']].values]
-        for circle in circles:
-            ax.add_artist(circle)
-
+        
         def animate_func(i):
+            ax.clear()
+            ax.set_xlim(-0.5, 0.5)
+            ax.set_ylim(-0.5, 0.5)
+            ax.set_aspect('equal', 'box')
+            ax.set_xticks([])
+            ax.set_yticks([])
+                
             t = float(round(times[i], 2))
             ax.set_xlabel(f'{t=}', fontsize=12)
-            for circle, (x, y, r) in zip(circles, states[i][['x', 'y', 'r']].values):
-                circle.center = (x, y)
-                circle.radius = r
-            print(f'StateBuffer.animate(): {i = }/{len(times)} ({i/len(times)*100:.2f}%)', end='\r')
+            
+            circles = [plt.Circle((x, y), r, color='green',
+                              fill=not fast) for x, y, r in states[i][['x', 'y', 'r']].values]
+            for circle in circles:
+                ax.add_artist(circle)
+            print(f'StateBuffer.animate(): i = {i + 1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
             return ax
 
         ani = animation.FuncAnimation(
@@ -452,8 +454,8 @@ class FieldBuffer:
         if os.path.exists(self.file_path):
             print(
                 f'FieldBuffer.__init__(): Loading data from already existing file {self.file_path}.')
-        else:
-            self._initialize_file()
+        # else:
+        #     self._initialize_file()
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -490,7 +492,10 @@ class FieldBuffer:
         new_rows = pd.DataFrame(self.buffer, columns=self.columns)
         print(
             f'\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-
+        
+        if not os.path.exists(self.file_path):
+            self._initialize_file()
+            
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
         self.buffer = pd.DataFrame(columns=self.columns)
@@ -528,7 +533,7 @@ class FieldBuffer:
         data.to_csv(path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_field(field, t=None, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+    def plot_field(field, t=None, size=2, title = '', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         ax.contour(field, levels=[1.0], colors=[
@@ -540,11 +545,11 @@ class FieldBuffer:
             ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
         ax.set_xticks([])
         ax.set_yticks([])
-        return fig, ax
+        return fig, ax, title
 
-    def plot(self, size=2, n_plots=20, vmin=0, vmax=None, title='', extent=[-0.5, 0.5, -0.5, 0.5]):
+    @staticmethod
+    def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', extent=[-0.5, 0.5, -0.5, 0.5]):
         title = 'FieldBuffer ' + title
-        data = self.get_data()
         if data.empty:
             print('FieldBuffer.plot(): No data to plot.')
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -553,8 +558,9 @@ class FieldBuffer:
         b = np.linspace(times_unique.min(), times_unique.max(),
                         min(len(times_unique), n_plots))
         times = np.unique([times_unique[np.abs(times_unique - t).argmin()] for t in b])
+        resolution = int(np.sqrt(data.shape[1] - 1))
         fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(
-            self.resolution, self.resolution) for t in times])
+            resolution, resolution) for t in times])
         if vmax is None:
             vmax = np.nanmax(fields)
         T = len(times)
@@ -577,11 +583,9 @@ class FieldBuffer:
                 continue
             field = fields[i]
             t = times[i]
-            # plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, extent=extent)
-            self.plot_field(field=field, t=t, size=size, ax=a,
-                            vmin=vmin, vmax=vmax, extent=extent)
+            FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, extent=extent)
         
-        title = title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
+        title = title
         return fig, ax, title
 
     def animate(self, size=6, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
@@ -687,17 +691,17 @@ class HistogramBuffer:
         self.end = self.bin_vals[-1]
         self.length = self.values.shape[0]
 
-    def plot(self, size=2, t=None, nplots=20, title='', density=False, xscale=1, xlabel='', ylabel='frequency'):
+    @staticmethod
+    def plot(data, size=2, t=None, nplots=20, title='', density=False, xscale=1, xlabel='', ylabel='frequency'):
         title = 'HistogramBuffer ' + title
-        values = self.get_values()
         start = self.start * xscale
         end = self.end * xscale
         xx = np.linspace(start, end, self.bins)
         if density:
-            values = values / \
-                np.sum(values, axis=1)[:, np.newaxis]
+            data = data / \
+                np.sum(data, axis=1)[:, np.newaxis]
             ylabel = 'density'
-        ymax = np.nanmax(values)
+        ymax = np.nanmax(data)
         if title is None:
             title = self.title
         if t is None:
@@ -722,7 +726,7 @@ class HistogramBuffer:
             idx = ii[i]
             t = tt[idx]
 
-            ax_i.bar(xx, values[idx], width=(
+            ax_i.bar(xx, data[idx], width=(
                 end - start) / self.bins, color='black', alpha=0.5)
 
             xticks = (xx[0], xx[-1])
