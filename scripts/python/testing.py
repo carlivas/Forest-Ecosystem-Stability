@@ -7,17 +7,18 @@ from mods.simulation import Simulation
 save_results = True
 plot_results = True
 
-T = 50_00
+T = 5_000
 
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 500,
+    'L': 1000,
     'T': T,
     'precipitation': 0.5,
     'seed': seed,
-    'r_min': 0.1,
-    'r_max': 30,
+    'r_min': 1,
+    'r_max': 10,
+    'dispersal_range': 200,
 }
 num_plants = int(2/3 * kwargs['L'])
 
