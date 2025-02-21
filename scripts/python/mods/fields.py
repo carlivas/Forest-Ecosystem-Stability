@@ -50,6 +50,14 @@ def getDensity(r, pos, m, hSq, dist_max=np.inf):
 
     return rho.reshape((M, 1))
 
+def boundary_check(pos, r, xlim=(-0.5, 0.5), ylim=(-0.5, 0.5)):
+    is_close_left_boundary = pos[0] - r < xlim[0]
+    is_close_right_boundary = pos[0] + r > xlim[1]
+    is_close_bottom_boundary = pos[1] - r < ylim[0]
+    is_close_top_boundary = pos[1] + r > ylim[1]
+    is_close_boundary = np.array([is_close_left_boundary, is_close_right_boundary, is_close_bottom_boundary, is_close_top_boundary])
+    return is_close_boundary
+
 class DensityFieldSPH:
     def __init__(self, half_width, half_height, density_radius, resolution):
         print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
@@ -95,6 +103,75 @@ class DensityFieldSPH:
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         im = ax.imshow(self.get_values(), origin='lower', cmap='Greys',
+                       vmin=vmin, vmax=vmax, extent=extent)
+        ax.set_title(title, fontsize=7)
+        if colorbar:
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            cbar = plt.colorbar(im, cax=cax)
+            cbar.set_label('Density')
+        # ax.set_xticks([])
+        # ax.set_yticks([])
+        return fig, ax
+
+    def get_values(self):
+        return copy.deepcopy(self.values)
+
+
+class DensityFieldCustom:
+    def __init__(self, half_width, half_height, query_radius_factor, bandwidth_factor, resolution):
+        print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
+
+        dx = 1 / resolution
+        dy = 1 / resolution
+        xx = np.linspace(-half_width + dx/2,
+                         half_width - dx/2, resolution)
+        yy = np.linspace(-half_height + dy/2,
+                         half_height - dy/2, resolution)
+        X, Y = np.meshgrid(xx, yy)
+
+        self.grid_points = np.vstack([X.ravel(), Y.ravel()]).T
+        self.values = np.zeros(self.grid_points.shape[0])
+        self.KDTree_grid = KDTree(self.grid_points)
+        self.resolution = resolution
+        self.query_radius_factor = query_radius_factor
+        self.bandwidth_factor = bandwidth_factor
+
+    def query(self, pos):
+        # Find the nearest neighbors using KDTree
+        dist, idx = self.KDTree_grid.query(pos)
+        return self.values[idx]
+
+    def update(self, plants):
+        if len(plants) == 0:
+            return
+        
+        positions = np.array([(plant.x, plant.y) for plant in plants])
+        radii = np.array([plant.r for plant in plants])
+        radiiSq = radii**2
+        areas = np.pi * radiiSq
+        
+        self.values = np.zeros(self.grid_points.shape[0])
+        # for each plant, calculate its contribution to the density field based on its radius, it's area and the gaussian distribution
+        for i, p in enumerate(positions):
+            sigmaSq = self.bandwidth_factor**2 * radiiSq[i]
+            query_radius = self.query_radius_factor * self.bandwidth_factor * radii[i]
+            is_close_boundary = boundary_check(p, query_radius)
+            
+            # Apply periodic boundary conditions
+            shifts = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
+            pos_shifted = [p + shift for shift in shifts[is_close_boundary]]
+                
+            for point in [p] + pos_shifted:
+                for idx in self.KDTree_grid.query_ball_point(point, r=query_radius):
+                    distSq = np.sum((point - self.grid_points[idx])**2)
+                    self.values[idx] += areas[i] * np.exp(-distSq / (2 * sigmaSq)) / (2 * np.pi * sigmaSq)    
+        
+
+    def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(size, size))
+        im = ax.imshow(self.get_values().reshape(self.resolution, self.resolution), origin='lower', cmap='Greys',
                        vmin=vmin, vmax=vmax, extent=extent)
         ax.set_title(title, fontsize=7)
         if colorbar:

@@ -534,6 +534,8 @@ class FieldBuffer:
 
     @staticmethod
     def plot_field(field, t=None, size=2, title = '', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+        resolution = np.sqrt(field.size).astype(int)
+        field = field.reshape(resolution, resolution)
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
         ax.contour(field, levels=[1.0], colors=[

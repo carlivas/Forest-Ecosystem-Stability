@@ -15,18 +15,9 @@ from scipy.stats import gaussian_kde
 from mods.buffers import (DataBuffer, FieldBuffer, HistogramBuffer, StateBuffer,
                           rewrite_density_field_buffer_data,
                           rewrite_hist_buffer_data, rewrite_state_buffer_data)
-from mods.fields import DensityFieldSPH as DensityField
+from mods.fields import DensityFieldSPH, DensityFieldCustom
 from mods.plant import Plant
 from mods.utilities import print_nested_dict, save_kwargs, convert_to_serializable, linear_regression, dbh_to_crown_radius
-
-
-def boundary_check(pos, r):
-    is_close_left_boundary = pos[0] - r < -0.5
-    is_close_right_boundary = pos[0] + r > 0.5
-    is_close_bottom_boundary = pos[1] - r < -0.5
-    is_close_top_boundary = pos[1] + r > 0.5
-    is_close_boundary = np.array([is_close_left_boundary, is_close_right_boundary, is_close_bottom_boundary, is_close_top_boundary])
-    return is_close_boundary
 
 
 modi_path_kwargs = '../../default_kwargs.json'
@@ -105,10 +96,17 @@ class Simulation:
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
         self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)
-        self.density_field = DensityField(
+        # self.density_field = DensityFieldSPH(
+        #     half_width=self.half_width,
+        #     half_height=self.half_height,
+        #     density_radius=self.density_check_radius,
+        #     resolution=self.density_field_resolution,
+        # )
+        self.density_field = DensityFieldCustom(
             half_width=self.half_width,
             half_height=self.half_height,
-            density_radius=self.density_check_radius,
+            bandwidth_factor=self.density_bandwidth_factor,
+            query_radius_factor=self.density_query_radius_factor,
             resolution=self.density_field_resolution,
         )
 

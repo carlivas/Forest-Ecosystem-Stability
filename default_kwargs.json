@@ -10,5 +10,8 @@
     "precipitation": -1,
     "spawn_rate": 1,
     "time_step": 1,
-    "verbose": true
+    "verbose": true,
+
+    "density_bandwidth_factor": 2,
+    "density_query_radius_factor": 3
 }
