@@ -51,7 +51,7 @@ def getDensity(r, pos, m, hSq, dist_max=np.inf):
     return rho.reshape((M, 1))
 
 class DensityFieldSPH:
-    def __init__(self, half_width, half_height, density_radius, resolution, state=None):
+    def __init__(self, half_width, half_height, density_radius, resolution):
         print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
 
         dx = 1 / resolution

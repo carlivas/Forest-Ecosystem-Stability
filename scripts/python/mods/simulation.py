@@ -283,7 +283,10 @@ def sim_from_data(sim_data, times_to_load='last'):
     return sim
 
 
-path_kwargs = '../../default_kwargs.json'
+modi_path_kwargs = '../../default_kwargs.json'
+local_path_kwargs = 'default_kwargs.json'
+path_kwargs = modi_path_kwargs if os.path.exists(modi_path_kwargs) else local_path_kwargs
+
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 

@@ -3,11 +3,13 @@ import os
 import matplotlib.pyplot as plt
 from mods.simulation import Simulation
 from mods.buffers import DataBuffer, StateBuffer
+print('\nplotting.py: Running...\n')
 
-show_figs = False
+do_plots = True
+do_animations = True
 save_figs = True
 
-path = '../../Data/linear_precipitation/L1000'
+path = 'Data/small_domain/small_test400' # Path to the folder containing the buffers
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
@@ -17,15 +19,21 @@ print(f'aliases: {aliases}')
 
 for alias in aliases:
     sim = Simulation(folder=load_folder, alias=alias)
-    db_fig, db_ax, db_title = sim.data_buffer.plot(size = (8, 7), keys = ['Biomass', 'Precipitation'])
-    db_ax[0].set_ylim(-0.05, 0.95)
-    sb_fig, sb_ax, sb_title = StateBuffer.plot(sim.state_buffer.get_data())
-    if save_figs:
-        db_save_path = load_folder + '/figures' + f'/_{db_title}_' + alias
-        db_fig.savefig(db_save_path, dpi = 600)
-        sb_save_path = load_folder + '/figures' + f'/_{sb_title}_' + alias
-        sb_fig.savefig(sb_save_path, dpi = 600)
-    if show_figs:
+    
+    if do_plots:
+        db_fig, db_ax, db_title = sim.data_buffer.plot(size = (5, 7), keys = ['Biomass', 'Population', 'Precipitation'], title=alias)
+        # sb_fig, sb_ax, sb_title = StateBuffer.plot(sim.state_buffer.get_data(), title=alias)
+        if save_figs:
+            db_save_path = f'{load_folder}/figures/data_buffer_{alias}.png'
+            db_fig.savefig(db_save_path, dpi = 600)
+            # sb_save_path = f'{load_folder}/figures/state_buffer_{alias}.png'
+            # sb_fig.savefig(sb_save_path, dpi = 600)
+            
+    if do_animations:
+        sb_anim, _ = StateBuffer.animate(sim.state_buffer.get_data(), skip = 5, title=alias)
+        if save_figs:
+            sb_anim.save(f'{load_folder}/figures/state_anim_{alias}.mp4', dpi = 600)
+    else:
         plt.show()
 
 print('plotting.py: Done.\n')

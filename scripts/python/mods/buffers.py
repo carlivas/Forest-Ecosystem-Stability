@@ -11,7 +11,10 @@ import json
 from mods.files import move_to_previous_line
 from mods.plant import Plant
 
-path_kwargs = '../../default_kwargs.json'
+modi_path_kwargs = '../../default_kwargs.json'
+local_path_kwargs = 'default_kwargs.json'
+path_kwargs = modi_path_kwargs if os.path.exists(modi_path_kwargs) else local_path_kwargs
+
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -132,14 +135,14 @@ class DataBuffer:
             self._flush_buffer()
 
     def get_data(self):
-        return pd.read_csv(self.file_path)
+        data = pd.DataFrame(columns=self.columns)
+        
+        if os.path.exists(self.file_path):
+            data = pd.read_csv(self.file_path)
+        return data # returns an empty dataframe if the file does not exist
 
-    def plot(self, size=6, title='DataBuffer', keys=None):
-        data = self.get_data()
-        if len(data) < 2:
-            print(
-                f'DataBuffer.plot(): Not enough data to plot ({len(data)=}).')
-            return None, None, ''
+    def plot(self, size=6, title='', keys=None, drop_first = True):
+        title = 'DataBuffer ' + title
 
         # Specify which keys need to be plotted
         if keys is None:
@@ -162,6 +165,14 @@ class DataBuffer:
         
         fig.suptitle(title, fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
+        
+        data = self.get_data()
+        if len(data) < 2:
+            print(
+                f'DataBuffer.plot(): Not enough data to plot ({len(data)=}).')
+            return fig, ax, title
+        if drop_first:
+            data = data.drop(0)
 
         cmap = ListedColormap(
             ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
@@ -172,8 +183,8 @@ class DataBuffer:
             x_data = data['Time']
             y_data = data[key]
 
-            ax[i].plot(x_data, y_data,
-                       label=key, color=cmap((i + 1) / len(keys)))
+            ax[i].plot(x_data, y_data, color=cmap((i + 1) / len(keys)))
+            ax[i].set_ylabel(key)
             y_max = np.nanmax(y_data)
             if y_max != 0:
                 ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
@@ -198,9 +209,7 @@ class StateBuffer:
         self.columns = ['id', 'x', 'y', 'r', 't']
         if os.path.exists(self.file_path):
             print(
-                f'StateBuffer.__init__(): StateBuffer conected to already existing file {self.file_path}.')
-        else:
-            self._initialize_file()
+                f'StateBuffer.__init__(): StateBuffer succesfully conected to already existing file {self.file_path}.')
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -253,14 +262,26 @@ class StateBuffer:
             self._flush_buffer()
 
     def get_data(self):
-        data = pd.read_csv(self.file_path)
-        if 'id' not in data.keys():
-            data = rewrite_state_buffer_data(data)
-            self.override_data(data)
-        return data
+        print(f'StateBuffer.get_data(): {self.columns=}')
+        data = pd.DataFrame(columns=self.columns)
+        
+        if os.path.exists(self.file_path):
+            print(f'StateBuffer.get_data(): Loading data from {self.file_path}.')
+            data = pd.read_csv(self.file_path)
+            if 'id' not in data.keys():
+                data = rewrite_state_buffer_data(data)
+                self.override_data(data)
+                print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
+
+        return data # returns an empty dataframe if the file does not exist
 
     def get_last_state(self):
         last_state_df = pd.DataFrame(columns=self.columns)
+        
+        # if the file does not exist, return an empty dataframe
+        if not os.path.exists(self.file_path):
+            return last_state_df
+        
         # Open the state buffer file in binary read mode
         with open(self.file_path, 'rb') as f:
 
@@ -307,7 +328,7 @@ class StateBuffer:
         data.to_csv(file_path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_state(state, size=2, fig=None, ax=None, title='State', half_width=0.5, half_height=0.5, fast=False):
+    def plot_state(state, size=2, fig=None, ax=None, title='', half_width=0.5, half_height=0.5, fast=False):
         if state.empty:
             print('StateBuffer.plot_state(): No data to plot.')
             return fig, ax, title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('=', '')
@@ -334,7 +355,6 @@ class StateBuffer:
             ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
             
 
-        ax.set_title(title, fontsize=8)
         ax.set_xticks([])
         ax.set_yticks([])
         
@@ -342,10 +362,12 @@ class StateBuffer:
         return fig, ax, title
 
     @staticmethod
-    def plot(data, size=2, title='StateBuffer', fast=False, n_plots=20):
+    def plot(data, size=2, title='', fast=False, n_plots=20):
+        title = 'StateBuffer ' + title
         if data.empty:
             print('StateBuffer.plot(): No data to plot.')
-            return
+            fig, ax = plt.subplots(1, 1, figsize=(size, size))
+            return fig, ax, title
         if fast:
             print(
                 'StateBuffer.plot(): Faster plotting is enabled, some elements might be missing in the plots.')
@@ -381,18 +403,16 @@ class StateBuffer:
         return fig, ax, title
 
     @staticmethod
-    def animate(data, size=6, title=None, fast=False):
-        print('StateBuffer.animation(): Animating StateBuffer...')
-        times = data['t'].unique()
+    def animate(data, size=6, title='', fast=False, skip=1):
+        print('StateBuffer.animate(): Animating StateBuffer...')
+        times = data['t'].unique()[::skip]
         states = [data[data['t'] == t] for t in times]
         time_step = times[1] - times[0]
         T = len(times)
-        print(f'StateBuffer.animation(): {T=}')
+        print(f'StateBuffer.animate(): {T=}')
 
-        if title is None:
-            title = 'StateBuffer Animation'
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        fig.suptitle(title, fontsize=10)
+        fig.suptitle(title, fontsize=15)
         fig.tight_layout()
 
         ax.set_xlim(-0.5, 0.5)
@@ -406,17 +426,18 @@ class StateBuffer:
         for circle in circles:
             ax.add_artist(circle)
 
-        def animate(i):
+        def animate_func(i):
             t = float(round(times[i], 2))
-            ax.set_title(f'{t=}', fontsize=8)
+            ax.set_xlabel(f'{t=}', fontsize=12)
             for circle, (x, y, r) in zip(circles, states[i][['x', 'y', 'r']].values):
                 circle.center = (x, y)
                 circle.radius = r
+            print(f'StateBuffer.animate(): {i = }/{len(times)} ({i/len(times)*100:.2f}%)', end='\r')
             return ax
 
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval=10 * time_step, repeat=True)
-        return ani
+            fig, animate_func, frames=T, interval=10 * time_step, repeat=True)
+        return ani, title
 
 
 class FieldBuffer:
@@ -479,11 +500,14 @@ class FieldBuffer:
             self._flush_buffer()
 
     def get_data(self):
-        data = pd.read_csv(self.file_path)
-        if 't' not in data.keys():
-            data = rewrite_density_field_buffer_data(data)
-            self.override_data(data)
-        return data
+        data = pd.DataFrame(columns=self.columns)
+        if os.path.exists(self.file_path):
+            data = pd.read_csv(self.file_path)
+            if 't' not in data.keys():
+                data = rewrite_density_field_buffer_data(data)
+                self.override_data(data)
+        
+        return data # returns an empty dataframe if the file does not exist
 
     def get_fields(self):
         data = self.get_data()
@@ -518,11 +542,13 @@ class FieldBuffer:
         ax.set_yticks([])
         return fig, ax
 
-    def plot(self, size=2, n_plots=20, vmin=0, vmax=None, title='FieldBuffer', extent=[-0.5, 0.5, -0.5, 0.5]):
+    def plot(self, size=2, n_plots=20, vmin=0, vmax=None, title='', extent=[-0.5, 0.5, -0.5, 0.5]):
+        title = 'FieldBuffer ' + title
         data = self.get_data()
         if data.empty:
             print('FieldBuffer.plot(): No data to plot.')
-            return None, None, ''
+            fig, ax = plt.subplots(1, 1, figsize=(size, size))
+            return fig, ax, title
         times_unique = data['t'].unique()
         b = np.linspace(times_unique.min(), times_unique.max(),
                         min(len(times_unique), n_plots))
@@ -661,7 +687,8 @@ class HistogramBuffer:
         self.end = self.bin_vals[-1]
         self.length = self.values.shape[0]
 
-    def plot(self, size=2, t=None, nplots=20, title=None, density=False, xscale=1, xlabel='', ylabel='frequency'):
+    def plot(self, size=2, t=None, nplots=20, title='', density=False, xscale=1, xlabel='', ylabel='frequency'):
+        title = 'HistogramBuffer ' + title
         values = self.get_values()
         start = self.start * xscale
         end = self.end * xscale

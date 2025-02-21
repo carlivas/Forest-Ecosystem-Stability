@@ -2,7 +2,7 @@
     "buffer_size": 20,
     "buffer_skip": 20,
     "density_check_radius": 100,
-    "density_field_resolution": 100,
+    "density_field_resolution": 50,
     "dispersal_range": 90,
     "growth_rate": 0.1,
     "r_max": 30,
