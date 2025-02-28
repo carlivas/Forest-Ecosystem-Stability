@@ -24,12 +24,12 @@ load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    surfixes = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
-    surfixes = [s for s in surfixes if 'checkpoint' not in s]
-    surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
-    if not surfixes:
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [s for s in aliases if 'checkpoint' not in s]
+    aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
+    if not aliases:
         continue
-    print(f'surfixes: {surfixes}')
+    print(f'aliases: {aliases}')
 
     biomass_ylim = 0
     precipitation_ylim = 0
@@ -38,18 +38,18 @@ for root, dirs, files in os.walk(load_folder):
     max_num_plants = 0
     kwargs_list = []
     data_buffer_list = []
-    for i, surfix in enumerate(surfixes):
+    for i, alias in enumerate(aliases):
         kwargs = pd.read_json(
-            f'{root}/kwargs_{surfix}.json', typ='series').to_dict()
-        data_buffer = pd.read_csv(f'{root}/data_buffer_{surfix}.csv')
+            f'{root}/kwargs-{alias}.json', typ='series').to_dict()
+        data_buffer = pd.read_csv(f'{root}/data_buffer-{alias}.csv')
         data_buffer_list.append(data_buffer)
         kwargs_list.append(kwargs)
 
     fig, ax = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
 
     max_time = 0
-    for i, surfix in enumerate(surfixes):
-        num = int(surfix.split('-')[-1])
+    for i, alias in enumerate(aliases):
+        num = int(alias.split('-')[-1])
         kwargs = kwargs_list[i]
         data_buffer_df = data_buffer_list[i]
         time = data_buffer_df['Time']
@@ -86,12 +86,12 @@ for root, dirs, files in os.walk(load_folder):
     subpath = root.split('Data/')[-1]
     fig.suptitle(f'{subpath}', color=white, fontsize=10)
 
-    surfix = root.split('\\')[-1]
+    alias = root.split('\\')[-1]
 
-    print(f'{surfix=}')
+    print(f'{alias=}')
 
     if save_plot:
-        save_path = f'{root}/_successive_{surfix}.png'
+        save_path = f'{root}/_successive-{alias}.png'
         print(f'Saving data plot in {save_path=}')
         plt.savefig(save_path, dpi=300)
 

@@ -71,17 +71,17 @@ def convert_to_serializable(obj):
         return val
     return val
 
-def save_kwargs(kwargs, path, exclude=None):
+def save_dict(d, path, exclude=None):
     if exclude is not None:
-        kwargs = {k: v for k, v in kwargs.items() if k not in exclude}
-    kwargs = dict(sorted(kwargs.items()))
+        d = {k: v for k, v in d.items() if k not in exclude}
+    d = dict(sorted(d.items()))
 
     if not path.endswith('.json'):
             path = path + '.json'
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w') as f:
-        serializable_kwargs = convert_to_serializable(kwargs)
-        json.dump(serializable_kwargs, f, indent=4)
+        serializable_dictionary = convert_to_serializable(d)
+        json.dump(serializable_dictionary, f, indent=4)
     print('Kwargs saved.')
 
 
@@ -107,17 +107,7 @@ def get_max_depth(d, level=1):
     return max(get_max_depth(value, level + 1) for value in d.values())
 
 
-def print_nested_dict(d, indent=0, exclude=None):
-    """
-    Recursively prints a nested dictionary with indentation.
-
-    Args:
-        d (dict): The dictionary to print.
-        indent (int, optional): The current level of indentation. Defaults to 0.
-
-    Returns:
-        None
-    """
+def print_dict(d, indent=0, exclude=None):
     if exclude is not None:
         d = {k: v for k, v in d.items() if k not in exclude
                 and not isinstance(v, type(lambda: None))}
@@ -132,13 +122,13 @@ def print_nested_dict(d, indent=0, exclude=None):
             print(' ' * indent + str(key) + ':', end=' ')
         if isinstance(value, dict):
             print()
-            print_nested_dict(value, indent + 4)
+            print_dict(value, indent + 4)
         else:
             if isinstance(value, float) and value.is_integer():
                 value = int(value)
             if isinstance(value, type(lambda: None)):
                 value = value.__name__
-            print(value)
+            print(f'{value}')
     time.sleep(0.5)
 
 
@@ -148,3 +138,12 @@ def scientific_notation_parser(float_str):
         return float(base) * 10**int(exponent)
     return float(float_str)
 
+
+def convert_dict(d, conversion_factors, reverse=False):
+        if reverse:
+            converted_dict = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
+                              for key, value in d.items()}
+        else:
+            converted_dict = {key: (value * conversion_factors[key] if key in conversion_factors.keys() else value)
+                              for key, value in d.items()}
+        return converted_dict

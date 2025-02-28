@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit
 def power_law(x, a, b):
     return a * x ** b
 
-folder = 'Data/starting_point_parameter_shift/L1000_shifted' # Path to the folder containing the buffers
+folder = 'Data/parameter_shift/L1000_shifted/maturity_size' # Path to the folder containing the buffers
 save_fig = True
 
 if not os.path.exists(folder):
@@ -21,16 +21,16 @@ load_folder = os.path.abspath(folder)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    surfixes = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
-    surfixes = [s for s in surfixes if 'checkpoint' not in s]
-    # surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
-    if not surfixes:
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [s for s in aliases if 'checkpoint' not in s]
+    # aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
+    if not aliases:
         continue
-    print(f'surfixes: {surfixes}')
+    print(f'aliases: {aliases}')
     
-    for i, surfix in enumerate(surfixes):
-        kwargs = pd.read_json(f'{root}/kwargs_{surfix}.json', typ='series').to_dict()
-        state_buffer = StateBuffer(file_path=f'{root}/state_buffer_{surfix}.csv')
+    for i, alias in enumerate(aliases):
+        kwargs = pd.read_json(f'{root}/kwargs-{alias}.json', typ='series').to_dict()
+        state_buffer = StateBuffer(file_path=f'{root}/state_buffer-{alias}.csv')
         state_buffer_df = state_buffer.get_data()
         
         skip = min(100, len(state_buffer_df['t'].unique()) // 100)
@@ -134,6 +134,6 @@ for root, dirs, files in os.walk(load_folder):
         
         ani_hist = FuncAnimation(fig, update_hist, frames=len(times), repeat=False, interval=timestep)
         if save_fig:
-            ani_hist.save(f'{root}/figures/size_dist_{surfix}.mp4', writer='ffmpeg')
+            ani_hist.save(f'{root}/figures/size_dist-{alias}.mp4', writer='ffmpeg')
         else:
             plt.show()

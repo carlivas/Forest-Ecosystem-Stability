@@ -19,7 +19,7 @@ def W(x, y, hSq):
     return w
 
 
-@njit
+@njit(parallel=True)
 def getPairwiseSeparations(ri, rj):
     M = ri.shape[0]
     N = rj.shape[0]
@@ -36,7 +36,7 @@ def getPairwiseSeparations(ri, rj):
 
 
 @njit(parallel=True)
-def getDensity(r, pos, m, hSq, dist_max=np.inf):
+def getDensity(r, pos, m, hSq):
     M = r.shape[0]
     N = pos.shape[0]
 
@@ -45,21 +45,23 @@ def getDensity(r, pos, m, hSq, dist_max=np.inf):
     rho = np.zeros(M)
     for i in prange(M):
         for j in prange(N):
-            if dx[i, j]**2 + dy[i, j]**2 <= dist_max:
-                rho[i] += m[j] * W(dx[i, j], dy[i, j], hSq)
+            rho[i] += m[j] * W(dx[i, j], dy[i, j], hSq[j])
 
     return rho.reshape((M, 1))
+
 
 def boundary_check(pos, r, xlim=(-0.5, 0.5), ylim=(-0.5, 0.5)):
     is_close_left_boundary = pos[0] - r < xlim[0]
     is_close_right_boundary = pos[0] + r > xlim[1]
     is_close_bottom_boundary = pos[1] - r < ylim[0]
     is_close_top_boundary = pos[1] + r > ylim[1]
-    is_close_boundary = np.array([is_close_left_boundary, is_close_right_boundary, is_close_bottom_boundary, is_close_top_boundary])
+    is_close_boundary = np.array(
+        [is_close_left_boundary, is_close_right_boundary, is_close_bottom_boundary, is_close_top_boundary])
     return is_close_boundary
 
+
 class DensityFieldSPH:
-    def __init__(self, half_width, half_height, density_radius, resolution):
+    def __init__(self, half_width, half_height, resolution):
         print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
 
         dx = 1 / resolution
@@ -73,9 +75,6 @@ class DensityFieldSPH:
         self.resolution = resolution
         self.grid_points = np.vstack([X.ravel(), Y.ravel()]).T
         self.KDTree = KDTree(self.grid_points)
-
-        self.bandwidthSq = density_radius**2
-        self.dist_max = 1.6424 * density_radius
         self.values = np.zeros((resolution, resolution))
 
     def query(self, pos):
@@ -91,13 +90,18 @@ class DensityFieldSPH:
         else:
             positions = np.array([(plant.x, plant.y)
                                   for plant in state])
-            areas = np.array([plant.area for plant in state])
+            radiiSq = np.array([plant.r for plant in state])**2
 
-            if positions.shape[0] == 0:
-                self.values = np.zeros((self.resolution, self.resolution))
-            else:
-                self.values = getDensity(
-                    self.grid_points, positions, areas, self.bandwidthSq, self.dist_max).reshape(self.resolution, self.resolution)
+            sigmasSq = radiiSq * self.bandwidth_factor**2
+            
+            self.values = getDensity(r=self.grid_points,
+                                     pos=positions,
+                                     m=np.pi*radiiSq,
+                                     hSq=sigmasSq).reshape(
+                self.resolution, self.resolution)
+
+    def integrate(self):
+        return np.sum(self.values) / self.resolution**2
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
         if ax is None:
@@ -117,10 +121,27 @@ class DensityFieldSPH:
     def get_values(self):
         return copy.deepcopy(self.values)
 
+@njit(parallel=True)
+def compute_density(grid_points, positions, radiiSq, sigmas, resolution):
+    values = np.zeros(grid_points.shape[0])
+    query_radius_factor = 3
+    
+    sigmaSq = sigmas**2
+    for i in prange(len(positions)):
+        query_radius = query_radius_factor * sigmas[i]
+        
+        for j in range(grid_points.shape[0]):
+            distSq = np.sum((positions[i] - grid_points[j])**2)
+            
+            if distSq <= query_radius**2:
+                values[j] += np.pi*radiiSq[i] * \
+                    np.exp(-distSq / (2 * sigmaSq[i])) / \
+                    (2 * np.pi * sigmaSq[i])        
+    return values
 
 class DensityFieldCustom:
-    def __init__(self, half_width, half_height, query_radius_factor, bandwidth_factor, resolution):
-        print('DensityFieldSPH: DensityField is using smoothed particle hydrodynamics density estimation.')
+    def __init__(self, half_width, half_height, resolution):
+        print('DensityFieldCustom: DensityField is using custom density estimation.')
 
         dx = 1 / resolution
         dy = 1 / resolution
@@ -134,8 +155,6 @@ class DensityFieldCustom:
         self.values = np.zeros(self.grid_points.shape[0])
         self.KDTree_grid = KDTree(self.grid_points)
         self.resolution = resolution
-        self.query_radius_factor = query_radius_factor
-        self.bandwidth_factor = bandwidth_factor
 
     def query(self, pos):
         # Find the nearest neighbors using KDTree
@@ -145,28 +164,21 @@ class DensityFieldCustom:
     def update(self, plants):
         if len(plants) == 0:
             return
-        
+
         positions = np.array([(plant.x, plant.y) for plant in plants])
         radii = np.array([plant.r for plant in plants])
+        sigmas = np.array([plant.r * plant.density_range/plant.r_max for plant in plants])
+        
+        sigmasSq = sigmas**2
+        
         radiiSq = radii**2
         areas = np.pi * radiiSq
-        
+
         self.values = np.zeros(self.grid_points.shape[0])
-        # for each plant, calculate its contribution to the density field based on its radius, it's area and the gaussian distribution
-        for i, p in enumerate(positions):
-            sigmaSq = self.bandwidth_factor**2 * radiiSq[i]
-            query_radius = self.query_radius_factor * self.bandwidth_factor * radii[i]
-            is_close_boundary = boundary_check(p, query_radius)
-            
-            # Apply periodic boundary conditions
-            shifts = np.array([[1, 0], [-1, 0], [0, 1], [0, -1]])
-            pos_shifted = [p + shift for shift in shifts[is_close_boundary]]
-                
-            for point in [p] + pos_shifted:
-                for idx in self.KDTree_grid.query_ball_point(point, r=query_radius):
-                    distSq = np.sum((point - self.grid_points[idx])**2)
-                    self.values[idx] += areas[i] * np.exp(-distSq / (2 * sigmaSq)) / (2 * np.pi * sigmaSq)    
-        
+        self.values = compute_density(self.grid_points, positions, radiiSq, sigmas, self.resolution)
+    
+    def integrate(self):
+        return np.sum(self.values) / self.resolution**2
 
     def plot(self, size=2, title='Density field', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5], colorbar=True):
         if ax is None:

@@ -4,7 +4,7 @@ import copy
 
 
 class Plant:
-    def __init__(self, id, x, y, r, r_min, r_max, growth_rate, dispersal_range, maturity_size, **kwargs):
+    def __init__(self, id, x, y, r, r_min, r_max, growth_rate, dispersal_range, density_range, maturity_size, germination_chance=1, species_id = -1, **kwargs):
         self.id = id
         self.x = x
         self.y = y
@@ -18,14 +18,11 @@ class Plant:
         self.growth_rate = growth_rate
 
         self.maturity_size = maturity_size
-        self.species_germination_chance = 1
+        self.germination_chance = germination_chance
         self.dispersal_range = dispersal_range
-
-        # self.age_max = (self.r_max - self.r_min)/self.growth_rate
-
-        # self.is_dead = kwargs.get('is_dead', False)
-        # self.is_colliding = kwargs.get('is_colliding', False)
-        # self.generation = kwargs.get('generation', 0)
+        self.density_range = density_range
+        
+        self.species_id = species_id
 
         self.is_dead = False
         self.is_colliding = False
@@ -44,6 +41,9 @@ class Plant:
 
     # Maybe move this to a simulation class
     def disperse(self, sim):
+        if self.r < self.maturity_size:
+            return
+        
         n = sim.spawn_rate * sim.time_step
         decimal_part = n % 1
         if np.random.rand() < decimal_part:
@@ -53,12 +53,12 @@ class Plant:
 
         new_plants = []
         for _ in range(n):
-            if self.species_germination_chance > 0 and not self.is_dead:
+            if self.germination_chance > 0 and not self.is_dead:
                 new_pos = np.array([self.x, self.y]) + \
                     np.random.normal(0, self.dispersal_range, 2)
 
                 dispersal_chance = max(sim.land_quality, sim.local_density(
-                    new_pos) * sim.precipitation * self.species_germination_chance)
+                    new_pos) * sim.precipitation * self.germination_chance)
 
                 if dispersal_chance > np.random.uniform(0, 1):
                     new_plants.append(
@@ -70,8 +70,10 @@ class Plant:
                             r_min=self.r_min,
                             r_max=self.r_max,
                             growth_rate=self.growth_rate,
-                            species_germination_chance=self.species_germination_chance,
+                            germination_chance=self.germination_chance,
                             dispersal_range=self.dispersal_range,
+                            density_range=self.density_range,
+                            species_id=self.species_id,
                             maturity_size=self.maturity_size,
                         )
                     )
@@ -92,10 +94,34 @@ class Plant:
 
     def update(self, sim):
         self.grow()
-        if self.r >= self.maturity_size:
-            self.disperse(sim)
+        self.disperse(sim)
         self.mortality()
         return
 
     def copy(self):
         return Plant(**self.__dict__)
+    
+    def pos(self):
+        return np.array([self.x, self.y])
+
+
+class PlantSpecies:
+    def __init__(self, species_id=-1, r_min=1, r_max=30, growth_rate = 0.1, dispersal_range=90, density_range=90, maturity_size=1, germination_chance = 1, **kwargs):
+        self.species_id = species_id
+        self.name = kwargs.get('name', f'Species {species_id}')
+        self.r_min = r_min
+        self.r_max = r_max
+        self.growth_rate = growth_rate
+        self.dispersal_range = dispersal_range
+        self.density_range = density_range
+        self.maturity_size = maturity_size
+        self.germination_chance = germination_chance
+
+    def create_plant(self, id, x, y, r, **kwargs):
+        return Plant(id=id, x=x, y=y, r=r, **self.__dict__)
+    
+    def copy(self):
+        return PlantSpecies(**self.__dict__)
+        
+        
+    

@@ -41,20 +41,20 @@ load_folder = os.path.abspath(folder)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    surfixes = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
-    surfixes = [s for s in surfixes if 'checkpoint' not in s]
-    # surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
-    if not surfixes:
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [s for s in aliases if 'checkpoint' not in s]
+    # aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
+    if not aliases:
         continue
-    print(f'surfixes: {surfixes}')
+    print(f'aliases: {aliases}')
     
     max_num_plants = 0
     kwargs_list = []
     data_buffer_list = []
-    for i, n in enumerate(surfixes):
+    for i, alias in enumerate(aliases):
         kwargs = pd.read_json(
-            f'{root}/kwargs_{n}.json', typ='series').to_dict()
-        data_buffer = pd.read_csv(f'{root}/data_buffer_{n}.csv')
+            f'{root}/kwargs-{alias}.json', typ='series').to_dict()
+        data_buffer = pd.read_csv(f'{root}/data_buffer-{alias}.csv')
         data_buffer_list.append(data_buffer)
         kwargs_list.append(kwargs)
     
@@ -124,8 +124,8 @@ for root, dirs, files in os.walk(load_folder):
 
     sim_name = root.split('/')[-1]
     
-    if len(surfixes) == 1:
-        sim_name += '_' + surfixes[0]
+    if len(aliases) == 1:
+        sim_name += '_' + aliases[0]
         
     fig.suptitle(f'{key} Correlation {sim_name}')
     fig.tight_layout()

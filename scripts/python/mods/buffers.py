@@ -81,7 +81,7 @@ class DataBuffer:
 
         if os.path.exists(self.file_path):
             print(
-                f'DataBuffer.__init__(): Loading data from already existing file {self.file_path}.')
+                f'DataBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
             self.columns = list(pd.read_csv(self.file_path).keys())
         else:
             self.columns = ['Time', 'Biomass', 'Population', 'Precipitation']
@@ -193,7 +193,7 @@ class DataBuffer:
 
         for ax_i in ax:
             ax_i.grid()
-            ax_i.legend()
+            # ax_i.legend()
         
         title = title
         return fig, ax, title
@@ -205,10 +205,10 @@ class StateBuffer:
         self.skip = skip
         self.batch_size = 100_000
 
-        self.columns = ['id', 'x', 'y', 'r', 't']
+        self.columns = ['id', 'x', 'y', 'r', 'species', 't']
         if os.path.exists(self.file_path):
             print(
-                f'StateBuffer.__init__(): StateBuffer succesfully conected to already existing file {self.file_path}.')
+                f'StateBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
         # else:
         #     self._initialize_file()
 
@@ -234,8 +234,8 @@ class StateBuffer:
 
     def add(self, plants, t):
         new_data = pd.DataFrame(
-            [[plant.id, plant.x, plant.y, plant.r, t] for plant in plants],
-            columns=['id', 'x', 'y', 'r', 't']
+            [[plant.id, plant.x, plant.y, plant.r, plant.species_id, t] for plant in plants],
+            columns=['id', 'x', 'y', 'r', 'species', 't']
         )
         if new_data.empty:
             return
@@ -268,7 +268,7 @@ class StateBuffer:
         data = pd.DataFrame(columns=self.columns)
         
         if os.path.exists(self.file_path):
-            print(f'StateBuffer.get_data(): Loading data from {self.file_path}.')
+            print(f'StateBuffer.get_data(): Succesfully conected to {self.file_path}.')
             data = pd.read_csv(self.file_path)
             if 'id' not in data.keys():
                 data = rewrite_state_buffer_data(data)
@@ -277,12 +277,15 @@ class StateBuffer:
 
         return data # returns an empty dataframe if the file does not exist
 
-    def get_last_state(self):
-        last_state_df = pd.DataFrame(columns=self.columns)
-        
+    def get_last_state(self):     
         # if the file does not exist, return an empty dataframe
         if not os.path.exists(self.file_path):
-            return last_state_df
+            return pd.DataFrame(columns=self.columns)
+        
+        columns = []
+        with open(self.file_path, 'r') as f:
+            columns = f.readline().strip().split(',')
+        last_state_df = pd.DataFrame(columns=columns)
         
         # Open the state buffer file in binary read mode
         with open(self.file_path, 'rb') as f:
@@ -302,7 +305,13 @@ class StateBuffer:
             while val == last_val:
                 move_to_previous_line(f)
                 line = f.readline().decode().strip()
-                val = float(line.split(',')[-1].strip())
+                
+                try:
+                    val = float(line.split(',')[-1].strip())
+                except ValueError:
+                    print(f'StateBuffer.get_last_state(): Error reading values from line {i} {line = }')
+                    break
+                
                 move_to_previous_line(f)
 
                 if val == last_val:
@@ -341,16 +350,17 @@ class StateBuffer:
         ax.set_ylim(-half_height, half_height)
         ax.set_aspect('equal', 'box')
 
-
         t = state['t'].iloc[0]
+                    
+        cmap = plt.colormaps['tab10']
 
-        for id, x, y, r in state[['id', 'x', 'y', 'r']].values:
+        for id, x, y, r, species in state[['id', 'x', 'y', 'r', 'species']].values:
             if fast and r > 0.005:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         color='green', fill=False, transform=ax.transData))
+                                         color=cmap(int(species + 3)), fill=False, transform=ax.transData))
             elif not fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         color='green', fill=True, transform=ax.transData))
+                                         color=cmap(int(species + 3)), fill=True, transform=ax.transData))
 
         if t is not None:
             t = float(round(t, 2))
@@ -416,8 +426,10 @@ class StateBuffer:
         fig.suptitle(title, fontsize=15)
         fig.tight_layout()
         
-        circles = [plt.Circle((x, y), r, color='green',
-                              fill=not fast) for x, y, r in states[0][['x', 'y', 'r']].values]
+        cmap = plt.colormaps['tab10']
+        
+        circles = [plt.Circle((x, y), r, color=cmap(int(species + 3)),
+                              fill=not fast) for x, y, r, species in states[0][['x', 'y', 'r', 'species']].values]
         
         def animate_func(i):
             ax.clear()
@@ -430,8 +442,8 @@ class StateBuffer:
             t = float(round(times[i], 2))
             ax.set_xlabel(f'{t=}', fontsize=12)
             
-            circles = [plt.Circle((x, y), r, color='green',
-                              fill=not fast) for x, y, r in states[i][['x', 'y', 'r']].values]
+            circles = [plt.Circle((x, y), r, color=cmap(int(species + 3)),
+                              fill=not fast) for x, y, r, species in states[i][['x', 'y', 'r', 'species']].values]
             for circle in circles:
                 ax.add_artist(circle)
             print(f'StateBuffer.animate(): i = {i + 1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
@@ -453,7 +465,7 @@ class FieldBuffer:
 
         if os.path.exists(self.file_path):
             print(
-                f'FieldBuffer.__init__(): Loading data from already existing file {self.file_path}.')
+                f'FieldBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
         # else:
         #     self._initialize_file()
 
