@@ -7,7 +7,9 @@ from mods.simulation import Simulation
 from scipy.interpolate import interp1d
 import matplotlib.animation as animation
 
-load_folder = 'Data/parameter_shift/L1000_shifted/maturity_size' # Path to the folder containing the buffers
+save_animation = True
+
+load_folder = 'Data/dynamics' # Path to the folder containing the buffers
 aliases = [f.split('-')[-1] for f in os.listdir(load_folder) if 'kwargs-' in f]
 aliases = [f.replace('.json', '') for f in aliases]
 aliases = [f.replace('.csv', '') for f in aliases]
@@ -16,9 +18,8 @@ print(f'{aliases = }')
 for i, alias in enumerate(aliases):
     sim = Simulation(folder=load_folder, alias=alias)
 
-    save_animation = True
 
-    skip = 25
+    skip = 10
     window_size = 200
     key = 'Biomass'
     data = sim.data_buffer.get_data()[key]
@@ -67,6 +68,6 @@ for i, alias in enumerate(aliases):
         data_mean[::skip])-1, interval=30*1000/(len(data_mean[::skip])-1))
     if save_animation:
         os.makedirs(f'{load_folder}/figures', exist_ok=True)
-        anim.save(f'{load_folder}/figures/phase_space-{alias}.mp4', dpi=600)
+        anim.save(f'{load_folder}/figures/phase_space-{alias}.mp4', writer='ffmpeg', dpi=600)
     else:
         plt.show()

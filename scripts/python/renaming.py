@@ -1,5 +1,6 @@
 import os
-folder =  # Path to the folder containing the buffers
+folder = ''
+# Path to the folder containing the buffers
 
 load_folder = os.path.abspath(folder)
 print(f'\nload_folder: {load_folder}\n')

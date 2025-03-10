@@ -264,14 +264,14 @@ class Simulation:
                     print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
                           population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}  |  conv = {np.round(convergence_factor, 8):<10}', end='\r')
                     
-                    
-                    if _ % 100 == 0:
-                        species_counts = {species.species_id: 0 for species in self.species_list}
-                        for plant in self.plants:
-                            species_counts[plant.species_id] += 1
-                        print()
-                        print(f'Species counts: {species_counts}')
-                        print()
+                    if len(self.species_list) > 1:
+                        if _ % 100 == 0:
+                            species_counts = {species.species_id: 0 for species in self.species_list}
+                            for plant in self.plants:
+                                species_counts[plant.species_id] += 1
+                            print()
+                            print(f'Species counts: {species_counts}')
+                            print()
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
                 if (max_population is not None and l > max_population):
@@ -390,6 +390,12 @@ class Simulation:
         is_converged = bool(convergence_factor < 0) & bool(
             (time[-1] - time[0]) > trend_window)
         return is_converged, convergence_factor, regression_line
+    
+    def remove_fraction(self, fraction):
+        indices = np.random.choice(len(self.plants), int(fraction * len(self.plants)), replace=False)
+        self.plants = [self.plants[i] for i in range(len(self.plants)) if i not in indices]
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
 
     def attempt_spawn(self, n, species_list=[]):
 
