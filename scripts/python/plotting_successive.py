@@ -24,7 +24,7 @@ load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs-' in f]
     aliases = [s for s in aliases if 'checkpoint' not in s]
     aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
     if not aliases:

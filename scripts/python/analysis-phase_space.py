@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 import matplotlib.animation as animation
 
 load_folder = 'Data/parameter_shift/L1000_shifted/maturity_size' # Path to the folder containing the buffers
-aliases = [f.split('-')[-1] for f in os.listdir(load_folder) if 'kwargs' in f]
+aliases = [f.split('-')[-1] for f in os.listdir(load_folder) if 'kwargs-' in f]
 aliases = [f.replace('.json', '') for f in aliases]
 aliases = [f.replace('.csv', '') for f in aliases]
 print(f'{aliases = }')

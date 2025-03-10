@@ -30,7 +30,7 @@ def calculate_fit_and_p_value(fit_func, x, y):
     
     return y_fit, p_value
 
-folder = '../../Data/linear_precipitation/L500'
+folder = 'Data/linear_precipitation/L1000'
 key = 'Biomass'
 save_fig = True
 
@@ -41,7 +41,7 @@ load_folder = os.path.abspath(folder)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs-' in f]
     aliases = [s for s in aliases if 'checkpoint' not in s]
     # aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
     if not aliases:
@@ -122,16 +122,12 @@ for root, dirs, files in os.walk(load_folder):
         a.axvline(time_range[0], color='black', ls='--', alpha = 0.5)
         a.axvline(time_range[1], color='black', ls='--', alpha = 0.5)
 
-    sim_name = root.split('/')[-1]
-    
-    if len(aliases) == 1:
-        sim_name += '_' + aliases[0]
         
-    fig.suptitle(f'{key} Correlation {sim_name}')
+    fig.suptitle(f'{key} Correlation {alias}')
     fig.tight_layout()
     
     if save_fig:
-        fig_path = f'{root}/figures/_{key.lower()}_correlation_{sim_name}.png'
+        fig_path = f'{root}/figures/_{key.lower()}_correlation_{alias}.png'
         fig.savefig(fig_path, dpi=600)
 plt.show()
     

@@ -268,12 +268,15 @@ class StateBuffer:
         data = pd.DataFrame(columns=self.columns)
         
         if os.path.exists(self.file_path):
-            print(f'StateBuffer.get_data(): Succesfully conected to {self.file_path}.')
+            # print(f'StateBuffer.get_data(): Succesfully conected to {self.file_path}.')
             data = pd.read_csv(self.file_path)
             if 'id' not in data.keys():
                 data = rewrite_state_buffer_data(data)
                 self.override_data(data)
-                print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
+            print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
+        else:
+            warnings.warn(
+                f'StateBuffer.get_data(): File {self.file_path} does not exist.')    
 
         return data # returns an empty dataframe if the file does not exist
 
@@ -415,10 +418,10 @@ class StateBuffer:
         return fig, ax, title
 
     @staticmethod
-    def animate(data, size=6, title='', fast=False, skip=1):
+    def animate(data, size=6, title='', fast=False, skip=1, interval=None):
         print('StateBuffer.animate(): Animating StateBuffer...')
         times = data['t'].unique()[::skip]
-        states = [data[data['t'] == t] for t in times]
+        circle_data = [data[data['t'] == t][['x', 'y', 'r', 'species']].values for t in times]
         time_step = times[1] - times[0]
         T = len(times)
 
@@ -426,10 +429,11 @@ class StateBuffer:
         fig.suptitle(title, fontsize=15)
         fig.tight_layout()
         
-        cmap = plt.colormaps['tab10']
+        cmap = plt.colormaps['tab10'] 
+        
         
         circles = [plt.Circle((x, y), r, color=cmap(int(species + 3)),
-                              fill=not fast) for x, y, r, species in states[0][['x', 'y', 'r', 'species']].values]
+                              fill=not fast) for x, y, r, species in circle_data[0]]
         
         def animate_func(i):
             ax.clear()
@@ -443,14 +447,17 @@ class StateBuffer:
             ax.set_xlabel(f'{t=}', fontsize=12)
             
             circles = [plt.Circle((x, y), r, color=cmap(int(species + 3)),
-                              fill=not fast) for x, y, r, species in states[i][['x', 'y', 'r', 'species']].values]
+                              fill=not fast) for x, y, r, species in circle_data[i]]
             for circle in circles:
                 ax.add_artist(circle)
             print(f'StateBuffer.animate(): i = {i + 1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
             return ax
 
+        if interval is None:
+            interval = 15 * time_step
+
         ani = animation.FuncAnimation(
-            fig, animate_func, frames=T, interval=10 * time_step, repeat=True)
+            fig, animate_func, frames=T, interval=interval, repeat=True)
         return ani, title
 
 

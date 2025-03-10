@@ -127,21 +127,20 @@ def compute_density(grid_points, positions, radiiSq, sigmas, resolution):
     query_radius_factor = 3
     
     sigmaSq = sigmas**2
+    mass = np.pi * radiiSq
     for i in prange(len(positions)):
-        query_radius = query_radius_factor * sigmas[i]
+        query_radiusSq = (query_radius_factor * sigmas[i])**2
         
-        for j in range(grid_points.shape[0]):
+        for j in prange(grid_points.shape[0]):
             distSq = np.sum((positions[i] - grid_points[j])**2)
             
-            if distSq <= query_radius**2:
-                values[j] += np.pi*radiiSq[i] * \
-                    np.exp(-distSq / (2 * sigmaSq[i])) / \
-                    (2 * np.pi * sigmaSq[i])        
+            if distSq <= query_radiusSq:
+                values[j] += mass[i]   *   1/(2 * np.pi * sigmaSq[i])   *   np.exp(-distSq / (2 * sigmaSq[i]))   
     return values
 
 class DensityFieldCustom:
     def __init__(self, half_width, half_height, resolution):
-        print('DensityFieldCustom: DensityField is using custom density estimation.')
+        # print('DensityFieldCustom: DensityField is using custom density estimation.')
 
         dx = 1 / resolution
         dy = 1 / resolution

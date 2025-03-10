@@ -17,7 +17,7 @@ folder = os.path.abspath(path)
 print(f'folder: {folder}')
 
 aliases = [f.split('-')[-1].split('.')[0]
-            for f in os.listdir(folder) if 'kwargs' in f][::-1]
+            for f in os.listdir(folder) if 'kwargs-' in f][::-1]
 aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
 print(f'{len(aliases)=}')
 

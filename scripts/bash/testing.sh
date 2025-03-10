@@ -2,7 +2,7 @@
 #SBATCH --job-name=trees
 #SBATCH --partition=modi_short
 #SBATCH --output=../../slurm_out/TESTING_%j.out
-#SBATCH --exclusive
+#SBATCH --cpu-per-tasks=16
 
 python3 ../python/testing.py
 
