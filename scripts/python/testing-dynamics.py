@@ -11,20 +11,20 @@ from datetime import datetime
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 1000,
+    'L': 2000,
     'precipitation': 0.5,
     'seed': seed,
 }
 num_plants = int(kwargs['L'])
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'Data/dynamics/recovery_rates'
+folder = f'../../Data/dynamics/recovery_rates'
 
-alias = f'rec_rate_test2'
+alias = f'rec_rate_{current_time}'
 print(f'{seed = }')
 
 os.makedirs(folder, exist_ok=True)
-sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
+sim = Simulation(folder=folder, alias=alias, **kwargs)
 
 print(f'num_plants: {num_plants}')
 sim.initiate_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
@@ -49,7 +49,7 @@ for i in range(n_steps):
 figs, axs, titles = sim.plot_buffers(title=alias)
 os.makedirs(folder + '/figures', exist_ok=True)
 for i, (fig, title) in enumerate(zip(figs, titles)):
-    tilte = title.replace(' ', '-').lower()
+    title = title.replace(' ', '-').lower()
     fig.savefig(f'{folder}/figures/{title}.png', dpi=1000)
 
 # anim, _ = StateBuffer.animate(
