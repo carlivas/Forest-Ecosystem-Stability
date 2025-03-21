@@ -11,7 +11,7 @@ from datetime import datetime
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 1000,
+    'L': 2000,
     'precipitation': 0.5,
     'seed': seed,
 }
@@ -19,7 +19,7 @@ num_plants = int(kwargs['L'])
 print(f'num_plants: {num_plants}')
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'Data/dynamics/recovery_rates'
+folder = f'../../Data/dynamics/recovery_rates'
 
 alias = f'rec_rate_250311_152357'
 print(f'{seed = }')
@@ -52,6 +52,7 @@ for i in range(2, n_steps):
 figs, axs, titles = sim.plot_buffers(title=alias)
 os.makedirs(folder + '/figures', exist_ok=True)
 for i, (fig, title) in enumerate(zip(figs, titles)):
+    title = title.replace(' ', '-').lower()
     title = title.replace(' ', '-').lower()
     fig.savefig(f'{folder}/figures/{title}.png', dpi=1000)
 

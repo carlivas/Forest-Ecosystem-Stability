@@ -11,17 +11,17 @@ from datetime import datetime
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 500,
+    'L': 1000,
     'precipitation': 1,
     'seed': seed,
     'spawn_rate': 1,
+    'land_qualtiy': 0,
 }
 num_plants = int(kwargs['L'])
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-current_time = 'test2'
-folder = f'Data/species_experiments/experiment4/tests/{current_time}'
-alias = f'exp4_{current_time}'
+folder = f'../../Data/species_experiments/experiment4/tests/test5'
+alias = f'spec_exp4_{current_time}'
 print(f'{seed = }')
 
 os.makedirs(folder, exist_ok=True)
@@ -63,9 +63,9 @@ for i, (fig, title) in enumerate(zip(figs, titles)):
     title = title.replace(' ', '-').lower()
     fig.savefig(f'{folder}/figures/{title}.png', dpi=1000)
 
-anim, _ = StateBuffer.animate(
-    sim.state_buffer.get_data(), skip=10, title=alias, fast=True)
-anim.save(f'{folder}/figures/state_anim-{alias}.mp4', writer='ffmpeg', dpi=600)
+# anim, _ = StateBuffer.animate(
+#     sim.state_buffer.get_data(), skip=10, title=alias, fast=True)
+# anim.save(f'{folder}/figures/state_anim-{alias}.mp4', writer='ffmpeg', dpi=600)
 
 # THINK ABOUT THIS
 # field = pd.DataFrame([[x, y, d] for (x, y), d in zip(self.density_field.positions, self.density_field.values)], columns=['x', 'y', 'd'])
