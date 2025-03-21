@@ -61,31 +61,6 @@ class Plant:
                 new_positions[i] = new_pos
                 
         sim.attempt_germination(new_positions, self)
-                    
-                
-        #         # DO BOUNDARY CONDITIONS HERE
-
-        #         dispersal_chance = max(sim.land_quality, sim.local_density(
-        #             new_pos) * sim.precipitation * self.germination_chance)
-
-        #         if dispersal_chance > np.random.uniform(0, 1):
-        #             new_plants.append(
-        #                 Plant(
-        #                     id=sim.id_generator.get_next_id(),
-        #                     x=new_pos[0],
-        #                     y=new_pos[1],
-        #                     r=self.r_min,
-        #                     r_min=self.r_min,
-        #                     r_max=self.r_max,
-        #                     growth_rate=self.growth_rate,
-        #                     germination_chance=self.germination_chance,
-        #                     dispersal_range=self.dispersal_range,
-        #                     density_range=self.density_range,
-        #                     species_id=self.species_id,
-        #                     maturity_size=self.maturity_size,
-        #                 )
-        #             )
-        # sim.add(new_plants)
 
     def compete(self, other_plant):
         if self.r < other_plant.r:

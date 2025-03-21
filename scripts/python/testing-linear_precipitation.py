@@ -11,46 +11,34 @@ from datetime import datetime
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 1000,
-    'precipitation': 0.5,
+    'L': 500,
     'seed': seed,
 }
-num_plants = int(kwargs['L'])
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'Data/dynamics/recovery_rates'
-
-alias = f'rec_rate_test2'
-print(f'{seed = }')
+folder = f'Data/linear_precipitation/L{kwargs["L"]}'
+alias = f'lin_prec_L{kwargs["L"]}_temp'
 
 os.makedirs(folder, exist_ok=True)
 sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
+sim.precipitation = 0.3
 
-print(f'num_plants: {num_plants}')
+num_plants = int(kwargs['L'])
 sim.initiate_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
 
-n_steps = 10
-T = 2000
-precipitation_step = - kwargs['precipitation'] / (n_steps - 1)
+T = 31000
+precipitation_step = - sim.precipitation / int(T - 1000)
 print(f'{precipitation_step = }')
-for i in range(n_steps):
-    print(f'Running step {i+1}/{n_steps}')
-    sim.run(T=T)
-    
-    # Remove a fraction of the plants
-    sim.remove_fraction(0.15)
-    
-    sim.run(T=T)
-    
-    sim.precipitation = sim.precipitation + precipitation_step
+
+sim.run(T=T, delta_p=precipitation_step)
     
 
 
 figs, axs, titles = sim.plot_buffers(title=alias)
 os.makedirs(folder + '/figures', exist_ok=True)
 for i, (fig, title) in enumerate(zip(figs, titles)):
-    tilte = title.replace(' ', '-').lower()
-    fig.savefig(f'{folder}/figures/{title}.png', dpi=1000)
+    title = title.replace(' ', '-').lower()
+    fig.savefig(f'{folder}/figures/{title}.png', dpi=600)
 
 # anim, _ = StateBuffer.animate(
 #     sim.state_buffer.get_data(), skip=10, title=alias, fast=True)

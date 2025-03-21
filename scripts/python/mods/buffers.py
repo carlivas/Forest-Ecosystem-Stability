@@ -8,8 +8,9 @@ import copy
 import warnings
 import json
 
-from mods.files import move_to_previous_line
+from mods.files import *
 from mods.plant import Plant
+from io import StringIO
 
 modi_path_kwargs = '../../default_kwargs.json'
 local_path_kwargs = 'default_kwargs.json'
@@ -144,7 +145,7 @@ class DataBuffer:
 
     @staticmethod
     def plot(data, size=6, title='', keys=None, drop_first = True):
-        title = 'DataBuffer ' + title
+        title = 'Data Buffer ' + title
 
         # Specify which keys need to be plotted
         if keys is None:
@@ -268,17 +269,28 @@ class StateBuffer:
         data = pd.DataFrame(columns=self.columns)
         
         if os.path.exists(self.file_path):
-            # print(f'StateBuffer.get_data(): Succesfully conected to {self.file_path}.')
             data = pd.read_csv(self.file_path)
-            if 'id' not in data.keys():
-                data = rewrite_state_buffer_data(data)
-                self.override_data(data)
             print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
         else:
             warnings.warn(
                 f'StateBuffer.get_data(): File {self.file_path} does not exist.')    
 
         return data # returns an empty dataframe if the file does not exist
+    
+    def get_specific_data(self, t):
+        if not isinstance(t, (list, np.ndarray, pd.Series)):
+            t = [t]
+        
+        print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
+        with open(self.file_path, 'rb') as f:
+            lines = find_all_lines_key_values(f, 't', t, assume_sorted=True)
+            
+            if not lines:
+                return pd.DataFrame(columns=self.columns)
+            
+            data = pd.read_csv(StringIO('\n'.join(lines)), header=None, names=self.columns)
+                
+        return data
 
     def get_last_state(self):     
         # if the file does not exist, return an empty dataframe
@@ -378,7 +390,7 @@ class StateBuffer:
 
     @staticmethod
     def plot(data, size=2, title='', fast=False, n_plots=20):
-        title = 'StateBuffer ' + title
+        title = 'State Buffer ' + title
         if data.empty:
             print('StateBuffer.plot(): No data to plot.')
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -570,7 +582,7 @@ class FieldBuffer:
 
     @staticmethod
     def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', extent=[-0.5, 0.5, -0.5, 0.5]):
-        title = 'FieldBuffer ' + title
+        title = 'Field Buffer ' + title
         if data.empty:
             print('FieldBuffer.plot(): No data to plot.')
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -714,7 +726,7 @@ class HistogramBuffer:
 
     @staticmethod
     def plot(data, size=2, t=None, nplots=20, title='', density=False, xscale=1, xlabel='', ylabel='frequency'):
-        title = 'HistogramBuffer ' + title
+        title = 'Histogram Buffer ' + title
         start = self.start * xscale
         end = self.end * xscale
         xx = np.linspace(start, end, self.bins)

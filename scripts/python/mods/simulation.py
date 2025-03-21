@@ -158,13 +158,10 @@ class Simulation:
         converted_dict = convert_dict(
             d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
         self.__dict__.update(converted_dict)
-        self.initiate()
-
-    def initiate(self):
         self.update_kdtree(self.plants)
         self.density_field.update(self.plants)
-        print(
-            f'\nSimulation.initiate(): Time: {time.strftime("%Y-%m-%d %H:%M:%S")}')
+        print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
+        print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
 
     def add(self, plant: Union[Plant, List[Plant], np.ndarray]):
         if isinstance(plant, Plant):
@@ -229,7 +226,7 @@ class Simulation:
             self.density_field_buffer.add(
                 field=self.density_field.values, t=self.t)
 
-    def run(self, T, min_population=None, max_population=None, transient_period=2, delta_p=0, convergence_stop=False):
+    def run(self, T, min_population=None, max_population=None, transient_period=0, delta_p=0, convergence_stop=False):
 
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
@@ -240,7 +237,6 @@ class Simulation:
                 if _ > transient_period:
                     self.precipitation = max(0, self.precipitation + delta_p)
                 self.step()
-                is_converged, convergence_factor = self.convergence_check()[:2]
 
                 if self.verbose:
                     elapsed_time = time.time() - start_time
@@ -261,8 +257,7 @@ class Simulation:
                         'Time', 'Biomass', 'Population', 'Precipitation']].values.reshape(-1)
                     t = float(round(t, 2))
 
-                    print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {
-                          population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}  |  conv = {np.round(convergence_factor, 8):<10}', end='\r')
+                    print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}', end='\r')
                     
                     if len(self.species_list) > 1:
                         if _ % 100 == 0:
@@ -399,41 +394,62 @@ class Simulation:
 
     def attempt_spawn(self, n, species_list=[]):
 
-        # Take care of the decimal part of n
+        # Take care of the decimal part of the spawn rate n
         decimal_part = n - int(n)
         n = int(n)
         if np.random.rand() < decimal_part:
             n += 1
 
+        # Generate new positions
         new_positions = np.random.uniform(-self.half_width,
                                           self.half_width, (n, 2))
+        new_species = np.random.choice(species_list, n)
         
-        new_plants = []
+        # Collect all positions that are not colliding with other plants
+        not_colliding_indices = []
         for i, pos in enumerate(new_positions):
-            current_species = np.random.choice(species_list)
+            current_species = new_species[i]
             
             # COLLISION CHECK
+            collisions = []
             if self.kt is not None:
                 indices_neighbours = self.kt.query_ball_point(pos, current_species.r_min+self.maximum_plant_size)
                 for j in indices_neighbours:
                     if (pos[0] - self.plants[j].x)**2 + (pos[1] - self.plants[j].y)**2 < (current_species.r_min + self.plants[j].r)**2:
-                        continue     
+                        collisions.append(j)
+            if len(collisions) == 0:
+                not_colliding_indices.append(i)
             
-            germination_chances = np.maximum(self.land_quality, self.local_density(pos) * self.precipitation * current_species.germination_chance)
-            random_values = np.random.uniform(0, 1, len(pos))
+        # Filter out the positions of the colliding plants
+        new_positions = new_positions[not_colliding_indices]
+        new_species = new_species[not_colliding_indices]
+        
+        
+        new_plants = []
+        if len(new_positions) > 0:
+            germination_chances = np.maximum(self.land_quality, self.local_density(new_positions)) * self.precipitation * current_species.germination_chance
+            random_values = np.random.uniform(0, 1, len(new_positions))
             spawn_indices = np.where(
                 germination_chances > random_values)[0]
+            
+            new_positions = new_positions[spawn_indices]
+            new_species = new_species[spawn_indices]
 
-            new_plants.append(
-                current_species.create_plant(
-                    id=self.id_generator.get_next_id(),
-                    x=pos[0],
-                    y=pos[1],
-                    r=current_species.r_min
+            for i, pos in enumerate(new_positions):
+                current_species = new_species[i]
+                new_plants.append(
+                    current_species.create_plant(
+                        id=self.id_generator.get_next_id(),
+                        x=pos[0],
+                        y=pos[1],
+                        r=current_species.r_min
+                    )
                 )
-            )
 
-        self.add(new_plants)
+        if len(new_plants) > 0:
+            self.add(new_plants)
+            print(f'Simulation.attempt_spawn(): {len(new_plants)} plants spawned.', end='\r')
+            print()
 
     def get_collisions(self):
         collisions = []
@@ -455,7 +471,13 @@ class Simulation:
         pos = np.atleast_2d(pos)
         pos_in_box = (np.abs(pos[:, 0]) < self.half_width) & (np.abs(pos[:, 1]) < self.half_height)
         return pos_in_box
-
+    
+    def pos_shift_periodic(self, pos):
+        pos = np.atleast_2d(pos)
+        pos[:, 0] = np.mod(pos[:, 0] + self.half_width, 2*self.half_width) - self.half_width
+        pos[:, 1] = np.mod(pos[:, 1] + self.half_height, 2*self.half_height) - self.half_height
+        return pos
+    
     def local_density(self, pos):
         # DO BOUNDARY CONDITIONS HERE
         return self.density_field.query(pos)
@@ -475,7 +497,7 @@ class Simulation:
                     
         new_positions = new_positions[~np.isnan(new_positions).any(axis=1)]
        
-        germination_chances = np.maximum(self.land_quality, self.local_density(new_positions) * self.precipitation * parent.germination_chance)
+        germination_chances = np.maximum(self.land_quality, self.local_density(new_positions)) * self.precipitation * parent.germination_chance
         random_values = np.random.uniform(0, 1, len(new_positions))
         germination_indices = np.where(germination_chances > random_values)[0]
 
@@ -536,7 +558,8 @@ class Simulation:
             )
 
         self.add(new_plants)
-        self.initiate()
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
         self.data_buffer.add(data=self.collect_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
         
@@ -581,7 +604,8 @@ class Simulation:
                 f"Simulation.spawn_non_overlapping(): Only {len(new_plants)} circles were placed after {max_attempts} attempts.")
 
         self.add(new_plants)
-        self.initiate()
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
         self.data_buffer.add(data=self.collect_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
 
@@ -619,7 +643,8 @@ class Simulation:
     #         for i, r in enumerate(samples)
     #     ]
     #     self.add(plants)
-    #     self.initiate()
+        # self.update_kdtree(self.plants)
+        # self.density_field.update(self.plants)
     #     self.data_buffer.add(data=self.collect_data())
     #     self.state_buffer.add(plants=state=self.plants, t=self.t)
 
@@ -653,7 +678,8 @@ class Simulation:
     #             )
 
     #     self.add(plants)
-    #     self.initiate()
+        # self.update_kdtree(self.plants)
+        # self.density_field.update(self.plants)
     exclude_default = [
         'alias',
         'biomass_buffer',
