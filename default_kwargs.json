@@ -4,5 +4,6 @@
     "time_step": 1,
     "spawn_rate": 1,
     "verbose": true,
-    "density_field_resolution": 50
+    "density_field_resolution": 50,
+    "boundary_condition": "periodic"
 }

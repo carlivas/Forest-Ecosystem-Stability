@@ -2,10 +2,11 @@ import os
 import json
 import numpy as np
 import time
-from mods.plant import Plant
-from mods.fields import DensityFieldSPH
-from mods.buffers import DataBuffer, StateBuffer, FieldBuffer
 from scipy.spatial import KDTree
+
+from mods.plant import *
+from mods.fields import *
+from mods.buffers import *
 
 def linear_regression(x, y, advanced=False):
     """Calculates the linear regression of a dataset.

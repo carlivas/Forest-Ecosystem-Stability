@@ -12,45 +12,32 @@ seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
     'L': 2000,
-    'precipitation': 0.5,
     'seed': seed,
+    'precipitation': 0.5,
 }
-num_plants = int(kwargs['L'])
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'../../Data/dynamics/recovery_rates'
+folder = f'Data/baseline/L{kwargs["L"]}'
+alias = f'baseline_L{kwargs["L"]}_P{kwargs["precipitation"]:.0e}'
 
-alias = f'rec_rate_{current_time}'
-print(f'{seed = }')
 
+alias = alias.replace(' ', '_').replace('-', '_').replace('.', '_')
 os.makedirs(folder, exist_ok=True)
-sim = Simulation(folder=folder, alias=alias, **kwargs)
+sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
 
-print(f'num_plants: {num_plants}')
-sim.initiate_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
+sim.initiate_non_overlapping(target_density=0.5, max_attempts=50*kwargs['L'])
 
-n_steps = 10
-T = 2000
-precipitation_step = - kwargs['precipitation'] / (n_steps - 1)
-print(f'{precipitation_step = }')
-for i in range(n_steps):
-    print(f'Running step {i+1}/{n_steps}')
-    sim.run(T=T)
-    
-    # Remove a fraction of the plants
-    sim.remove_fraction(0.15)
-    
-    sim.run(T=T)
-    
-    sim.precipitation = sim.precipitation + precipitation_step
+T = 5000    
+
+sim.run(T=T)
     
 
 
 figs, axs, titles = sim.plot_buffers(title=alias)
 os.makedirs(folder + '/figures', exist_ok=True)
 for i, (fig, title) in enumerate(zip(figs, titles)):
-    title = title.replace(' ', '-').lower()
-    fig.savefig(f'{folder}/figures/{title}.png', dpi=1000)
+    title = title.replace(' ', '-')
+    fig.savefig(f'{folder}/figures/{title}.png', dpi=600)
 
 # anim, _ = StateBuffer.animate(
 #     sim.state_buffer.get_data(), skip=10, title=alias, fast=True)

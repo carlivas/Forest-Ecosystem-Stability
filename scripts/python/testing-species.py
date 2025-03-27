@@ -53,14 +53,14 @@ print(f'num_plants: {num_plants}')
 sim.initiate_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
 
 T = 30_000
-dp = - kwargs['precipitation'] / (T - 5_000)
+dp = - kwargs['precipitation'] / (T - 5000)
 sim.run(T=T, min_population=1, delta_p=dp)
 
 
 figs, axs, titles = sim.plot_buffers(title=alias)
 os.makedirs(folder + '/figures', exist_ok=True)
 for i, (fig, title) in enumerate(zip(figs, titles)):
-    tilte = title.replace(' ', '-').lower()
+    title = title.replace(' ', '-').lower()
     fig.savefig(f'{folder}/figures/{title}.png', dpi=1000)
 
 # anim, _ = StateBuffer.animate(
