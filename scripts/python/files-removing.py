@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 
-folder = 'D:/linear_precipitation/L2000'
+folder = 'Data/debugging'
 
 load_folder = os.path.abspath(folder)
 print(f'load_folder: {load_folder}')

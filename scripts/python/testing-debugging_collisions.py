@@ -19,7 +19,7 @@ kwargs = {
 }
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'Data/debugging'
+folder = f'Data/debugging/collisions'
 alias = f'250326_172819'
 
 species = PlantSpecies()

@@ -7,10 +7,11 @@ import os
 import copy
 import warnings
 import json
+from io import StringIO
 
 from mods.files import *
-from mods.plant import Plant
-from io import StringIO
+from mods.plant import *
+from mods.spatial import *
 
 modi_path_kwargs = '../../default_kwargs.json'
 local_path_kwargs = 'default_kwargs.json'
@@ -124,7 +125,7 @@ class DataBuffer:
         new_rows = pd.DataFrame(
             self.buffer, columns=self.columns, dtype=np.float64)
         print(
-            f'\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+            f'\n\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
         if not os.path.exists(self.file_path):
             self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
@@ -145,7 +146,7 @@ class DataBuffer:
 
     @staticmethod
     def plot(data, size=6, title='', keys=None, drop_first = True):
-        title = 'Data Buffer ' + title
+        title = 'data_buffer-' + title
 
         # Specify which keys need to be plotted
         if keys is None:
@@ -182,10 +183,10 @@ class DataBuffer:
         if isinstance(ax, plt.Axes):
             ax = np.array([ax])
         for i, key in enumerate(keys):
-            x_data = data['Time']
+            t_data = data['Time']
             y_data = data[key]
-
-            ax[i].plot(x_data, y_data, color=cmap((i + 1) / len(keys)))
+            
+            ax[i].plot(t_data, y_data, color=cmap((i + 1) / len(keys)))
             ax[i].set_ylabel(key)
             y_max = np.nanmax(y_data)
             if y_max != 0:
@@ -197,6 +198,7 @@ class DataBuffer:
             # ax_i.legend()
         
         title = title
+        print(f'DataBuffer.plot(): {title = }')
         return fig, ax, title
 
 
@@ -253,7 +255,7 @@ class StateBuffer:
         new_rows = pd.DataFrame(
             self.buffer, columns=self.columns, dtype=np.float64)
         print(
-            f'\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+            f'\n\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
         if not os.path.exists(self.file_path):
             self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
@@ -277,7 +279,10 @@ class StateBuffer:
 
         return data # returns an empty dataframe if the file does not exist
     
-    def get_specific_data(self, t):
+    def get_specific_data(self, t=None):
+        if t is None:
+            print(f'StateBuffer.get_specific_data(): t not specified, returning all data.')
+            return self.get_data()
         if not isinstance(t, (list, np.ndarray, pd.Series)):
             t = [t]
         
@@ -354,32 +359,77 @@ class StateBuffer:
         data.to_csv(file_path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_state(state, size=2, fig=None, ax=None, title='', half_width=0.5, half_height=0.5, fast=False):
+    def plot_state(state, size=2, fig=None, ax=None, title='', box=None, fast=False, boundary_condition=None):
         if state.empty:
             print('StateBuffer.plot_state(): No data to plot.')
             return fig, ax, title
         
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        ax.set_xlim(-half_width, half_width)
-        ax.set_ylim(-half_height, half_height)
+            
+        if box is None:
+            box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
+        
+        scale = 1.4
+        dim = box[:, 1] - box[:, 0]
+        c = 0.5 * (box[:, 0] + box[:, 1])
+        scaled_box = c + scale * dim/2 * np.array([[-1, 1], [-1, 1]])
+        ax.set_xlim(scaled_box[0, 0], scaled_box[0, 1])
+        ax.set_ylim(scaled_box[1, 0], scaled_box[1, 1])
         ax.set_aspect('equal', 'box')
+        
+        # Draw a grey outlined rectangle along the box
+        rect = plt.Rectangle(
+            (box[0, 0], box[1, 0]),  # Bottom-left corner
+            box[0, 1] - box[0, 0],  # Width
+            box[1, 1] - box[1, 0],  # Height
+            edgecolor='grey',
+            facecolor='none',
+            linestyle='-',
+            linewidth=1,
+            alpha=0.5
+        )
+        ax.add_patch(rect)
 
         t = state['t'].iloc[0]
                     
         cmap = plt.colormaps['tab10']
+        
+        ids = state['id'].values
+        positions = state[['x', 'y']].values
+        radii = state['r'].values
+        species = state['species'].values
+        
+        if boundary_condition == 'periodic':
+            if fast:
+                positions_shifted, index_pairs, was_shifted = positions_shift_periodic(box, positions, radii, duplicates=True)
+            else:
+                positions_shifted, index_pairs, was_shifted = positions_shift_periodic_all(box, positions)
+            
+            is_beyond_plot_boundary = np.any(boundary_check(scaled_box, positions_shifted), axis=1)
+            
+            index_pairs = index_pairs[~is_beyond_plot_boundary]
+            
+            ids = ids[index_pairs[:, 0]]
+            species = species[index_pairs[:, 0]]
+            radii = radii[index_pairs[:, 0]]
+            positions = positions_shifted[index_pairs[:, 1]]
 
-        for id, x, y, r, species in state[['id', 'x', 'y', 'r', 'species']].values:
-            if fast and r > 0.005:
+        for i, (id, (x, y), r, species) in enumerate(zip(ids, positions, radii, species)):
+            if boundary_condition == 'periodic' and was_shifted[i]:
+                alpha = 0.5
+            else:
+                alpha = 1.0
+            if fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         color=cmap(int(species + 3)), fill=False, transform=ax.transData))
+                                         facecolor='None', edgecolor=cmap(int(species + 3)), transform=ax.transData, alpha=alpha))
             elif not fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         color=cmap(int(species + 3)), fill=True, transform=ax.transData))
+                                         facecolor=cmap(int(species + 3)), edgecolor='None', transform=ax.transData, alpha=alpha))
 
         if t is not None:
             t = float(round(t, 2))
-            ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
+            ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
             
 
         ax.set_xticks([])
@@ -389,8 +439,8 @@ class StateBuffer:
         return fig, ax, title
 
     @staticmethod
-    def plot(data, size=2, title='', fast=False, n_plots=20):
-        title = 'State Buffer ' + title
+    def plot(data, size=2, title='', fast=False, n_plots=20, box=None, boundary_condition=None):
+        title = 'state_buffer-' + title
         if data.empty:
             print('StateBuffer.plot(): No data to plot.')
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -424,44 +474,27 @@ class StateBuffer:
                 a.axis('off')
                 continue
             state = data[data['t'] == times[i]]
-            StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast)
+            StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast, box=box, boundary_condition=boundary_condition)
             
         title = title
         return fig, ax, title
 
     @staticmethod
-    def animate(data, size=6, title='', fast=False, skip=1, interval=None):
+    def animate(data, size=6, title='', fast=False, skip=1, interval=None, box=None, boundary_condition=None):
         print('StateBuffer.animate(): Animating StateBuffer...')
         times = data['t'].unique()[::skip]
-        circle_data = [data[data['t'] == t][['x', 'y', 'r', 'species']].values for t in times]
         time_step = times[1] - times[0]
         T = len(times)
 
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
         fig.suptitle(title, fontsize=15)
         fig.tight_layout()
-        
-        cmap = plt.colormaps['tab10'] 
-        
-        
-        circles = [plt.Circle((x, y), r, color=cmap(int(species + 3)),
-                              fill=not fast) for x, y, r, species in circle_data[0]]
-        
+
         def animate_func(i):
             ax.clear()
-            ax.set_xlim(-0.5, 0.5)
-            ax.set_ylim(-0.5, 0.5)
-            ax.set_aspect('equal', 'box')
-            ax.set_xticks([])
-            ax.set_yticks([])
-                
-            t = float(round(times[i], 2))
-            ax.set_xlabel(f'{t=}', fontsize=12)
-            
-            circles = [plt.Circle((x, y), r, color=cmap(int(species + 3)),
-                              fill=not fast) for x, y, r, species in circle_data[i]]
-            for circle in circles:
-                ax.add_artist(circle)
+            t = times[i]
+            state = data[data['t'] == t]
+            StateBuffer.plot_state(state=state, size=size, ax=ax, fast=fast, box=box, boundary_condition=boundary_condition)
             print(f'StateBuffer.animate(): i = {i + 1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
             return ax
 
@@ -522,7 +555,7 @@ class FieldBuffer:
     def _flush_buffer(self):
         new_rows = pd.DataFrame(self.buffer, columns=self.columns)
         print(
-            f'\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+            f'\n\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
         
         if not os.path.exists(self.file_path):
             self._initialize_file()
@@ -543,14 +576,27 @@ class FieldBuffer:
                 data = rewrite_density_field_buffer_data(data)
                 self.override_data(data)
         
-        return data # returns an empty dataframe if the file does not exist
+        return data # returns an empty dataframe if the file does not exist        
 
-    def get_fields(self):
+    def get_specific_data(self, t=None):
+        if t is None:
+            print(f'FieldBuffer.get_specific_data(): t not specified, returning all data.')
+            return self.get_data()
+        t = np.atleast_1d(t)
         data = self.get_data()
+        if data.empty:
+            return data
+        times = data['t'].unique()
+        times_to_get = np.unique([times[np.abs(times - t).argmin()] for t in t])
+        data = data[data['t'].isin(times_to_get)]
+        return data
+
+    def get_specific_fields(self, t=None):
+        data = self.get_specific_data(t)
         times = data['t'].unique()
         fields = [data[data['t'] == t].iloc[:, 1:].values.reshape(
             self.resolution, self.resolution) for t in times]
-        return fields
+        return fields[0] if len(fields) == 1 else fields
 
     def override_data(self, data):
         with open(self.file_path, 'w', newline='') as f:
@@ -564,25 +610,58 @@ class FieldBuffer:
         data.to_csv(path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_field(field, t=None, size=2, title = '', fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+    def plot_field(field, t=None, size=2, title = '', fig=None, ax=None, vmin=0, vmax=None, box=None, boundary_condition=None):
         resolution = np.sqrt(field.size).astype(int)
         field = field.reshape(resolution, resolution)
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
+            
+        if box is None:
+            box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
+            
         ax.contour(field, levels=[1.0], colors=[
                    'r'], linewidths=[1], alpha=0.5)
         ax.imshow(field, origin='lower', cmap='Greys',
-                  vmin=vmin, vmax=vmax, extent=extent)
+                  vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
+        
+        if boundary_condition == 'periodic':
+            rect = plt.Rectangle(
+                (box[0, 0], box[1, 0]),  # Bottom-left corner
+                box[0, 1] - box[0, 0],  # Width
+                box[1, 1] - box[1, 0],  # Height
+                edgecolor='black',
+                facecolor='none',
+                linestyle='-',
+                linewidth=1,
+                alpha=0.2
+            )
+            ax.add_patch(rect)
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                    extent_shifted = [
+                        box[0, 0] + dx * (box[0, 1] - box[0, 0]),
+                        box[0, 1] + dx * (box[0, 1] - box[0, 0]),
+                        box[1, 0] + dy * (box[1, 1] - box[1, 0]),
+                        box[1, 1] + dy * (box[1, 1] - box[1, 0]),
+                    ]
+                    ax.imshow(field, origin='lower', cmap='Greys',
+                              vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
+        
+        scale = 1.4
+        ax.set_xlim(box[0, 0] * scale, box[0, 1] * scale)
+        ax.set_ylim(box[1, 0] * scale, box[1, 1] * scale)
         if t is not None:
             t = float(round(t, 2))
-            ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
+            ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
         ax.set_xticks([])
         ax.set_yticks([])
         return fig, ax, title
 
     @staticmethod
-    def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', extent=[-0.5, 0.5, -0.5, 0.5]):
-        title = 'Field Buffer ' + title
+    def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', box=None, boundary_condition=None):
+        title = 'field_buffer-' + title
         if data.empty:
             print('FieldBuffer.plot(): No data to plot.')
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
@@ -616,12 +695,12 @@ class FieldBuffer:
                 continue
             field = fields[i]
             t = times[i]
-            FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, extent=extent)
+            FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, box=box, boundary_condition=boundary_condition)
         
         title = title
         return fig, ax, title
 
-    def animate(self, size=6, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+    def animate(self, size=6, vmin=0, vmax=None, box=None, boundary_condition=None):
         print('FieldBuffer.animation(): Animating FieldBuffer...')
         data = self.get_data()
         times = data['t'].unique()
@@ -643,11 +722,7 @@ class FieldBuffer:
         def animate(i):
             ax.clear()
             t = float(round(times[i], 2))
-            ax.set_title(f'{t=}')
-            ax.imshow(fields[i], origin='lower', cmap='Greys',
-                      vmin=vmin, vmax=vmax, extent=extent)
-            ax.set_xticks([])
-            ax.set_yticks([])
+            FieldBuffer.plot_field(field=fields[i], t=t, size=size, ax=ax, vmin=vmin, vmax=vmax, box=box, boundary_condition=boundary_condition)
             return ax
 
         ani = animation.FuncAnimation(
@@ -726,7 +801,7 @@ class HistogramBuffer:
 
     @staticmethod
     def plot(data, size=2, t=None, nplots=20, title='', density=False, xscale=1, xlabel='', ylabel='frequency'):
-        title = 'Histogram Buffer ' + title
+        title = 'histogram_buffer-' + title
         start = self.start * xscale
         end = self.end * xscale
         xx = np.linspace(start, end, self.bins)
@@ -793,7 +868,7 @@ class HistogramBuffer:
         ymax = np.nanmax(values)
 
         if title is None:
-            title = self.title + ' Animation'
+            title = self.title + 'animation'
 
         fig, ax = plt.subplots(1, 1, figsize=(size, 2*size//3))
         # fig.tight_layout()

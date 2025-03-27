@@ -12,12 +12,11 @@ import pandas as pd
 from scipy.spatial import KDTree
 from scipy.stats import gaussian_kde
 
-from mods.buffers import (DataBuffer, FieldBuffer, HistogramBuffer, StateBuffer,
-                          rewrite_density_field_buffer_data,
-                          rewrite_hist_buffer_data, rewrite_state_buffer_data)
-from mods.fields import DensityFieldSPH, DensityFieldCustom
-from mods.plant import Plant, PlantSpecies
+from mods.buffers import *
+from mods.fields import *
+from mods.plant import *
 from mods.utilities import *
+from mods.spatial import *
 
 
 modi_path_kwargs = '../../default_kwargs.json'
@@ -90,9 +89,8 @@ class Simulation:
         self.plants = []
         self.land_quality = 0.001
 
-        self.half_width = 0.5
-        self.half_height = 0.5
-
+        self.box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
+        
         self._m = 1 / self.L
         self.conversion_factors_default = {
             'r_min': self._m,
@@ -128,9 +126,7 @@ class Simulation:
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
         self.density_field_buffer = FieldBuffer(
             file_path=density_field_buffer_path, resolution=self.density_field_resolution)
-        self.density_field = DensityFieldCustom(
-            half_width=self.half_width,
-            half_height=self.half_height,
+        self.density_field = DensityFieldCustom(box=self.box,
             resolution=self.density_field_resolution,
         )
 
@@ -185,20 +181,52 @@ class Simulation:
                 [(plant.x, plant.y) for plant in state])
 
     def step(self):
-        n = self.spawn_rate
-        self.attempt_spawn(n=n, species_list=self.species_list)
-
-        n0 = len(self.plants)
-        # First Phase: Update all plants based on the current state of the simulation
+        # Update all plants based on the current state of the simulation
+        dispersed_positions = np.empty((0, 2))
+        parent_species = []
         for plant in self.plants:
-            plant.update(self)
+            plant.grow()
+            pos = plant.disperse(self)
+            if len(pos) > 0:
+                dispersed_positions = np.vstack((dispersed_positions, pos))
+                parent_species.extend([PlantSpecies(**plant.__dict__)] * len(pos))
+            plant.mortality()
 
+        # Spawn new plants
+        self.attempt_germination(dispersed_positions, parent_species)
+        self.attempt_spawn(n=self.spawn_rate, species_list=self.species_list)
+        
         # Check for and resolve collisions
-        self.resolve_collisions(self.get_collisions())
-
-        # Second Phase: Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
+        # self.resolve_collisions(collision_indices)
+        positions = np.array([[plant.x, plant.y] for plant in self.plants if not plant.is_dead])
+        if len(positions) > 0:
+            radii = np.array([plant.r for plant in self.plants if not plant.is_dead])
+            
+            if self.boundary_condition == 'periodic':
+                positions_shifted, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions, radii=radii, duplicates=True)
+                radii_shifted = radii[index_pairs[:, 0]]
+                collision_indices = get_all_collisions(positions_shifted, radii_shifted)
+                
+                indices_final_shifted = index_pairs[:, 1][~was_shifted]
+                if len(collision_indices) > 0:
+                    collision_losers_indices = np.unique([j if radii_shifted[i] > radii_shifted[j] else i for i, j in collision_indices])
+                    indices_final_shifted = np.setdiff1d(index_pairs[:, 1][~was_shifted], collision_losers_indices)
+                    
+                indices_final = index_pairs[:, 0][indices_final_shifted]
+            else:
+                collision_indices = get_all_collisions(positions, radii)
+                if len(collision_indices) > 0:
+                    collision_losers_indices = np.unique([j if radii[i] > radii[j] else i for i, j in collision_indices])
+                    indices_final = np.setdiff1d(np.arange(len(positions)), collision_losers_indices)
+        else:
+            indices_final = np.array([])
+            
+        # Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
         new_plants = []
-        for plant in self.plants:
+        for i, plant in enumerate(self.plants):
+            if i not in indices_final:
+                plant.is_dead = True
+        
             if not plant.is_dead:
                 new_plants.append(plant)
 
@@ -393,6 +421,8 @@ class Simulation:
         self.density_field.update(self.plants)
 
     def attempt_spawn(self, n, species_list=[]):
+        if species_list == []:
+            species_list = self.species_list
 
         # Take care of the decimal part of the spawn rate n
         decimal_part = n - int(n)
@@ -400,117 +430,78 @@ class Simulation:
         if np.random.rand() < decimal_part:
             n += 1
 
-        # Generate new positions
-        new_positions = np.random.uniform(-self.half_width,
-                                          self.half_width, (n, 2))
+        # Generate new positions and species
+        new_positions = np.random.uniform(self.box[:, 0], self.box[:, 1], (n, 2))
         new_species = np.random.choice(species_list, n)
         
-        # Collect all positions that are not colliding with other plants
-        not_colliding_indices = []
-        for i, pos in enumerate(new_positions):
-            current_species = new_species[i]
-            
-            # COLLISION CHECK
-            collisions = []
-            if self.kt is not None:
-                indices_neighbours = self.kt.query_ball_point(pos, current_species.r_min+self.maximum_plant_size)
-                for j in indices_neighbours:
-                    if (pos[0] - self.plants[j].x)**2 + (pos[1] - self.plants[j].y)**2 < (current_species.r_min + self.plants[j].r)**2:
-                        collisions.append(j)
-            if len(collisions) == 0:
-                not_colliding_indices.append(i)
-            
-        # Filter out the positions of the colliding plants
-        new_positions = new_positions[not_colliding_indices]
-        new_species = new_species[not_colliding_indices]
-        
-        
-        new_plants = []
-        if len(new_positions) > 0:
-            germination_chances = np.maximum(self.land_quality, self.local_density(new_positions)) * self.precipitation * current_species.germination_chance
-            random_values = np.random.uniform(0, 1, len(new_positions))
-            spawn_indices = np.where(
-                germination_chances > random_values)[0]
-            
-            new_positions = new_positions[spawn_indices]
-            new_species = new_species[spawn_indices]
-
-            for i, pos in enumerate(new_positions):
-                current_species = new_species[i]
-                new_plants.append(
-                    current_species.create_plant(
-                        id=self.id_generator.get_next_id(),
-                        x=pos[0],
-                        y=pos[1],
-                        r=current_species.r_min
-                    )
-                )
-
-        if len(new_plants) > 0:
-            self.add(new_plants)
-            print(f'Simulation.attempt_spawn(): {len(new_plants)} plants spawned.', end='\r')
-            print()
-
-    def get_collisions(self):
-        collisions = []
-        if len(self.plants) > 1:
-            radii = np.array([plant.r for plant in self.plants])
-            sparse_dist_matrix = self.kt.sparse_distance_matrix(
-                self.kt, max_distance=2*np.max(radii))
-            # Filter pairs that are within collision distance
-            collision_dist_matrix = radii[:, None] + radii[None, :]
-            collisions = [(i, j) for i, j in zip(*sparse_dist_matrix.nonzero())
-                          if sparse_dist_matrix[i, j] < collision_dist_matrix[i, j]]
-        return collisions
+        self.attempt_germination(new_positions, new_species)
 
     def resolve_collisions(self, collisions):
         for i, j in collisions:
             self.plants[i].compete(self.plants[j])
-
-    def pos_in_box(self, pos):
-        pos = np.atleast_2d(pos)
-        pos_in_box = (np.abs(pos[:, 0]) < self.half_width) & (np.abs(pos[:, 1]) < self.half_height)
-        return pos_in_box
-    
-    def pos_shift_periodic(self, pos):
-        pos = np.atleast_2d(pos)
-        pos[:, 0] = np.mod(pos[:, 0] + self.half_width, 2*self.half_width) - self.half_width
-        pos[:, 1] = np.mod(pos[:, 1] + self.half_height, 2*self.half_height) - self.half_height
-        return pos
     
     def local_density(self, pos):
-        # DO BOUNDARY CONDITIONS HERE
         return self.density_field.query(pos)
 
-    def attempt_germination(self, new_positions, parent):        
-        # DO BOUNDARY CONDITIONS HERE INSTEAD OF POS_IN_BOX
-        new_positions = new_positions[self.pos_in_box(new_positions)]
-        
-        # COLLISION CHECK
-        if self.kt is None:
+    def attempt_germination(self, positions_to_germinate, parent_species):
+        if len(positions_to_germinate) == 0:
             return
-        for i, pos in enumerate(new_positions):
-            indices_neighbours = self.kt.query_ball_point(pos, parent.r_min+self.maximum_plant_size)
-            for j in indices_neighbours:
-                if (pos[0] - self.plants[j].x)**2 + (pos[1] - self.plants[j].y)**2 < (parent.r_min + self.plants[j].r)**2:
-                    new_positions[i] = np.nan
-                    
-        new_positions = new_positions[~np.isnan(new_positions).any(axis=1)]
-       
-        germination_chances = np.maximum(self.land_quality, self.local_density(new_positions)) * self.precipitation * parent.germination_chance
-        random_values = np.random.uniform(0, 1, len(new_positions))
+        parent_species = np.atleast_1d(parent_species)
+        if len(parent_species) == 1:
+            parent_species = np.repeat(parent_species, len(positions_to_germinate))
+        elif len(parent_species) != len(positions_to_germinate):
+            raise ValueError(
+                'Simulation.attempt_germination(): The number of parent species must match the number of positions.')
+        
+        # ENFORCE BOUNDARIES
+        boundary = self.box
+        
+        if self.boundary_condition == 'periodic':
+            positions_new, index_pairs, was_shifted = positions_shift_periodic(boundary=boundary, positions=positions_to_germinate, duplicates=False)
+            
+            is_beyond_boundary = boundary_check(boundary=boundary, positions=positions_new)
+            if is_beyond_boundary.any():
+                print(f'Simulation.attempt_germination(): {np.sum(is_beyond_boundary)}/{len(positions_new)} positions are beyond the boundary.')
+                for i, j in index_pairs:
+                    if is_beyond_boundary[j].any():
+                        print(f'Simulation.attempt_germination(): {positions_to_germinate[i]} -> {positions_new[j]}')
+            
+            positions_to_germinate = positions_new
+            parent_species = parent_species[index_pairs[:, 0]]  
+        else:
+            is_beyond_boundary = np.any(boundary_check(boundary=boundary, positions=positions_to_germinate), axis=1)
+            positions_to_germinate = positions_to_germinate[~is_beyond_boundary]
+            parent_species = parent_species[~is_beyond_boundary]
+            
+        # # COLLISION CHECK
+        # plant_positions = np.array([[plant.x, plant.y] for plant in self.plants])
+        # radii = np.array([plant.r for plant in self.plants])
+        # positions_before_collision_check = positions_to_germinate.copy()
+        # parent_species_before_collision_check = parent_species.copy()
+        # for i, pos in enumerate(positions_to_germinate):
+        #     collision_indices = get_collisions_for_point(
+        #         positions=plant_positions,
+        #         radii=radii,
+        #         point=pos,
+        #         radius=parent_species_before_collision_check[i].r_min
+        #     )
+        #     if len(collision_indices) > 0:
+        #         positions_to_germinate = np.delete(positions_before_collision_check, i, axis=0)
+        #         parent_species = np.delete(parent_species_before_collision_check, i)
+        
+        species_germination_chances = np.array([s.germination_chance for s in parent_species])         
+        germination_chances = np.maximum(self.land_quality, self.local_density(positions_to_germinate)) * self.precipitation * species_germination_chances
+        random_values = np.random.uniform(0, 1, len(positions_to_germinate))
         germination_indices = np.where(germination_chances > random_values)[0]
 
         new_plants = []
         for i in germination_indices:
-            new_plant = parent.copy()
-            new_plant.id = self.id_generator.get_next_id()
-            new_plant.x = new_positions[i, 0]
-            new_plant.y = new_positions[i, 1]
-            new_plant.r = parent.r_min
+            new_plant = parent_species[i].create_plant(id=self.id_generator.get_next_id(), x=positions_to_germinate[i, 0], y=positions_to_germinate[i, 1], r=parent_species[i].r_min)
             new_plants.append(new_plant)
                     
-        self.add(new_plants)
+        if len(new_plants) > 0:
+            self.add(new_plants)
+            # print(f'Simulation.attempt_germination(): {len(new_plants)} plants germinated.')
 
     def collect_data(self):
         sizes = np.array([plant.r for plant in self.plants])
@@ -527,7 +518,7 @@ class Simulation:
         )
         return data
 
-    def initiate_uniform_radii(self, n, mode='full', species_list=[]):
+    def initiate_uniform_radii(self, n, species_list=[], box=None):
         if self.plants != []:
             raise ValueError(
                 "Simulation.initiate_uniform_radii(): The simulation is not empty. Please initialize an empty simulation.")
@@ -535,15 +526,8 @@ class Simulation:
         if species_list == []:
             species_list = self.species_list
 
-        if mode == 'full':
-            x_range = (-self.half_width, self.half_width)
-            y_range = (-self.half_height, self.half_height)
-        elif mode == 'half':
-            x_range = (0, self.half_width)
-            y_range = (-self.half_height, self.half_height)
-        else:
-            raise ValueError(
-                "Simulation.initiate_uniform_radii(): mode must be either 'full' or 'half'.")
+        if box is None:
+            box = self.box
 
         new_plants = []
         for i in range(n):
@@ -551,8 +535,8 @@ class Simulation:
             new_plants.append(
                 current_species.create_plant(
                     id=self.id_generator.get_next_id(),
-                    x=np.random.uniform(*x_range),
-                    y=np.random.uniform(*y_range),
+                    x=np.random.uniform(*box[0]),
+                    y=np.random.uniform(*box[1]),
                     r=np.random.uniform(current_species.r_min,
                                         current_species.r_max))
             )
@@ -563,17 +547,33 @@ class Simulation:
         self.data_buffer.add(data=self.collect_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
         
-    def initiate_non_overlapping(self, n, species_list=[], max_attempts=None):
+    def initiate_non_overlapping(self, n=None, species_list=[], max_attempts=None, box=None, target_density=None):
+        if n is None and target_density is None:
+            raise ValueError("Simulation.initiate_non_overlapping(): Either n or target_density must be specified.")
+        
+        if self.plants != []: 
+            warnings.warn("Simulation.initiate_non_overlapping(): The simulation is not empty. Do you want to continue? (Y/n):")
+            user_input = input()
+            if user_input.lower() != 'y':
+                raise ValueError("Simulation.initiate_non_overlapping(): Aborted by user.")
+        if species_list == []:
+            species_list = self.species_list
         L = self.L
         new_plants = []
         attempts = 0
         if max_attempts is None:
-            max_attempts = 200 * n
+            max_attempts = 200 * n if n is not None else 50 * L
         species_counts = {s.species_id: 0 for s in species_list}
         weights = np.ones(len(species_list)) / len(species_list)
         
+        if box is None:
+            box = self.box
+        
+        
         try:
-            while len(new_plants) < n and attempts < max_attempts:
+            stop_condition = False
+            biomass = 0
+            while stop_condition is False and attempts < max_attempts:
                 if len(new_plants) > 0:
                     fractions = np.array([species_counts[s.species_id]
                             for s in species_list]) / len(new_plants)
@@ -585,8 +585,8 @@ class Simulation:
                 
                 current_species = np.random.choice(species_list, p=weights)
                 new_r = np.random.uniform(current_species.r_min, current_species.r_max)
-                new_x = np.random.uniform(-self.half_width, self.half_width)
-                new_y = np.random.uniform(-self.half_width, self.half_width)
+                new_x = np.random.uniform(*box[0])
+                new_y = np.random.uniform(*box[1])
                 new_pos = np.array([new_x, new_y])
 
                 attempts += 1
@@ -594,14 +594,18 @@ class Simulation:
                     new_plants.append(current_species.create_plant(
                     id=len(new_plants), x=new_x,  y=new_y, r=new_r))
                     species_counts[current_species.species_id] += 1
+                    biomass = sum([plant.area for plant in new_plants])
+                
                     print(
-                    f'Simulation.spawn_non_overlapping(): {len(new_plants) = }   {attempts = }/{max_attempts}', end='\r')
+                    f'Simulation.spawn_non_overlapping(): {len(new_plants) = }/{n}   {biomass = :.3f}/{target_density}   {attempts = }/{max_attempts}', end='\r')
+                        
+                
+                stop_condition = (len(new_plants) >= n) if (n is not None) else (sum([s.area for s in new_plants]) >= target_density)
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
 
-        if len(new_plants) < n:
-            print(
-                f"Simulation.spawn_non_overlapping(): Only {len(new_plants)} circles were placed after {max_attempts} attempts.")
+        print(f"Simulation.spawn_non_overlapping(): {len(new_plants)} plants with biomass {biomass:.3f} was placed after {attempts}/{max_attempts} attempts.")
+        print()
 
         self.add(new_plants)
         self.update_kdtree(self.plants)
@@ -609,77 +613,6 @@ class Simulation:
         self.data_buffer.add(data=self.collect_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
 
-    # def initiate_dense_distribution(self, n: int):
-        # if self.plants != []:
-        #     raise ValueError(
-        #         "Simulation.initiate_dense_distribution(): The simulation is not empty. Please initialize an empty simulation.")
-    #     mean_dbhs = np.array([0.05, 0.2, 0.4, 0.6, 0.85, 1.50])  # in m
-    #     mean_rs = dbh_to_crown_radius(mean_dbhs) * self._m
-    #     freqs = np.array([5800, 378.8, 50.98, 13.42, 5.62, 0.73])
-
-    #     # Apply log transformation to the data
-    #     log_mean_rs = np.log(mean_rs)
-
-    #     # Calculate the KDE of the log-transformed data
-    #     kde = gaussian_kde(log_mean_rs, weights=freqs, bw_method='silverman')
-
-    #     # Resample from the KDE and transform back to the original space
-    #     log_samples = kde.resample(n)[0]
-    #     samples = np.exp(log_samples)
-
-    #     # Create the plants
-    #     plants = [
-    #         Plant(
-    #             id=self.id_generator.get_next_id(),
-    #               x = np.random.uniform(-self.half_width, self.half_width),
-    #               y = np.random.uniform(-self.half_height, self.half_height),
-    #             r=r,
-    #             r_min=self.r_min,
-    #             r_max=self.r_max,
-    #             growth_rate=self.growth_rate,
-    #             dispersal_range=self.dispersal_range,
-    #             maturity_size=self.maturity_size
-    #         )
-    #         for i, r in enumerate(samples)
-    #     ]
-    #     self.add(plants)
-        # self.update_kdtree(self.plants)
-        # self.density_field.update(self.plants)
-    #     self.data_buffer.add(data=self.collect_data())
-    #     self.state_buffer.add(plants=state=self.plants, t=self.t)
-
-    # def initiate_packed_distribution(self, r: float):
-        # if self.plants != []:
-        #     raise ValueError(
-        #         "Simulation.initiate_packed_distribution(): The simulation is not empty. Please initialize an empty simulation.")
-    #     plants = []
-    #     dx = 2 * r
-    #     dy = np.sqrt(3) * r
-
-    #     for i, x in enumerate(np.arange(-self.half_width + r, self.half_width - r, dx)):
-    #         for j, y in enumerate(np.arange(-self.half_height + r, self.half_height - r, dy)):
-
-    #             if j % 2 == 0:
-    #                 x += r
-    #             if j % 2 == 1:
-    #                 x -= r
-    #             pos = np.array([x, y])
-    #             plants.append(
-    #                 Plant(
-    #                     id=self.id_generator.get_next_id(),
-    #                     pos=pos,
-    #                     r=r,
-    #                     r_min=self.r_min,
-    #                     r_max=self.r_max,
-    #                     growth_rate=self.growth_rate,
-    #                     dispersal_range=self.dispersal_range,
-    #                     maturity_size=self.maturity_size
-    #                 )
-    #             )
-
-    #     self.add(plants)
-        # self.update_kdtree(self.plants)
-        # self.density_field.update(self.plants)
     exclude_default = [
         'alias',
         'biomass_buffer',
@@ -694,6 +627,7 @@ class Simulation:
         'folder',
         'half_height',
         'half_width',
+        'box',
         'id_generator',
         'kt',
         'maximum_plant_size',
@@ -705,27 +639,38 @@ class Simulation:
         'verbose'
     ]
 
-    def plot_buffers(self, title=None, convergence=True, n_plots=20, fast=False):
+    def plot_buffers(self, title='', convergence=True, n_plots=20, fast=False):
         db_fig, db_ax, db_title = DataBuffer.plot(
             data=self.data_buffer.get_data(), title=title)
         sb_fig, sb_ax, sb_title = StateBuffer.plot(
-            data=self.state_buffer.get_data(), title=title, n_plots=n_plots, fast=fast)
-        dfb_fig, dfb_ax, dfb_title = FieldBuffer.plot(
-            data=self.density_field_buffer.get_data(), title=title, n_plots=n_plots)
-        figs = [db_fig, sb_fig, dfb_fig]
-        axs = [db_ax, sb_ax, dfb_ax]
-        titles = [db_title, sb_title, dfb_title]
+            data=self.state_buffer.get_data(), title=title, n_plots=n_plots, box=self.box, boundary_condition=self.boundary_condition, fast=fast)
+        # dfb_fig, dfb_ax, dfb_title = FieldBuffer.plot(
+        #     data=self.density_field_buffer.get_data(), title=title, n_plots=n_plots, box=self.box, boundary_condition=self.boundary_condition)
+        # figs = [db_fig, sb_fig, dfb_fig]
+        # axs = [db_ax, sb_ax, dfb_ax]
+        # titles = [db_title, sb_title, dfb_title]
+        figs = [db_fig, sb_fig]
+        axs = [db_ax, sb_ax]
+        titles = [db_title, sb_title]
         return figs, axs, titles
 
-    def plot(self):
+    def plot(self, fast = False, field_buffer=True):
         state = pd.DataFrame([[p.id, p.x, p.y, p.r, p.species_id, self.t]
                              for p in self.plants], columns=['id', 'x', 'y', 'r', 'species', 't'])
         field = self.density_field.values
 
-        sb_fig, sb_ax, sb_title = StateBuffer.plot_state(size=6, state=state)
-        fb_fig, fb_ax, fb_title = FieldBuffer.plot_field(size=6, field=field)
+        sb_fig, sb_ax, sb_title = StateBuffer.plot_state(size=6, state=state, box=self.box, boundary_condition=self.boundary_condition, fast=fast)
+        if field_buffer:
+            fb_fig, fb_ax, fb_title = FieldBuffer.plot_field(size=6, field=field, box=self.box, boundary_condition=self.boundary_condition)
 
-        figs = [sb_fig, fb_fig]
-        axs = [sb_ax, fb_ax]
-        titles = [sb_title, fb_title]
+            figs = [sb_fig, fb_fig]
+            axs = [sb_ax, fb_ax]
+            titles = [sb_title, fb_title]
+        else:
+            figs = [sb_fig]
+            axs = [sb_ax]
+            titles = [sb_title]
         return figs, axs, titles
+    
+    def plot_state(self, fast = False):
+        return self.plot(fast=fast, field_buffer=False)

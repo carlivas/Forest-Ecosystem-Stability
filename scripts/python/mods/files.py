@@ -23,8 +23,10 @@ def find_all_lines_key_values(f, key, vals, assume_sorted=False):
 
     # Find which column the key is in
     f.seek(0)
-    line = f.readline().decode('utf-8').replace('\n', '')
+    line = f.readline().decode('utf-8').strip()
+    print(f'files.find_all_lines_key_values(): Found keys: {line}')
     keys = line.split(',')
+    print(f'files.find_all_lines_key_values(): Found keys: {keys}')
     key_col = keys.index(key)
     
     # Create a list to store the lines
@@ -69,7 +71,7 @@ def find_all_lines_key_values(f, key, vals, assume_sorted=False):
 def find_first_value_sorted(f, key, val):
     # Find which column the key is in
     f.seek(0)
-    line = f.readline().decode('utf-8').replace('\n', '')
+    line = f.readline().decode('utf-8').strip()
     keys = line.split(',')
     key_col = keys.index(key)
     
