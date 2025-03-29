@@ -45,7 +45,7 @@ def find_all_lines_key_values(f, key, vals, assume_sorted=False):
             except ValueError:
                 break
             move_to_previous_line(f)
-            print(f'files.find_all_lines_key_values(): Found value at stream position {f.tell()}: \'{key}\' = {val}', end=' '*50 + '\r')
+            print(f'files.find_all_lines_key_values(): Found value at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
         
         # If the value is less than the minimum value, move the pointer to the next line
         if val < min_val:
@@ -58,10 +58,10 @@ def find_all_lines_key_values(f, key, vals, assume_sorted=False):
         line = line.decode('utf-8')
         val = float(line.split(',')[key_col])
         if val in vals_set:
-            print(f'files.find_all_lines_key_values(): Found value at stream position {i}: \'{key}\' = {val}', end=' '*50 + '\r')
+            print(f'files.find_all_lines_key_values(): Found value at stream position {i}: \'{key}\' = {val}', end=' '*10 + '\r')
             lines.append(line)
         else:
-            print(f'files.find_all_lines_key_values(): Searching for value at stream position {i}', end=' '*50 + '\r') 
+            print(f'files.find_all_lines_key_values(): Searching for value at stream position {i}', end=' '*10 + '\r') 
         if assume_sorted and val > max_val:
             print()
             print(f'files.find_all_lines_key_values(): Assumed sorted, stopping search at line {i}, val > max_val: {val} > {max_val}')
@@ -98,9 +98,9 @@ def find_first_value_sorted(f, key, val):
         # If the value is equal to the target value, return the line
         else:
             break
-        print(f'files.find_first_value_sorted(): Interval: {start_line = }, {found_val = }, {end_line = }', end=' '*50 + '\r')
+        print(f'files.find_first_value_sorted(): Interval: {start_line = }, {found_val = }, {end_line = }', end=' '*10 + '\r')
     
-    print(f'files.find_first_value_sorted(): Found value: {found_val} at line {f.tell()}' + ' '*50)
+    print(f'files.find_first_value_sorted(): Found value: {found_val} at line {f.tell()}' + ' '*10)
     return line
     
     

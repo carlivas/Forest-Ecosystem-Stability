@@ -6,15 +6,15 @@ from mods.simulation import Simulation
 from mods.buffers import DataBuffer, StateBuffer, FieldBuffer
 print('\nplotting.py: Running...\n')
 
-do_plots = True
-do_animations = False
+do_plots = False
+do_animations = True
 save_figs = True
 
 fast_plots = False
-fast_animations = True
+fast_animations = False
 animation_skip = 5
 
-path = 'Data/baseline/L1000' # Path to the folder containing the buffers
+path = 'Data/baseline/BOX/L500' # Path to the folder containing the buffers
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 

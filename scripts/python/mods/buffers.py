@@ -370,7 +370,7 @@ class StateBuffer:
         if box is None:
             box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
         
-        scale = 1.4
+        scale = 1.2
         dim = box[:, 1] - box[:, 0]
         c = 0.5 * (box[:, 0] + box[:, 1])
         scaled_box = c + scale * dim/2 * np.array([[-1, 1], [-1, 1]])
@@ -649,7 +649,7 @@ class FieldBuffer:
                     ax.imshow(field, origin='lower', cmap='Greys',
                               vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
         
-        scale = 1.4
+        scale = 1.2
         ax.set_xlim(box[0, 0] * scale, box[0, 1] * scale)
         ax.set_ylim(box[1, 0] * scale, box[1, 1] * scale)
         if t is not None:

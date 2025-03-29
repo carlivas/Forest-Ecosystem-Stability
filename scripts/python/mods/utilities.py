@@ -47,7 +47,7 @@ def convert_to_serializable(obj):
             val = convert_to_serializable(obj.__dict__)
         elif isinstance(obj, KDTree):
             val = convert_to_serializable(obj.__dict__)
-        elif isinstance(obj, DensityFieldSPH):
+        elif isinstance(obj, DensityFieldCustom):
             val = convert_to_serializable(obj.__dict__)
         elif isinstance(obj, DataBuffer):
             val = convert_to_serializable(obj.__dict__)
@@ -83,7 +83,7 @@ def save_dict(d, path, exclude=None):
     with open(path, 'w') as f:
         serializable_dictionary = convert_to_serializable(d)
         json.dump(serializable_dictionary, f, indent=4)
-    print('Kwargs saved.')
+    print(f'utilities.save_dict: Kwargs saved at path {path}')
 
 
 def dbh_to_crown_radius(dbh):

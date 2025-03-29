@@ -38,17 +38,27 @@ class IDGenerator:
 
 
 class Simulation:
-    def __init__(self, folder, alias='alias', species_list=[], override=False, **kwargs):
+    def __init__(self, folder, alias='alias', **kwargs):
         kwargs_path = f'{folder}/kwargs-{alias}.json'
         data_buffer_path = f'{folder}/data_buffer-{alias}.csv'
         state_buffer_path = f'{folder}/state_buffer-{alias}.csv'
         density_field_buffer_path = f'{folder}/density_field_buffer-{alias}.csv'
         figure_folder = f'{folder}/figures'
 
-        if override and os.path.exists(kwargs_path):
-            do_override = input(
-                f'Simulation.__init__(): OVERRIDE existing files in folder "{folder}" with alias "{alias}"? (Y/n):')
-            if do_override.lower() != 'y':
+        override = kwargs.get('override', False)
+        override_force = kwargs.get('override_force', False)
+        if (override or override_force) and os.path.exists(kwargs_path):
+            if not override_force:
+                override_input = input(
+                    f'Simulation.__init__(): OVERRIDE existing files in folder "{folder}" with alias "{alias}"? (Y/n):')
+            else:
+                print()
+                print("##################################################")
+                print("##### WARNING: FORCED OVERRIDING IS ENABLED. #####")
+                print("##################################################")
+                print()
+                override_input = 'y'
+            if override_input.lower() != 'y':
                 raise ValueError('Simulation.__init__(): Aborted by user...')
             else:
                 for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
@@ -61,14 +71,14 @@ class Simulation:
 
         os.makedirs(folder + '/figures', exist_ok=True)
 
-        self.species_list = species_list
+        self.species_list = kwargs.get('species_list', [])
         if os.path.exists(kwargs_path):
             print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
             with open(kwargs_path, 'r') as file:
                 kwargs = json.load(file)
 
             species_files = [f for f in os.listdir(folder) if f.startswith(
-                'species_') and f.endswith(f'-{alias}.json')]
+                'species') and f.endswith(f'-{alias}.json')]
             species_list = []
             for species_file in species_files:
                 with open(os.path.join(folder, species_file), 'r') as sf:
@@ -80,41 +90,41 @@ class Simulation:
             print(
                 f'Simulation.__init__(): Loaded {len(self.species_list)} species.')
 
+        self.t = 0
+        self.box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
         self.__dict__.update(default_kwargs)
         self.__dict__.update(kwargs)
         self.folder = folder
         self.alias = alias
 
-        self.t = 0
         self.plants = []
-        self.land_quality = 0.001
-
-        self.box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
         
-        self._m = 1 / self.L
+        _m = 1 / self.L
         self.conversion_factors_default = {
-            'r_min': self._m,
-            'r_max': self._m,
-            'dispersal_range': self._m,
+            'r_min': _m,
+            'r_max': _m,
+            'dispersal_range': _m,
             'spawn_rate': self.time_step,
-            'growth_rate': self._m * self.time_step,
-            # 'density_check_radius': self._m,
-            'density_range': self._m,
-            'maturity_size': self._m,
+            'growth_rate': _m * self.time_step,
+            'density_range': _m,
+            'maturity_size': _m,
         }
 
-        if self.species_list == [] and species_list == []:
-            self.species_list = [PlantSpecies()]
-        else:
-            self.species_list = species_list
 
+        if self.species_list == []:
+            self.species_list = [PlantSpecies()]            
         for s in self.species_list:
-            save_dict(
-                path=f'{folder}/species_{s.species_id}-{alias}.json', d=s.__dict__)
-
-            converted_dict = convert_dict(
-                d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
-            s.__dict__.update(converted_dict)
+            species_kwargs_path=f'{folder}/species{str(s.species_id).replace('-', '_')}-{alias}.json'
+            
+            if kwargs.get('convert_kwargs', True) == True:
+                save_dict(path = species_kwargs_path, d=s.__dict__)
+                converted_dict = convert_dict(
+                    d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
+                s.__dict__.update(converted_dict)
+            else:
+                converted_dict = convert_dict(
+                    d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+                save_dict(path = species_kwargs_path, d=converted_dict)
 
         self.maximum_plant_size = max(
             [s.r_max for s in self.species_list])
@@ -129,33 +139,33 @@ class Simulation:
         self.density_field = DensityFieldCustom(box=self.box,
             resolution=self.density_field_resolution,
         )
+        
+        exisiting_data = self.data_buffer.get_data()
+        if not exisiting_data.empty:
+            self.precipitation = exisiting_data['Precipitation'].iloc[-1]
+            self.t = exisiting_data['Time'].iloc[-1]
 
-        last_state_df = self.state_buffer.get_last_state()
-        if not last_state_df.empty:
+        if kwargs.get('state', None) is not None:
+            self.set_state(kwargs['state'])
+            self.__dict__.pop('state')
+        else:
+            state_df = self.state_buffer.get_last_state()
+            self.set_state(state_df)
 
-            self.plants = []
-            if 'species' not in last_state_df.columns:
-                warnings.warn(
-                    'Simulation.__init__(): "species" column not found in state_buffer. Assuming species_id = -1 for all plants.')
-                last_state_df['species'] = -1
 
-            for (id, x, y, r, species_id) in last_state_df[['id', 'x', 'y', 'r', 'species']].values:
-                s = next(
-                    (s for s in self.species_list if s.species_id == species_id), None)
-                if s is None:
-                    raise ValueError(
-                        f'Simulation.__init__(): Species with id {species_id} not found in species_list.')
-                self.plants.append(s.create_plant(id=id, x=x, y=y, r=r))
+        if kwargs.get('convert_kwargs', True) == True:
+            save_dict(path = kwargs_path, d=self.__dict__, exclude=self.exclude_default)
+            converted_dict = convert_dict(
+                d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
+            self.__dict__.update(converted_dict)
+        else:
+            converted_dict = convert_dict(
+                d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+            save_dict(path = kwargs_path, d=self.__dict__, exclude=self.exclude_default)
+            
+        if 'convert_kwargs' in self.__dict__:
+            self.__dict__.pop('convert_kwargs')
 
-            self.t = last_state_df['t'].values[-1]
-
-        save_dict(path=kwargs_path, d=self.__dict__,
-                  exclude=self.exclude_default)
-        converted_dict = convert_dict(
-            d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
-        self.__dict__.update(converted_dict)
-        self.update_kdtree(self.plants)
-        self.density_field.update(self.plants)
         print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
         print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
 
@@ -259,7 +269,7 @@ class Simulation:
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
         print(
-            f'Simulation.run(): Running simulation for {n_iter} iterations...')
+            f'Simulation.run(): Running simulation for {n_iter} iterations from t = {self.t}...')
         try:
             for _ in range(0, n_iter):
                 if _ > transient_period:
@@ -368,14 +378,31 @@ class Simulation:
         save_dict(d=converted_dict, path=kwargs_path,
                   exclude=self.exclude_default)
 
-        self.data_buffer.add(self.collect_data())
-        self.data_buffer._flush_buffer()
+    def set_state(self, state_df):
+        self.plants = []
+        if not state_df.empty:
+            if 'species' not in state_df.columns:
+                warnings.warn(
+                    'Simulation.__init__(): "species" column not found in state_buffer. Assuming species_id = -1 for all plants.')
+                state_df['species'] = -1
+
+            for (id, x, y, r, species_id) in state_df[['id', 'x', 'y', 'r', 'species']].values:
+                s = next(
+                    (s for s in self.species_list if s.species_id == species_id), None)
+                if s is None:
+                    raise ValueError(
+                        f'Simulation.__init__(): Species with id {species_id} not found in species_list.')
+                self.plants.append(s.create_plant(id=id, x=x, y=y, r=r))
+
+            self.t = state_df['t'].values[-1]
+
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+        self.data_buffer.add(data=self.collect_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
-        self.state_buffer._flush_buffer()
         self.density_field_buffer.add(
             field=self.density_field.values, t=self.t)
-        self.density_field_buffer._flush_buffer()
-
+        
     def finalize(self):
         self.data_buffer.finalize()
         self.state_buffer.finalize()
@@ -636,6 +663,8 @@ class Simulation:
         'size_buffer',
         'species_list',
         'state_buffer',
+        'state',
+        'convert_dict',
         'verbose'
     ]
 

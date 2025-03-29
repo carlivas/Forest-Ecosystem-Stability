@@ -5,5 +5,6 @@
     "spawn_rate": 1,
     "verbose": true,
     "density_field_resolution": 50,
-    "boundary_condition": "periodic"
+    "boundary_condition": "periodic",
+    "land_quality": 0
 }
