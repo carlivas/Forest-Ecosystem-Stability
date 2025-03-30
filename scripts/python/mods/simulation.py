@@ -263,6 +263,32 @@ class Simulation:
         if do_save_density_field:
             self.density_field_buffer.add(
                 field=self.density_field.values, t=self.t)
+            
+        if self.verbose:
+            runtime_str = time.strftime("%H:%M:%S")
+
+            if self.t % 3 == 0:
+                dots = '.  '
+            elif self.t % 3 == 1:
+                dots = '.. '
+            else:
+                dots = '...'
+
+            data = self.collect_data()
+            t, biomass, population, precipitation = data[[
+                'Time', 'Biomass', 'Population', 'Precipitation']].values.reshape(-1)
+            t = float(round(t, 2))
+
+            print(f'{dots} Time: {runtime_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}', end='\r')
+            
+            if len(self.species_list) > 1:
+                if _ % 100 == 0:
+                    species_counts = {species.species_id: 0 for species in self.species_list}
+                    for plant in self.plants:
+                        species_counts[plant.species_id] += 1
+                    print()
+                    print(f'Species counts: {species_counts}')
+                    print()
 
     def run(self, T, min_population=None, max_population=None, transient_period=0, delta_p=0, convergence_stop=False):
 
@@ -276,35 +302,6 @@ class Simulation:
                     self.precipitation = max(0, self.precipitation + delta_p)
                 self.step()
 
-                if self.verbose:
-                    elapsed_time = time.time() - start_time
-                    hours, rem = divmod(elapsed_time, 3600)
-                    minutes, seconds = divmod(rem, 60)
-                    elapsed_time_str = f"{str(int(hours))}".rjust(
-                        2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
-
-                    if _ % 3 == 0:
-                        dots = '.  '
-                    elif _ % 3 == 1:
-                        dots = '.. '
-                    else:
-                        dots = '...'
-
-                    data = self.collect_data()
-                    t, biomass, population, precipitation = data[[
-                        'Time', 'Biomass', 'Population', 'Precipitation']].values.reshape(-1)
-                    t = float(round(t, 2))
-
-                    print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}', end='\r')
-                    
-                    if len(self.species_list) > 1:
-                        if _ % 100 == 0:
-                            species_counts = {species.species_id: 0 for species in self.species_list}
-                            for plant in self.plants:
-                                species_counts[plant.species_id] += 1
-                            print()
-                            print(f'Species counts: {species_counts}')
-                            print()
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
                 if (max_population is not None and l > max_population):

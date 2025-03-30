@@ -16,7 +16,6 @@ np.random.seed(seed)
 kwargs = {
     'L': 4000,
     'seed': seed,
-    'precipitation': 0.3,
     'land_quality': 0.01,
 }
 
@@ -29,10 +28,8 @@ os.makedirs(folder, exist_ok=True)
 sim = Simulation(folder=folder, alias=alias, **kwargs, override=False)
 sim.__dict__.update(kwargs)
 
-T = 300
-
-sim.run(T=T)
-    
+T = 3000
+sim.run(T=T, delta_p=-0.00001, min_population=1)
 
 
 # figs, axs, titles = sim.plot_buffers(title=alias)
