@@ -18,8 +18,8 @@ for i in range(n_experiments):
     print('---------------------------------')
     perturbation_fraction = np.random.choice(perturbation_fractions)
         
-    starting_point_folder = 'Data/baseline/L500'
-    starting_point_alias = 'baseline_L500_P5e_01'
+    starting_point_folder = 'D:/baseline/L2000'
+    starting_point_alias = 'baseline_L2000_P4e_01_250328_122116'
 
     starting_point_sim = Simulation(
         folder=starting_point_folder, alias=starting_point_alias)
@@ -41,16 +41,18 @@ for i in range(n_experiments):
                 if k in kwargs_to_copy}
 
     data = starting_point_sim.data_buffer.get_data()
-    random_start_time = np.random.choice(data['Time'].iloc[-1000:])
+    random_start_time = np.random.choice(data['Time'].iloc[-3000:])
     starting_state = starting_point_sim.state_buffer.get_specific_data(
         t=random_start_time)
-    mean_population = data['Population'].iloc[1000:].mean()
+    mean_population = data['Population'].iloc[3000:].mean()
     del starting_point_sim
 
-    save_folder = 'Data/temp'
-    save_alias = 'recovery_rates_L500_P5e_01'
+    temp_folder = 'Data/temp'
+    os.makedirs(temp_folder, exist_ok=True)
+
+    save_alias = starting_point_alias.replace('baseline', 'recovery_rates')
     
-    sim = Simulation(folder=save_folder, alias=save_alias, state=starting_state,
+    sim = Simulation(folder=temp_folder, alias=save_alias, state=starting_state,
                     override_force=True, **sim_kwargs, convert_kwargs=False)
 
     seed = np.random.randint(0, 1_000_000_000)
@@ -72,6 +74,9 @@ for i in range(n_experiments):
     sim.run(T=5000, min_population=1, max_population=mean_population)
     did_recover = len(sim.plants) >= mean_population
     recovery_time = sim.t - start_time
+    
+    if not did_recover:
+        recovery_time = np.nan
 
     file_path = f'Data/dynamics/recovery_rates/data/{save_alias}.csv'
 

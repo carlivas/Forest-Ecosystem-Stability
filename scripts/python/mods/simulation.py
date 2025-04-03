@@ -204,15 +204,15 @@ class Simulation:
 
         # Spawn new plants
         self.attempt_germination(dispersed_positions, parent_species)
-        self.attempt_spawn(n=self.spawn_rate, species_list=self.species_list)
+        self.attempt_spawn(n=self.spawn_rate)
         
         # Check for and resolve collisions
-        # self.resolve_collisions(collision_indices)
         positions = np.array([[plant.x, plant.y] for plant in self.plants if not plant.is_dead])
+        indices_final = np.array([])
         if len(positions) > 0:
             radii = np.array([plant.r for plant in self.plants if not plant.is_dead])
             
-            if self.boundary_condition == 'periodic':
+            if self.boundary_condition.lower() == 'periodic':
                 positions_shifted, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions, radii=radii, duplicates=True)
                 radii_shifted = radii[index_pairs[:, 0]]
                 collision_indices = get_all_collisions(positions_shifted, radii_shifted)
@@ -223,13 +223,16 @@ class Simulation:
                     indices_final_shifted = np.setdiff1d(index_pairs[:, 1][~was_shifted], collision_losers_indices)
                     
                 indices_final = index_pairs[:, 0][indices_final_shifted]
-            else:
+            elif self.boundary_condition.lower() == 'box':
                 collision_indices = get_all_collisions(positions, radii)
                 if len(collision_indices) > 0:
                     collision_losers_indices = np.unique([j if radii[i] > radii[j] else i for i, j in collision_indices])
                     indices_final = np.setdiff1d(np.arange(len(positions)), collision_losers_indices)
-        else:
-            indices_final = np.array([])
+                else:
+                    indices_final = np.arange(len(positions))
+            else:
+                raise ValueError(
+                    f'Simulation.step(): Boundary condition "{self.boundary_condition}" not recognized.')
             
         # Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
         new_plants = []
@@ -282,7 +285,7 @@ class Simulation:
             print(f'{dots} Time: {runtime_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}', end='\r')
             
             if len(self.species_list) > 1:
-                if _ % 100 == 0:
+                if self.t % 100 == 0:
                     species_counts = {species.species_id: 0 for species in self.species_list}
                     for plant in self.plants:
                         species_counts[plant.species_id] += 1
@@ -460,9 +463,9 @@ class Simulation:
         
         self.attempt_germination(new_positions, new_species)
 
-    def resolve_collisions(self, collisions):
-        for i, j in collisions:
-            self.plants[i].compete(self.plants[j])
+    # def resolve_collisions(self, collisions):
+    #     for i, j in collisions:
+    #         self.plants[i].compete(self.plants[j])
     
     def local_density(self, pos):
         return self.density_field.query(pos)
@@ -478,12 +481,10 @@ class Simulation:
                 'Simulation.attempt_germination(): The number of parent species must match the number of positions.')
         
         # ENFORCE BOUNDARIES
-        boundary = self.box
-        
-        if self.boundary_condition == 'periodic':
-            positions_new, index_pairs, was_shifted = positions_shift_periodic(boundary=boundary, positions=positions_to_germinate, duplicates=False)
+        if self.boundary_condition.lower() == 'periodic':
+            positions_new, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions_to_germinate, duplicates=False)
             
-            is_beyond_boundary = boundary_check(boundary=boundary, positions=positions_new)
+            is_beyond_boundary = boundary_check(boundary=self.box, positions=positions_new)
             if is_beyond_boundary.any():
                 print(f'Simulation.attempt_germination(): {np.sum(is_beyond_boundary)}/{len(positions_new)} positions are beyond the boundary.')
                 for i, j in index_pairs:
@@ -492,10 +493,13 @@ class Simulation:
             
             positions_to_germinate = positions_new
             parent_species = parent_species[index_pairs[:, 0]]  
-        else:
-            is_beyond_boundary = np.any(boundary_check(boundary=boundary, positions=positions_to_germinate), axis=1)
+        elif self.boundary_condition.lower() == 'box':
+            is_beyond_boundary = np.any(boundary_check(boundary=self.box, positions=positions_to_germinate), axis=1)
             positions_to_germinate = positions_to_germinate[~is_beyond_boundary]
             parent_species = parent_species[~is_beyond_boundary]
+        else:
+            raise ValueError(
+                f'Simulation.attempt_germination(): Boundary condition "{self.boundary_condition}" not recognized.')
             
         # # COLLISION CHECK
         # plant_positions = np.array([[plant.x, plant.y] for plant in self.plants])

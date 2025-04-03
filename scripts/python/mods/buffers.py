@@ -145,7 +145,7 @@ class DataBuffer:
         return data # returns an empty dataframe if the file does not exist
 
     @staticmethod
-    def plot(data, size=6, title='', keys=None, drop_first = True):
+    def plot(data, size=6, title='', keys=None, drop_first = False):
         title = 'data_buffer-' + title
 
         # Specify which keys need to be plotted
@@ -400,7 +400,7 @@ class StateBuffer:
         radii = state['r'].values
         species = state['species'].values
         
-        if boundary_condition == 'periodic':
+        if boundary_condition.lower() == 'periodic':
             if fast:
                 positions_shifted, index_pairs, was_shifted = positions_shift_periodic(box, positions, radii, duplicates=True)
             else:
@@ -416,7 +416,7 @@ class StateBuffer:
             positions = positions_shifted[index_pairs[:, 1]]
 
         for i, (id, (x, y), r, species) in enumerate(zip(ids, positions, radii, species)):
-            if boundary_condition == 'periodic' and was_shifted[i]:
+            if boundary_condition.lower() == 'periodic' and was_shifted[i]:
                 alpha = 0.5
             else:
                 alpha = 1.0
@@ -624,7 +624,7 @@ class FieldBuffer:
         ax.imshow(field, origin='lower', cmap='Greys',
                   vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
         
-        if boundary_condition == 'periodic':
+        if boundary_condition.lower() == 'periodic':
             rect = plt.Rectangle(
                 (box[0, 0], box[1, 0]),  # Bottom-left corner
                 box[0, 1] - box[0, 0],  # Width

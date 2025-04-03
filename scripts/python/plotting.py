@@ -6,15 +6,15 @@ from mods.simulation import Simulation
 from mods.buffers import DataBuffer, StateBuffer, FieldBuffer
 print('\nplotting.py: Running...\n')
 
-do_plots = False
-do_animations = True
+do_plots = True
+fast_plots = False
 save_figs = True
 
-fast_plots = False
+do_animations = False
 fast_animations = False
-animation_skip = 5
+animation_skip = 1
 
-path = 'Data/baseline/BOX/L500' # Path to the folder containing the buffers
+path = 'Data/maturity_sizes' # Path to the folder containing the buffers
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
@@ -24,6 +24,7 @@ db_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if
 sb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'state_buffer-' in f]
 dfb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'density_field_buffer-' in f]
 complete_aliases = list(set(kwargs_aliases) & set(db_aliases) & set(sb_aliases) & set(dfb_aliases))
+complete_aliases.sort()
 
 aliases = complete_aliases[::-1]
 print(f'aliases: {aliases}')
@@ -33,8 +34,8 @@ for i, alias in enumerate(aliases):
     sb_data, db_data, dfb_data = None, None, None
 
     # COMMENT OUT THE LINES BELOW TO AVOID PLOTTING
-    sb_data = sim.state_buffer.get_data()
-    db_data = sim.data_buffer.get_data()
+    # sb_data = sim.state_buffer.get_data()
+    db_data = sim.data_buffer.get_data().iloc[500:]
     # dfb_data = sim.density_field_buffer.get_data()
     ###############################################
 
