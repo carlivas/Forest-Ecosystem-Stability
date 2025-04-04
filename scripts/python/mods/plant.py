@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 import copy
+from itertools import compress
 
 
 class Plant:
@@ -34,9 +35,8 @@ class Plant:
 
     # Maybe move this to a simulation class
     def disperse(self, sim):
-        new_positions = np.empty((self.n_offspring,2), dtype=float)
         if self.r < self.maturity_size:
-            return new_positions
+            return np.empty((0,2), dtype=float)
         
         n = self.n_offspring * sim.time_step
         decimal_part = n % 1
@@ -45,6 +45,8 @@ class Plant:
         else:
             n = int(n)
 
+        new_positions = np.empty((n,2), dtype=float)
+        # COULD BE PARALLELIZED
         for i in range(n):
             if self.germination_chance > 0 and not self.is_dead:
                 new_pos = np.array([self.x, self.y]) + \
@@ -105,6 +107,7 @@ class PlantCollection:
             self.update()
     
     def grow(self):
+        # COULD BE PARALLELIZED
         for i, plant in enumerate(self.plants):
             plant.grow()
             self.radii[i] = plant.r
@@ -112,6 +115,7 @@ class PlantCollection:
     def disperse(self, sim):
         dispersed_positions = np.empty((0, 2))
         parent_species = []
+        # COULD BE PARALLELIZED
         for plant in self.plants:
             pos = plant.disperse(sim)
             if len(pos) > 0:
@@ -120,6 +124,7 @@ class PlantCollection:
         return dispersed_positions, parent_species
     
     def mortality(self):
+        # COULD BE PARALLELIZED
         for i, plant in enumerate(self.plants):
             plant.mortality()
             self.is_dead[i] = plant.is_dead
@@ -135,12 +140,13 @@ class PlantCollection:
 
     def remove_dead_plants(self):
         alive_indices = ~self.is_dead
-        self.plants = [plant for i, plant in enumerate(self.plants) if alive_indices[i]]
+        self.plants = list(compress(self.plants, alive_indices))
         self.positions = self.positions[alive_indices]
         self.radii = self.radii[alive_indices]
         self.is_dead = self.is_dead[alive_indices]
             
     def update_values(self):
+        # COULD BE PARALLELIZED
         for i, plant in enumerate(self.plants):
             self.radii[i] = plant.r
             self.is_dead[i] = plant.is_dead

@@ -297,59 +297,56 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
-    def resolve_collisions(self, positions, radii, boundary_condition=None, competition_scheme='sparse'):
-        boundary_condition = boundary_condition or self.boundary_condition
+    def find_collision_losers(self, collision_indices, radii, competition_scheme):
+            if len(collision_indices) == 0:
+                return np.empty(0, dtype=int)
+            
+            if competition_scheme.lower() == 'all':
+                return np.unique([
+                    j if radii[i] > radii[j] else i
+                    for i, j in collision_indices
+                ])
+            elif competition_scheme.lower() == 'sparse':
+                collision_losers_indices = set()
+                for i, j in collision_indices:
+                    if i not in collision_losers_indices and j not in collision_losers_indices:
+                        if radii[i] > radii[j]:
+                            collision_losers_indices.add(j)
+                        else:
+                            collision_losers_indices.add(i)
+                return np.array(list(collision_losers_indices), dtype=int)
+            else:
+                raise ValueError(
+                    f'Simulation.resolve_collisions(): Competition scheme "{competition_scheme}" not recognized.')
+
+    def resolve_collisions(self, positions, radii, boundary_condition=None, competition_scheme=None):
+        if len(positions) == 0:
+            return np.empty(0, dtype=int)
         
+        boundary_condition = boundary_condition or self.boundary_condition
+        competition_scheme = competition_scheme or self.competition_scheme
         indices_dead = np.empty(0, dtype=int)
+
         if boundary_condition.lower() == 'periodic':
-            positions_shifted, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions, radii=radii, duplicates=True)
+            positions_shifted, index_pairs, was_shifted = positions_shift_periodic(
+                boundary=self.box, positions=positions, radii=radii, duplicates=True)
             radii_shifted = radii[index_pairs[:, 0]]
             collision_indices_shifted = get_all_collisions(positions_shifted, radii_shifted)
-            collision_indices_shifted = np.random.permutation(collision_indices_shifted)
             
-            if len(collision_indices_shifted) > 0:
-                if competition_scheme == 'all':
-                    collision_losers_indices = np.unique([
-                        j if radii_shifted[i] > radii_shifted[j] else i
-                        for i, j in collision_indices_shifted
-                        ])
-                elif competition_scheme == 'sparse':
-                    collision_losers_indices = np.empty(0, dtype=int)
-                    for i, j in collision_indices_shifted:
-                        if i not in collision_losers_indices and j not in collision_losers_indices:
-                            if radii_shifted[i] > radii_shifted[j]:
-                                collision_losers_indices = np.append(collision_losers_indices, j)
-                            else:
-                                collision_losers_indices = np.append(collision_losers_indices, i)
-                    collision_losers_indices = np.unique(collision_losers_indices)                
-                indices_dead_shifted = [i for i in index_pairs[:, 1][~was_shifted] if i in collision_losers_indices]
-                indices_dead = index_pairs[:, 0][indices_dead_shifted]
-    
+            collision_losers_indices = self.find_collision_losers(collision_indices_shifted, radii_shifted, competition_scheme)
+            indices_dead_shifted = list(set(index_pairs[:, 1][~was_shifted]).intersection(collision_losers_indices))
+            indices_dead = index_pairs[:, 0][indices_dead_shifted]
+
         elif boundary_condition.lower() == 'box':
             collision_indices = get_all_collisions(positions, radii)
-            collision_indices = np.random.permutation(collision_indices)
-            if len(collision_indices) > 0:
-                
-                if competition_scheme == 'all':
-                    collision_losers_indices = np.unique([
-                        j if radii[i] > radii[j] else i
-                        for i, j in collision_indices
-                        ])
-                    
-                elif competition_scheme == 'sparse':
-                    collision_losers_indices = np.empty(0, dtype=int)
-                    for i, j in collision_indices_shifted:
-                        if i not in collision_losers_indices and j not in collision_losers_indices:
-                            if radii[i] > radii[j]:
-                                collision_losers_indices = np.append(collision_losers_indices, j)
-                            else:
-                                collision_losers_indices = np.append(collision_losers_indices, i)
-                    collision_losers_indices = np.unique(collision_losers_indices)
-                indices_dead = collision_losers_indices
+            
+            collision_losers_indices = self.find_collision_losers(collision_indices, radii, competition_scheme)
+            indices_dead = collision_losers_indices
+
         else:
             raise ValueError(
                 f'Simulation.step(): Boundary condition "{boundary_condition}" not recognized.')
-        
+
         for i in indices_dead:
             self.plants[i].is_dead = True
         return indices_dead
@@ -465,10 +462,19 @@ class Simulation:
         return is_converged, convergence_factor, regression_line
     
     def remove_fraction(self, fraction):
-        indices = np.random.choice(len(self.plants), int(fraction * len(self.plants)), replace=False)
-        plants_to_keep = [self.plants[i] for i in range(len(self.plants)) if i not in indices]
-        # self.plants = plants_to_keep
+        # Determine the indices of plants to remove
+        total_plants = len(self.plants)
+        num_to_remove = int(fraction * total_plants)
+        indices_to_remove = set(np.random.choice(total_plants, num_to_remove, replace=False))
+
+        # Use set difference to determine the indices to keep
+        indices_to_keep = set(range(total_plants)) - indices_to_remove
+
+        # Create a new PlantCollection with only the plants to keep
+        plants_to_keep = [self.plants[i] for i in indices_to_keep]
         self.plants = PlantCollection(plants=plants_to_keep)
+
+        # Update the KDTree and density field
         self.update_kdtree(self.plants)
         self.density_field.update(self.plants)
 
@@ -487,10 +493,6 @@ class Simulation:
         new_species = np.random.choice(species_list, n)
         
         self.attempt_germination(new_positions, new_species)
-
-    # def resolve_collisions(self, collisions):
-    #     for i, j in collisions:
-    #         self.plants[i].compete(self.plants[j])
     
     def local_density(self, pos):
         return self.density_field.query(pos)
@@ -510,12 +512,12 @@ class Simulation:
         if self.boundary_condition.lower() == 'periodic':
             positions_new, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions_to_germinate, duplicates=False)
             
-            is_beyond_boundary = boundary_check(boundary=self.box, positions=positions_new)
-            if is_beyond_boundary.any():
-                print(f'Simulation.attempt_germination(): {np.sum(is_beyond_boundary)}/{len(positions_new)} positions are beyond the boundary.')
-                for i, j in index_pairs:
-                    if is_beyond_boundary[j].any():
-                        print(f'Simulation.attempt_germination(): {positions_to_germinate[i]} -> {positions_new[j]}')
+            # is_beyond_boundary = boundary_check(boundary=self.box, positions=positions_new)
+            # if is_beyond_boundary.any():
+            #     print(f'Simulation.attempt_germination(): {np.sum(is_beyond_boundary)}/{len(positions_new)} positions are beyond the boundary.')
+            #     for i, j in index_pairs:
+            #         if is_beyond_boundary[j].any():
+            #             print(f'Simulation.attempt_germination(): {positions_to_germinate[i]} -> {positions_new[j]}')
             
             positions_to_germinate = positions_new
             parent_species = parent_species[index_pairs[:, 0]]  
@@ -527,23 +529,7 @@ class Simulation:
         else:
             raise ValueError(
                 f'Simulation.attempt_germination(): Boundary condition "{self.boundary_condition}" not recognized.')
-            
-        # # COLLISION CHECK
-        # plant_positions = np.array([[plant.x, plant.y] for plant in self.plants])
-        # radii = np.array([plant.r for plant in self.plants])
-        # positions_before_collision_check = positions_to_germinate.copy()
-        # parent_species_before_collision_check = parent_species.copy()
-        # for i, pos in enumerate(positions_to_germinate):
-        #     collision_indices = get_collisions_for_point(
-        #         positions=plant_positions,
-        #         radii=radii,
-        #         point=pos,
-        #         radius=parent_species_before_collision_check[i].r_min
-        #     )
-        #     if len(collision_indices) > 0:
-        #         positions_to_germinate = np.delete(positions_before_collision_check, i, axis=0)
-        #         parent_species = np.delete(parent_species_before_collision_check, i)
-        
+                    
         species_germination_chances = np.array([s.germination_chance for s in parent_species])         
         germination_chances = np.maximum(self.land_quality, self.local_density(positions_to_germinate)) * self.precipitation * species_germination_chances
         random_values = np.random.uniform(0, 1, len(positions_to_germinate))
@@ -551,7 +537,12 @@ class Simulation:
 
         new_plants = []
         for i in germination_indices:
-            new_plant = parent_species[i].create_plant(id=self.id_generator.get_next_id(), x=positions_to_germinate[i, 0], y=positions_to_germinate[i, 1], r=parent_species[i].r_min)
+            new_plant = parent_species[i].create_plant(
+                id=self.id_generator.get_next_id(), 
+                x=positions_to_germinate[i, 0], 
+                y=positions_to_germinate[i, 1], 
+                r=parent_species[i].r_min
+            )
             new_plants.append(new_plant)
                     
         if len(new_plants) > 0:
@@ -559,7 +550,6 @@ class Simulation:
             # print(f'Simulation.attempt_germination(): {len(new_plants)} plants germinated.')
 
     def collect_data(self):
-        # biomass = np.array([plant.r for plant in self.plants])**2 * np.pi
         biomass = self.plants.radii**2 * np.pi
         biomass_total = sum(biomass)
         population = len(self.plants)
@@ -585,6 +575,7 @@ class Simulation:
             box = self.box
 
         new_plants = []
+        # COULD BE PARALLELIZED
         for i in range(n):
             current_species = np.random.choice(species_list)
             new_plants.append(

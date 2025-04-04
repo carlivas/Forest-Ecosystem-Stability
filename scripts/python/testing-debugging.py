@@ -12,12 +12,13 @@ seed = np.random.randint(0, 1_000_000_000)
 kwargs = {
     'L': 500,
     'precipitation': 0.2,
-    # 'seed': seed   
+    'seed': seed,
+    'competition_scheme': 'all',
 }
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
 folder = f'Data/debugging'
-alias = f'new_competition_L500_ALL'
+alias = f'new_competition_L500_ALL3'
 
 
 sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
