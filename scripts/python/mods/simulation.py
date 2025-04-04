@@ -192,60 +192,21 @@ class Simulation:
         else:
             self.kt = KDTree(plants.positions)
 
-    def step(self):
+    def step(self):        
         # Update all plants based on the current state of the simulation
-        dispersed_positions = np.empty((0, 2))
-        parent_species = []
-        for plant in self.plants:
-            plant.grow()
-            pos = plant.disperse(self)
-            if len(pos) > 0:
-                dispersed_positions = np.vstack((dispersed_positions, pos))
-                parent_species.extend([PlantSpecies(**plant.__dict__)] * len(pos))
-            plant.mortality()
-
-        # Spawn new plants
-        self.attempt_germination(dispersed_positions, parent_species)
+        self.plants.grow()
+        self.plants.mortality()
+        
+        # Disperse and spawn new plants
+        disperse_positions, parent_species = self.plants.disperse(self)
+        self.attempt_germination(disperse_positions, parent_species)
         self.attempt_spawn(n=self.spawn_rate)
         
         # Check for and resolve collisions
-        positions = np.array([[plant.x, plant.y] for plant in self.plants if not plant.is_dead])
-        indices_final = np.array([])
-        if len(positions) > 0:
-            radii = np.array([plant.r for plant in self.plants if not plant.is_dead])
-            
-            if self.boundary_condition.lower() == 'periodic':
-                positions_shifted, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions, radii=radii, duplicates=True)
-                radii_shifted = radii[index_pairs[:, 0]]
-                collision_indices = get_all_collisions(positions_shifted, radii_shifted)
-                
-                indices_final_shifted = index_pairs[:, 1][~was_shifted]
-                if len(collision_indices) > 0:
-                    collision_losers_indices = np.unique([j if radii_shifted[i] > radii_shifted[j] else i for i, j in collision_indices])
-                    indices_final_shifted = np.setdiff1d(index_pairs[:, 1][~was_shifted], collision_losers_indices)
-                    
-                indices_final = index_pairs[:, 0][indices_final_shifted]
-            elif self.boundary_condition.lower() == 'box':
-                collision_indices = get_all_collisions(positions, radii)
-                if len(collision_indices) > 0:
-                    collision_losers_indices = np.unique([j if radii[i] > radii[j] else i for i, j in collision_indices])
-                    indices_final = np.setdiff1d(np.arange(len(positions)), collision_losers_indices)
-                else:
-                    indices_final = np.arange(len(positions))
-            else:
-                raise ValueError(
-                    f'Simulation.step(): Boundary condition "{self.boundary_condition}" not recognized.')
-            
-        # Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
-        new_plants = []
-        for i, plant in enumerate(self.plants):
-            if i not in indices_final:
-                plant.is_dead = True
+        self.resolve_collisions(positions=self.plants.positions, radii=self.plants.radii)
         
-            if not plant.is_dead:
-                new_plants.append(plant)
-
-        self.plants = new_plants
+        # Remove dead plants
+        self.plants.remove_dead_plants()
 
         prev_t = self.t
         self.t += self.time_step
@@ -335,6 +296,68 @@ class Simulation:
         print()
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
+
+    def resolve_collisions(self, positions, radii, boundary_condition=None, competition_scheme='sparse'):
+        boundary_condition = boundary_condition or self.boundary_condition
+        
+        indices_dead = np.empty(0, dtype=int)
+        if boundary_condition.lower() == 'periodic':
+            positions_shifted, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions, radii=radii, duplicates=True)
+            radii_shifted = radii[index_pairs[:, 0]]
+            collision_indices_shifted = get_all_collisions(positions_shifted, radii_shifted)
+            collision_indices_shifted = np.random.permutation(collision_indices_shifted)
+            
+            if len(collision_indices_shifted) > 0:
+                if competition_scheme == 'all':
+                    collision_losers_indices = np.unique([
+                        j if radii_shifted[i] > radii_shifted[j] else i
+                        for i, j in collision_indices_shifted
+                        ])
+                elif competition_scheme == 'sparse':
+                    collision_losers_indices = np.empty(0, dtype=int)
+                    for i, j in collision_indices_shifted:
+                        if i not in collision_losers_indices and j not in collision_losers_indices:
+                            if radii_shifted[i] > radii_shifted[j]:
+                                collision_losers_indices = np.append(collision_losers_indices, j)
+                            else:
+                                collision_losers_indices = np.append(collision_losers_indices, i)
+                    collision_losers_indices = np.unique(collision_losers_indices)                
+                indices_dead_shifted = [i for i in index_pairs[:, 1][~was_shifted] if i in collision_losers_indices]
+                indices_dead = index_pairs[:, 0][indices_dead_shifted]
+    
+        elif boundary_condition.lower() == 'box':
+            collision_indices = get_all_collisions(positions, radii)
+            collision_indices = np.random.permutation(collision_indices)
+            if len(collision_indices) > 0:
+                
+                if competition_scheme == 'all':
+                    collision_losers_indices = np.unique([
+                        j if radii[i] > radii[j] else i
+                        for i, j in collision_indices
+                        ])
+                    
+                elif competition_scheme == 'sparse':
+                    collision_losers_indices = np.empty(0, dtype=int)
+                    for i, j in collision_indices_shifted:
+                        if i not in collision_losers_indices and j not in collision_losers_indices:
+                            if radii[i] > radii[j]:
+                                collision_losers_indices = np.append(collision_losers_indices, j)
+                            else:
+                                collision_losers_indices = np.append(collision_losers_indices, i)
+                    collision_losers_indices = np.unique(collision_losers_indices)
+                indices_dead = collision_losers_indices
+        else:
+            raise ValueError(
+                f'Simulation.step(): Boundary condition "{boundary_condition}" not recognized.')
+        
+        for i in indices_dead:
+            self.plants[i].is_dead = True
+        return indices_dead
+        
+    def _flush_buffers(self):
+        self.data_buffer._flush_buffer()
+        self.state_buffer._flush_buffer()
+        self.density_field_buffer._flush_buffer()
 
     def set_folder(self, folder, alias=None, override=False):
         self.folder = folder
