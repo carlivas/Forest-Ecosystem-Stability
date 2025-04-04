@@ -11,47 +11,20 @@ from datetime import datetime
 seed = np.random.randint(0, 1_000_000_000)
 kwargs = {
     'L': 500,
-    'precipitation': 0.0,
-    'seed': seed,
-    'land_quality': 0.0,
-    'boundary_condition': 'periodic',
-    
+    'precipitation': 0.2,
+    # 'seed': seed   
 }
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
 folder = f'Data/debugging'
-alias = f'250326_172819'
-
-species = PlantSpecies()
-species.growth_rate = 0.0001 * kwargs['L']
-os.makedirs(folder, exist_ok=True)
-sim = Simulation(folder=folder, alias=alias, **kwargs, override=True, species_list=[species])
-
-sim.initiate_non_overlapping(n = 20, box=np.array([[-0.5, 0.5], [0.2, 0.5]]))
-sim.initiate_non_overlapping(n = 20, box=np.array([[-0.5, 0.5], [-0.2, -0.5]]))
+alias = f'new_competition_L500_ALL'
 
 
-plants = []
-s = species.growth_rate
-for i in range(1, 30):
-    r = 10*i*s
-    x = sim.box[0,0] + r + 2*sum(plant.r for plant in plants) + 1.5*s*i**2
-    y = 0
-    plant = species.create_plant(id=i, x=x, y=y, r=r)
-    print(f'{i=:.6f}, {r=:.6f}, {x=:.6f}, {y=:.6f}')
-    plants.append(plant)
-sim.add(plants)
-sim.update_kdtree(sim.plants)
-sim.data_buffer.add(data=sim.collect_data())
-sim.state_buffer.add(plants=sim.plants, t=sim.t)
-sim.plot_state()
+sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
+sim.initiate_non_overlapping(target_density=0.3, box=np.array([[-0.5, 0.5], [-0.5, 0.5]]))
 
-species.r_max = 10000000
-for i in range(100):
-    sim.density_field.values = sim.density_field.values*0
-    sim.step()
-    print(f'\nDone with iteration {sim.t}')
-anim, title = StateBuffer.animate(sim.state_buffer.buffer, box=sim.box, boundary_condition=sim.boundary_condition, interval=500)
+sim.run(T=3000)
+sim.plot_buffers(title=alias)
 plt.show()
     
 # plant_ids = np.unique([plant.id for plant in sim.plants])

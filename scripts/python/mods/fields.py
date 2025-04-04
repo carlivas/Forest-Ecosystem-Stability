@@ -162,8 +162,10 @@ class DensityFieldCustom:
         bandwidth_factor = 2
         query_radius_factor = 3
 
-        positions = np.array([(plant.x, plant.y) for plant in plants])
-        radii = np.array([plant.r for plant in plants])
+        # positions = np.array([(plant.x, plant.y) for plant in plants])
+        # radii = np.array([plant.r for plant in plants])
+        positions = plants.positions
+        radii = plants.radii
         query_radii = query_radius_factor * bandwidth_factor * radii
     
         positions_new, index_pairs, was_shifted = positions_shift_periodic(boundary=self.box, positions=positions, radii=query_radii, duplicates=True)

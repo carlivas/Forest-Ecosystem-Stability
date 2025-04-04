@@ -142,10 +142,14 @@ class DataBuffer:
         
         if os.path.exists(self.file_path):
             data = pd.read_csv(self.file_path)
+        
+        if not self.buffer.empty:
+            data = pd.concat([data, self.buffer], ignore_index=True)
+        
         return data # returns an empty dataframe if the file does not exist
 
     @staticmethod
-    def plot(data, size=6, title='', keys=None, drop_first = False):
+    def plot(data, size=6, title='', keys=None):
         title = 'data_buffer-' + title
 
         # Specify which keys need to be plotted
@@ -174,8 +178,11 @@ class DataBuffer:
             print(
                 f'DataBuffer.plot(): Not enough data to plot ({len(data)=}).')
             return fig, ax, title
-        if drop_first:
-            data = data.drop(0)
+        
+        if len(data) == 1:
+            marker = '.'
+        else:
+            marker = ''
 
         cmap = ListedColormap(
             ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
@@ -186,11 +193,16 @@ class DataBuffer:
             t_data = data['Time']
             y_data = data[key]
             
-            ax[i].plot(t_data, y_data, color=cmap((i + 1) / len(keys)))
+            ax[i].plot(t_data, y_data, color=cmap((i + 1) / len(keys)), marker=marker)
             ax[i].set_ylabel(key)
-            y_max = np.nanmax(y_data)
-            if y_max != 0:
-                ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
+            
+            if key == 'Biomass' or key == 'Precipitation':
+                ax[i].set_ylim(0, 1)
+            else:
+                y_max = np.nanmax(y_data)
+                if y_max != 0:
+                    ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
+                    
         ax[-1].set_xlabel('Time')
 
         for ax_i in ax:
@@ -288,7 +300,8 @@ class StateBuffer:
         
         print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
         with open(self.file_path, 'rb') as f:
-            lines = find_all_lines_key_values(f, 't', t, assume_sorted=True)
+            # lines = find_all_lines_key_values(f, 't', t, assume_sorted=True)
+            lines = find_all_lines_key_values_sorted(f, 't', t)
             
             if not lines:
                 return pd.DataFrame(columns=self.columns)
@@ -498,8 +511,7 @@ class StateBuffer:
             print(f'StateBuffer.animate(): i = {i + 1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
             return ax
 
-        if interval is None:
-            interval = 15 * time_step
+        interval = interval or 25 * time_step
 
         ani = animation.FuncAnimation(
             fig, animate_func, frames=T, interval=interval, repeat=True)
@@ -673,8 +685,7 @@ class FieldBuffer:
         resolution = int(np.sqrt(data.shape[1] - 1))
         fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(
             resolution, resolution) for t in times])
-        if vmax is None:
-            vmax = np.nanmax(fields)
+        vmax = vmax or np.nanmax(fields)
         T = len(times)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
@@ -810,8 +821,8 @@ class HistogramBuffer:
                 np.sum(data, axis=1)[:, np.newaxis]
             ylabel = 'density'
         ymax = np.nanmax(data)
-        if title is None:
-            title = self.title
+        
+        title = title or self.title
         if t is None:
             tt = self.get_times()
         elif isinstance(t, (int, float)):
@@ -867,9 +878,7 @@ class HistogramBuffer:
             ylabel = 'density'
         ymax = np.nanmax(values)
 
-        if title is None:
-            title = self.title + 'animation'
-
+        title = title or self.title + 'animation'
         fig, ax = plt.subplots(1, 1, figsize=(size, 2*size//3))
         # fig.tight_layout()
 

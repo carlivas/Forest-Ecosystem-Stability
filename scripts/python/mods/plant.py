@@ -10,9 +10,6 @@ class Plant:
         self.y = y
         self.r = r
 
-        self.d = 2*self.r
-        self.area = np.pi*self.r**2
-
         self.r_min = r_min
         self.r_max = r_max
         self.growth_rate = growth_rate
@@ -30,8 +27,6 @@ class Plant:
 
     def grow(self):
         self.r = self.r + self.growth_rate
-        self.d = 2*self.r
-        self.area = np.pi*self.r**2
 
     def mortality(self):
         if self.r > self.r_max:
@@ -97,5 +92,67 @@ class PlantSpecies:
     def copy(self):
         return PlantSpecies(**self.__dict__)
         
+class PlantCollection:
+    def __init__(self, plants=None):
+        self.plants = []
+        self.positions = np.empty((0, 2), dtype=float)
+        self.radii = np.empty(0, dtype=float)
+        self.is_dead = np.empty(0, dtype=bool)
         
+        if plants:
+            for plant in plants:
+                self.add_plant(plant)
+            self.update()
     
+    def grow(self):
+        for i, plant in enumerate(self.plants):
+            plant.grow()
+            self.radii[i] = plant.r
+                
+    def disperse(self, sim):
+        dispersed_positions = np.empty((0, 2))
+        parent_species = []
+        for plant in self.plants:
+            pos = plant.disperse(sim)
+            if len(pos) > 0:
+                dispersed_positions = np.vstack((dispersed_positions, pos))
+                parent_species.extend([PlantSpecies(**plant.__dict__)] * len(pos))
+        return dispersed_positions, parent_species
+    
+    def mortality(self):
+        for i, plant in enumerate(self.plants):
+            plant.mortality()
+            self.is_dead[i] = plant.is_dead
+
+    def append(self, plant):
+        self.add_plant(plant)
+        
+    def add_plant(self, plant):
+        self.plants.append(plant)
+        self.positions = np.vstack((self.positions, plant.pos()))
+        self.radii = np.append(self.radii, plant.r)
+        self.is_dead = np.append(self.is_dead, plant.is_dead)
+
+    def remove_dead_plants(self):
+        alive_indices = ~self.is_dead
+        self.plants = [plant for i, plant in enumerate(self.plants) if alive_indices[i]]
+        self.positions = self.positions[alive_indices]
+        self.radii = self.radii[alive_indices]
+        self.is_dead = self.is_dead[alive_indices]
+            
+    def update_values(self):
+        for i, plant in enumerate(self.plants):
+            self.radii[i] = plant.r
+            self.is_dead[i] = plant.is_dead
+    
+    def __getitem__(self, index):
+        return self.plants[index]
+    
+    def __len__(self):
+        return len(self.plants)
+    
+    def __iter__(self):
+        return iter(self.plants)
+    
+    def __str__(self):
+        return f'PlantCollection with {len(self.plants)} plants'

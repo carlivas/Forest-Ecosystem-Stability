@@ -10,11 +10,11 @@ do_plots = True
 fast_plots = False
 save_figs = True
 
-do_animations = False
+do_animations = True
 fast_animations = False
-animation_skip = 1
+animation_skip = 5
 
-path = 'Data/maturity_sizes' # Path to the folder containing the buffers
+path = 'Data/debugging' # Path to the folder containing the buffers
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
@@ -24,8 +24,8 @@ db_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if
 sb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'state_buffer-' in f]
 dfb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'density_field_buffer-' in f]
 complete_aliases = list(set(kwargs_aliases) & set(db_aliases) & set(sb_aliases) & set(dfb_aliases))
-complete_aliases.sort()
-
+# complete_aliases.sort()
+complete_aliases  = [alias for alias in complete_aliases if 'L1000_ALL' in alias]
 aliases = complete_aliases[::-1]
 print(f'aliases: {aliases}')
 
@@ -34,23 +34,26 @@ for i, alias in enumerate(aliases):
     sb_data, db_data, dfb_data = None, None, None
 
     # COMMENT OUT THE LINES BELOW TO AVOID PLOTTING
-    # sb_data = sim.state_buffer.get_data()
-    db_data = sim.data_buffer.get_data().iloc[500:]
+    sb_data = sim.state_buffer.get_data()
+    db_data = sim.data_buffer.get_data()
     # dfb_data = sim.density_field_buffer.get_data()
     ###############################################
 
     if do_plots:
         if db_data is not None:
+            print(f'plotting.py: Plotting data_buffer for alias {alias}')
             db_fig, db_ax, db_title = DataBuffer.plot(data=db_data, size=(
                 7, 7), keys=['Biomass', 'Population', 'Precipitation'], title=alias)
             db_title = db_title.replace(' ', '_').lower()
 
         if sb_data is not None and do_animations is False:
+            print(f'plotting.py: Plotting state_buffer for alias {alias}')
             sb_fig, sb_ax, sb_title = StateBuffer.plot(
                 sb_data, title=alias, box=sim.box, boundary_condition=sim.boundary_condition, fast=fast_plots)
             sb_title = sb_title.replace(' ', '_').lower()
 
         if dfb_data is not None:
+            print(f'plotting.py: Plotting density_field_buffer for alias {alias}')
             dfb_fig, dfb_ax, dfb_title = FieldBuffer.plot(
                 dfb_data, title=alias, box=sim.box, boundary_condition=sim.boundary_condition, fast=fast_plots)
             dfb_title = dfb_title.replace(' ', '_').lower()
@@ -74,6 +77,7 @@ for i, alias in enumerate(aliases):
 
     if do_animations:
         if sb_data is not None:
+            print(f'plotting.py: Animating state_buffer for alias {alias}')
             if 'species' not in sb_data.columns:
                 warnings.warn(
                     'plotting.py: "species" column not found in state_buffer. Assuming species_id = -1 for all plants.')
@@ -90,7 +94,7 @@ for i, alias in enumerate(aliases):
                 
                 sb_anim.save(sb_anim_path, dpi=600)
                 
-    print(f'\nDone plotting alias {i+1}/{len(aliases)}: {alias}\n')
+    print(f'\nDone plotting alias: {alias}   ({i+1}/{len(aliases)})\n')
 
     if not save_figs:
         plt.show()

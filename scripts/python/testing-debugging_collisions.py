@@ -20,7 +20,7 @@ kwargs = {
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
 folder = f'Data/debugging/collisions'
-alias = f'250326_172819'
+alias = f'250403_210300'
 
 species = PlantSpecies()
 species.growth_rate = 0.0001 * kwargs['L']
@@ -44,9 +44,11 @@ sim.add(plants)
 sim.update_kdtree(sim.plants)
 sim.data_buffer.add(data=sim.collect_data())
 sim.state_buffer.add(plants=sim.plants, t=sim.t)
-sim.plot_state()
+# sim.plot_state()
 
 species.r_max = 10000000
+for p in sim.plants:
+    p.r_max = 10000000
 for i in range(100):
     sim.density_field.values = sim.density_field.values*0
     sim.step()

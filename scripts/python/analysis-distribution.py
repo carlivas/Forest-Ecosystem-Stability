@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit
 def power_law(x, a, b):
     return a * x ** b
 
-folder = 'D:/linear_precipitation/L2000' # Path to the folder containing the buffers
+folder = 'Data/debugging' # Path to the folder containing the buffers
 save_fig = True
 
 if not os.path.exists(folder):
@@ -31,16 +31,19 @@ for root, dirs, files in os.walk(load_folder):
     for i, alias in enumerate(aliases):
         kwargs = pd.read_json(f'{root}/kwargs-{alias}.json', typ='series').to_dict()
         state_buffer = StateBuffer(file_path=f'{root}/state_buffer-{alias}.csv')
+        db_data = pd.read_csv(f'{root}/data_buffer-{alias}.csv', header=0)
         
-        times = np.arange(1000, 30000, 3000)
-        state_buffer_df = state_buffer.get_specific_data(times)
+        times = np.unique(db_data['Time'])        
+        time_step = times[1] - times[0]
+        times_to_analyse = times[::int(100*time_step)]
+        state_buffer_df = state_buffer.get_specific_data(times_to_analyse)
         
         hist_list = []
         bins_list = []
         fit_params_list = []
 
-        for i in range(len(times)):
-            t = times[i]
+        for i in range(len(times_to_analyse)):
+            t = times_to_analyse[i]
             hist, bins = np.histogram(state_buffer_df[state_buffer_df['t'] == t]['r']*kwargs['L'], bins=100, density=True)
             hist_list.append(hist)
             bins_list.append(bins)
@@ -57,7 +60,7 @@ for root, dirs, files in os.walk(load_folder):
                 popt = [np.nan, np.nan]
             
             fit_params_list.append(popt)
-            print(f'Calculating histograms and fits: i = {i+1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
+            print(f'Calculating histograms and fits: i = {i+1}/{len(times_to_analyse)} ({(i+1)/len(times_to_analyse)*100:.2f}%)', end='\r')
         print()
         
         y_min = min(hist.min() for hist in hist_list)
@@ -82,7 +85,7 @@ for root, dirs, files in os.walk(load_folder):
         ax3 = fig.add_subplot(gs[1, 1], sharex=ax2)
 
         def update_hist(i):
-            t = times[i]
+            t = times_to_analyse[i]
             ax1.clear()
             ax2.clear()
             ax3.clear()
@@ -102,7 +105,8 @@ for root, dirs, files in os.walk(load_folder):
             # Plot the power law fit
             bin_centers = (B[:-1] + B[1:]) / 2
             a, b = fit_params_list[i]
-            ax1.plot(bin_centers, power_law(bin_centers, a, b), 'r-', label=f'Power law fit: a={a:.2f}, b={b:.2f}')
+            ax1.plot(bin_centers, power_law(bin_centers, a, b), 'r-', label=f'Power law fit: $y = {a:.2f} \cdot x^{{{b:.2f}}}$')
+            ax1.legend(loc='best', fontsize='small', fancybox=True, framealpha=0.7)
             ax1.set_xscale('log')
             ax1.set_yscale('log')        
             
@@ -112,28 +116,28 @@ for root, dirs, files in os.walk(load_folder):
             ax1.legend()
             
             # Plot a and b over time
-            times_so_far = times[:i+1]
+            times_so_far = times_to_analyse[:i+1]
             a_values = [fit_params_list[j][0] for j in range(i+1)]
             b_values = [fit_params_list[j][1] for j in range(i+1)]
             
             ax2.plot(times_so_far, a_values, 'b-', label='a over time')
             ax2.set_xlabel('Time')
-            ax2.set_xlim(times[0], times[-1])
+            ax2.set_xlim(times_to_analyse[0], times_to_analyse[-1])
             ax2.set_ylim(a_min, a_max)
             ax2.legend()
             
             ax3.plot(times_so_far, b_values, 'm-', label='b over time')
             ax3.set_xlabel('Time')
-            ax3.set_xlim(times[0], times[-1])
+            ax3.set_xlim(times_to_analyse[0], times_to_analyse[-1])
             ax3.set_ylim(b_min, b_max)
             ax3.legend()
             
-            print(f'Animating histograms and fits: i = {i+1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
+            print(f'Animating histograms and fits: i = {i+1}/{len(times_to_analyse)} ({(i+1)/len(times_to_analyse)*100:.2f}%)', end='\r')
         print('')
         
-        if len(times) > 1:
-            timestep = times[1] - times[0]
-            ani_hist = FuncAnimation(fig, update_hist, frames=len(times), repeat=False, interval=timestep)
+        if len(times_to_analyse) > 1:
+            timestep = times_to_analyse[1] - times_to_analyse[0]
+            ani_hist = FuncAnimation(fig, update_hist, frames=len(times_to_analyse), repeat=True, interval=40*timestep)
             if save_fig:
                 ani_hist.save(f'{root}/figures/size_dist-{alias}.mp4', writer='ffmpeg')
         else:
