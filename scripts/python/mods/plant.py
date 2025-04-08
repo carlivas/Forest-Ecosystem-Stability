@@ -139,8 +139,8 @@ class PlantCollection:
         self.is_dead = np.append(self.is_dead, plant.is_dead)
 
     def remove_dead_plants(self):
-        alive_indices = ~self.is_dead
-        self.plants = list(compress(self.plants, alive_indices))
+        alive_indices = np.where(~self.is_dead)[0]
+        self.plants = list(compress(self.plants, ~self.is_dead))
         self.positions = self.positions[alive_indices]
         self.radii = self.radii[alive_indices]
         self.is_dead = self.is_dead[alive_indices]
