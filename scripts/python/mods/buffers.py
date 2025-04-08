@@ -372,7 +372,7 @@ class StateBuffer:
         data.to_csv(file_path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_state(state, size=2, fig=None, ax=None, title='', box=None, fast=False, boundary_condition=None):
+    def plot_state(state, size=2, fig=None, ax=None, title='', box=None, fast=False, boundary_condition=None, plot_dead=False):
         if state.empty:
             print('StateBuffer.plot_state(): No data to plot.')
             return fig, ax, title
@@ -412,6 +412,8 @@ class StateBuffer:
         positions = state[['x', 'y']].values
         radii = state['r'].values
         species = state['species'].values
+        if plot_dead:
+            is_dead = state['is_dead'].values
         
         if boundary_condition.lower() == 'periodic':
             if fast:
@@ -427,28 +429,35 @@ class StateBuffer:
             species = species[index_pairs[:, 0]]
             radii = radii[index_pairs[:, 0]]
             positions = positions_shifted[index_pairs[:, 1]]
+            if plot_dead:
+                is_dead = is_dead[index_pairs[:, 0]]
 
         for i, (id, (x, y), r, species) in enumerate(zip(ids, positions, radii, species)):
             if boundary_condition.lower() == 'periodic' and was_shifted[i]:
                 alpha = 0.5
             else:
                 alpha = 1.0
+            if plot_dead and is_dead[i]:
+                c = 'red'
+            else:   
+                c = cmap(int(species + 3)) 
             if fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         facecolor='None', edgecolor=cmap(int(species + 3)), transform=ax.transData, alpha=alpha))
+                                         facecolor='None', edgecolor=c, transform=ax.transData, alpha=alpha))
             elif not fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         facecolor=cmap(int(species + 3)), edgecolor='None', transform=ax.transData, alpha=alpha))
+                                         facecolor=c, edgecolor='None', transform=ax.transData, alpha=alpha))
 
         if t is not None:
             t = float(round(t, 2))
             ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
             
 
+        if title != '':
+            ax.set_title(title, fontsize=10)
         ax.set_xticks([])
         ax.set_yticks([])
         
-        title = title
         return fig, ax, title
 
     @staticmethod

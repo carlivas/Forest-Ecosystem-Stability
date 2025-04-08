@@ -11,20 +11,23 @@ from datetime import datetime
 save_figs = False
 
 seed = np.random.randint(0, 1_000_000_000)
-np.random.seed(seed)
-
-# current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-# folder = f'Data/baseline/BOX/L{kwargs["L"]}'
-# alias = f'baseline_BOX_L{kwargs["L"]}_P{kwargs["precipitation"]:.0e}_temp'#{current_time}'
+kwargs = {
+    'L': 2000,
+    'precipitation': 0.1,
+    'seed': seed,
+    'boundary_condition': 'periodic',
+    'competition_scheme': 'all',
+}
+current_time = datetime.now().strftime("%y%m%d_%H%M%S")
 folder = f'Data/temp'
-alias = f'baseline_BOX_L500_P5e_01_temp'
+alias = f'baseline_L{kwargs["L"]}_P{kwargs["precipitation"]}_{current_time}'
 
 alias = alias.replace(' ', '_').replace('-', '_').replace('.', '_')
 os.makedirs(folder, exist_ok=True)
-sim = Simulation(folder=folder, alias=alias)
+sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
+sim.initiate_non_overlapping(target_density=0.3)
 
 sim.run(T=5000)
-
 
 figs, axs, titles = sim.plot_buffers(title=alias)
 if save_figs:

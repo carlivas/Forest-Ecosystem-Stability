@@ -169,6 +169,7 @@ class Simulation:
         if 'convert_kwargs' in self.__dict__:
             self.__dict__.pop('convert_kwargs')
 
+        np.random.seed(self.seed)
         print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
         print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
 
@@ -301,6 +302,8 @@ class Simulation:
             if len(collision_indices) == 0:
                 return np.empty(0, dtype=int)
             
+            collision_indices = np.random.permutation(collision_indices)
+            
             if competition_scheme.lower() == 'all':
                 return np.unique([
                     j if radii[i] > radii[j] else i
@@ -347,6 +350,8 @@ class Simulation:
             raise ValueError(
                 f'Simulation.step(): Boundary condition "{boundary_condition}" not recognized.')
 
+        self.plants.is_dead[indices_dead] = True
+        ### SHOULD BE OPTIMIZED ###
         for i in indices_dead:
             self.plants[i].is_dead = True
         return indices_dead
@@ -541,7 +546,8 @@ class Simulation:
                 id=self.id_generator.get_next_id(), 
                 x=positions_to_germinate[i, 0], 
                 y=positions_to_germinate[i, 1], 
-                r=parent_species[i].r_min
+                r=parent_species[i].r_min,
+                is_dead=False
             )
             new_plants.append(new_plant)
                     
@@ -702,14 +708,16 @@ class Simulation:
         titles = [db_title, sb_title]
         return figs, axs, titles
 
-    def plot(self, fast = False, field_buffer=True):
-        state = pd.DataFrame([[p.id, p.x, p.y, p.r, p.species_id, self.t]
-                             for p in self.plants], columns=['id', 'x', 'y', 'r', 'species', 't'])
+    def plot(self, title='', fast = False, field_buffer=True, plot_dead=False):
+        state = pd.DataFrame([[p.id, p.x, p.y, p.r, p.species_id, self.t, p.is_dead]
+                             for p in self.plants], columns=['id', 'x', 'y', 'r', 'species', 't', 'is_dead'])
+            
+        
         field = self.density_field.values
 
-        sb_fig, sb_ax, sb_title = StateBuffer.plot_state(size=6, state=state, box=self.box, boundary_condition=self.boundary_condition, fast=fast)
+        sb_fig, sb_ax, sb_title = StateBuffer.plot_state(size=6, state=state, title=title, box=self.box, boundary_condition=self.boundary_condition, fast=fast, plot_dead=plot_dead)
         if field_buffer:
-            fb_fig, fb_ax, fb_title = FieldBuffer.plot_field(size=6, field=field, box=self.box, boundary_condition=self.boundary_condition)
+            fb_fig, fb_ax, fb_title = FieldBuffer.plot_field(size=6, field=field, title=title, box=self.box, boundary_condition=self.boundary_condition)
 
             figs = [sb_fig, fb_fig]
             axs = [sb_ax, fb_ax]
@@ -720,5 +728,5 @@ class Simulation:
             titles = [sb_title]
         return figs, axs, titles
     
-    def plot_state(self, fast = False):
-        return self.plot(fast=fast, field_buffer=False)
+    def plot_state(self, title='', fast = False, plot_dead=False):
+        return self.plot(fast=fast, title=title, field_buffer=False, plot_dead=plot_dead)
