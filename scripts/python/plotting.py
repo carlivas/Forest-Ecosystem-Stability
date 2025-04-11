@@ -10,11 +10,11 @@ do_plots = True
 fast_plots = False
 save_figs = True
 
-do_animations = True
+do_animations = False
 fast_animations = False
 animation_skip = 5
 
-path = 'Data/debugging' # Path to the folder containing the buffers
+path = '../../Data/baseline/L2000' # Path to the folder containing the buffers
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
@@ -25,7 +25,6 @@ sb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if
 dfb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'density_field_buffer-' in f]
 complete_aliases = list(set(kwargs_aliases) & set(db_aliases) & set(sb_aliases) & set(dfb_aliases))
 # complete_aliases.sort()
-complete_aliases  = [alias for alias in complete_aliases if 'L1000_ALL' in alias]
 aliases = complete_aliases[::-1]
 print(f'aliases: {aliases}')
 
