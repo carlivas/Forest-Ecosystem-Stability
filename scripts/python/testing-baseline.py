@@ -36,8 +36,8 @@ seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
     'L': 2000,
-    'precipitation': 0.0725,
-    'density_initial': 0.6,
+    'precipitation': 0.0775,
+    'density_initial': 0.1,
     'seed': seed,
     'boundary_condition': 'periodic',
     'competition_scheme': 'all'
