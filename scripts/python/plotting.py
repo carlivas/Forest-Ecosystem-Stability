@@ -42,7 +42,7 @@ for i, alias in enumerate(aliases):
         if db_data is not None:
             print(f'plotting.py: Plotting data_buffer for alias {alias}')
             db_fig, db_ax, db_title = DataBuffer.plot(data=db_data, size=(
-                7, 7), keys=['Biomass', 'Population', 'Precipitation'], title=alias)
+                7, 7), keys=['Biomass', 'Population', 'Precipitation'], title=alias, dict_to_print=sim.get_kwargs())
             db_title = db_title.replace(' ', '_').lower()
 
         if sb_data is not None and do_animations is False:

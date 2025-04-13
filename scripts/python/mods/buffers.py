@@ -149,7 +149,7 @@ class DataBuffer:
         return data # returns an empty dataframe if the file does not exist
 
     @staticmethod
-    def plot(data, size=6, title='', keys=None):
+    def plot(data, size=6, title='', keys=None, dict_to_print=None):
         title = 'data_buffer-' + title
 
         # Specify which keys need to be plotted
@@ -164,13 +164,19 @@ class DataBuffer:
             figsize = size
         else:
             figsize = (size, size * len(keys) / 3)
-        
-        # Create the figure and axes
-        fig, ax = plt.subplots(
-            len(keys), 1,
-            figsize=figsize,
-            sharex=True)
-        
+
+        # Create the figure and gridspec
+        if dict_to_print is not None:
+            fig = plt.figure(figsize=figsize)
+            gs = GridSpec(len(keys), 2, width_ratios=[6, 1], figure=fig)
+            ax = [fig.add_subplot(gs[i, 0]) for i in range(len(keys))]
+            dict_ax = fig.add_subplot(gs[:, 1])
+        else:
+            fig, ax = plt.subplots(
+                len(keys), 1,
+                figsize=figsize,
+                sharex=True)
+
         fig.suptitle(title, fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
         
@@ -207,10 +213,30 @@ class DataBuffer:
 
         for ax_i in ax:
             ax_i.grid()
-            # ax_i.legend()
-        
+
+        if dict_to_print is not None:
+            dict_ax.axis('off')
+
+            def format_dict(d, indent=0):
+                lines = []
+                for key, value in d.items():
+                    if isinstance(value, dict):
+                        lines.append("")  # Add an empty line before the dict title
+                        lines.append(f'{" " * indent}{key}:')
+                        lines.extend(format_dict(value, indent + 5))
+                    else:
+                        lines.append(f'{" " * indent}{key}: {value}')
+                return lines
+
+            dict_text = '\n'.join(format_dict(dict_to_print))
+            dict_ax.text(x=0, y=0.99, s=dict_text, transform=dict_ax.transAxes,
+                 fontsize=7, verticalalignment='top', horizontalalignment='left',
+                 linespacing=1.5,
+                 bbox=dict(facecolor="white", edgecolor="black", linewidth=0.8))
+
         title = title
-        print(f'DataBuffer.plot(): {title = }')
+        print(f'DataBuffer.plot(): {title=}')
+        fig.tight_layout()
         return fig, ax, title
 
 

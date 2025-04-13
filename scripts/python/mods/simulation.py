@@ -690,12 +690,28 @@ class Simulation:
         'state_buffer',
         'state',
         'convert_dict',
-        'verbose'
+        'verbose',
+        '_m'
     ]
+
+    def get_kwargs(self, exclude=None):
+        exclude = exclude or self.exclude_default
+        exclude = exclude if isinstance(exclude, list) else [exclude]
+        
+        kwargs = copy.deepcopy(self.__dict__)
+        for k in exclude:
+            if k in kwargs:
+                kwargs.pop(k)
+        
+        for species in self.species_list:
+            species_title = species.name
+            kwargs[species_title] = copy.deepcopy(convert_dict(species.__dict__, conversion_factors=self.conversion_factors_default, reverse=True))
+            kwargs[species_title].pop('name')        
+        return kwargs
 
     def plot_buffers(self, title='', n_plots=20, fast=False):
         db_fig, db_ax, db_title = DataBuffer.plot(
-            data=self.data_buffer.get_data(), title=title)
+            data=self.data_buffer.get_data(), title=title, dict_to_print=self.get_kwargs())
         sb_fig, sb_ax, sb_title = StateBuffer.plot(
             data=self.state_buffer.get_data(), title=title, n_plots=n_plots, box=self.box, boundary_condition=self.boundary_condition, fast=fast)
         # dfb_fig, dfb_ax, dfb_title = FieldBuffer.plot(
