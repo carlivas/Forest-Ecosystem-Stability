@@ -6,5 +6,6 @@
     "verbose": true,
     "density_field_resolution": 50,
     "boundary_condition": "periodic",
+    "competition_scheme": "all",
     "land_quality": 0
 }
