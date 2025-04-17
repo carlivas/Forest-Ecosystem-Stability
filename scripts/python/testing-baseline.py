@@ -35,9 +35,9 @@ save_figs = True
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 2000,
-    'precipitation': 0.0775,
-    'density_initial': 0.1,
+    'L': 10000,
+    'precipitation': 0.0675,
+    'density_initial': 0.3,
     'seed': seed,
     'boundary_condition': 'periodic',
     'competition_scheme': 'all'
@@ -46,7 +46,7 @@ folder = f'../../Data/baseline/L{kwargs["L"]}'
 alias = generate_alias(id='baseline', keys=['L', 'precipitation', 'density_initial'], time=True, **kwargs)
 sim = Simulation(folder=folder, alias=alias, **kwargs)
 sim.initiate_non_overlapping(target_density=kwargs['density_initial'])
-sim.run(T=15000)
+sim.run(T=5000)
 
 
 figs, axs, titles = sim.plot_buffers(title=alias)
