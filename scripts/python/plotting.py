@@ -14,7 +14,7 @@ do_animations = False
 fast_animations = False
 animation_skip = 5
 
-path = 'Data/temp' # Path to the folder containing the buffers
+path = '../../Data/baseline/L10000' # Path to the folder containing the buffers
 load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
@@ -22,13 +22,15 @@ kwargs_aliases = [f.split('-')[-1].split('.')[0]
             for f in os.listdir(load_folder) if 'kwargs-' in f]
 db_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'data_buffer-' in f]
 sb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'state_buffer-' in f]
-# dfb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'density_field_buffer-' in f]
+
 complete_aliases = list(set(kwargs_aliases) & set(db_aliases) & set(sb_aliases))
+
 # complete_aliases.sort()
 aliases = complete_aliases[::-1]
 print(f'aliases: {aliases}')
 
 for i, alias in enumerate(aliases):
+    print('plotting alias: ', alias)
     sim = Simulation(folder=load_folder, alias=alias)
     sb_data, db_data, dfb_data = None, None, None
 
