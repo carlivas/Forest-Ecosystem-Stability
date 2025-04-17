@@ -267,17 +267,18 @@ class Simulation:
 
             print(f'{dots} Time: {runtime_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}', end='\r')
             
-            if len(self.species_list) > 1:
-                if self.t % 100 == 0:
+            if self.t % 100 == 0:
+                print()
+                if len(self.species_list) > 1:
                     species_counts = {species.species_id: 0 for species in self.species_list}
                     for plant in self.plants:
                         species_counts[plant.species_id] += 1
-                    print()
                     print(f'Species counts: {species_counts}')
                     print()
 
     def run(self, T, min_population=None, max_population=None, transient_period=0, delta_p=0, convergence_stop=False):
-
+        
+        run_start_time = self.t
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
         print(
@@ -290,17 +291,16 @@ class Simulation:
 
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
-                if (max_population is not None and l > max_population):
-                    print(
-                        f'\nSimulation.run(): Population exceeded {max_population}. Stopping simulation...')
-                    break
-                elif (min_population is not None and l < min_population):
-                    print(
-                        f'\nSimulation.run(): Population below {min_population}. Stopping simulation...')
-                    break
-                elif convergence_stop and is_converged:
-                    print(
-                        f'\nSimulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
+                stop_conditions = [
+                    (max_population is not None and l > max_population, f'Population exceeded {max_population}'),
+                    (min_population is not None and l < min_population, f'Population below {min_population}'),
+                    (convergence_stop and self.convergence(t_min=run_start_time), f'Convergence reached at t = {self.t}')
+                ]
+                for condition, message in stop_conditions:
+                    if condition:
+                        print(f'\nSimulation.run(): {message}. Stopping simulation...')
+                        break
+                if condition:
                     break
 
         except KeyboardInterrupt:
@@ -456,36 +456,33 @@ class Simulation:
             d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
         save_dict(d=converted_dict,
                   path=f'{self.folder}/kwargs-{self.alias}', exclude=self.exclude_default)
-        print(f'Simulation.finalize(): Time: {time.strftime("%H:%M:%S")}')
 
-    def convergence_check(self, trend_window=5000, trend_threshold=1):
-        data = self.data_buffer.get_data()[['Time', 'Biomass']]
-        if data.shape[0] < 2:
-            return False, -1, None
-        time = data['Time'].values
-        biomass = data['Biomass'].values
-        time_step = time[1] - time[0]
-        window = np.min([int(trend_window//time_step), len(time)])
-        x = time[-window:]
-        y = biomass[-window:]
-        σy = np.std(y)
-        μy = np.mean(y)
-        if σy == 0:
-            _, slope_norm, regression_line_norm, _, _ = linear_regression(
-                x, y, advanced=True)
-            regression_line = regression_line_norm
-        else:
-            y_norm = (y - μy) / σy
-            _, slope_norm, regression_line_norm, _, _ = linear_regression(
-                x, y_norm, advanced=True)
-            regression_line = regression_line_norm * σy + μy
-
-        convergence_factor = np.abs(slope_norm) * \
-            trend_window - trend_threshold
-        is_converged = bool(convergence_factor < 0) & bool(
-            (time[-1] - time[0]) > trend_window)
-        return is_converged, convergence_factor, regression_line
-    
+    def convergence(self, trend_window=1500, trend_threshold=1e-1, t_min=0):
+        # If there are not enough data points to calculate convergence, return False
+        if self.t - t_min < 2:
+            return False
+        
+        # Calculate the number of time steps in the window
+        window = int(trend_window//self.time_step)
+        
+        # If the number of available data points is less than the window, return False
+        if self.t - t_min < window:
+            return False
+        
+        # Get the last 'window' data points
+        data = self.data_buffer.get_data().tail(window)
+        x, biomass, population = data['Time'].values, data['Biomass'].values, data['Population'].values
+        
+        # If the whole window has not yet passed t_min return False
+        if x[0] < t_min:
+            return False
+        
+        # Calculate whether the windowed data is converged
+        is_converged_biomass = convergence_check(x, biomass, trend_threshold=trend_threshold)
+        is_converged_population = convergence_check(x, population, trend_threshold=trend_threshold)
+        is_converged = is_converged_biomass and is_converged_population
+        return is_converged
+        
     def remove_fraction(self, fraction):
         # Determine the indices of plants to remove
         total_plants = len(self.plants)
