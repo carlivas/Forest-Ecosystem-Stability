@@ -23,10 +23,10 @@ kwargs_aliases = [f.split('-')[-1].split('.')[0]
 db_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'data_buffer-' in f]
 sb_aliases = [f.split('-')[-1].split('.')[0] for f in os.listdir(load_folder) if 'state_buffer-' in f]
 
-complete_aliases = list(set(kwargs_aliases) & set(db_aliases) & set(sb_aliases)) 
+complete_aliases = list(set(kwargs_aliases) & set(db_aliases) & set(sb_aliases))
+
 # complete_aliases.sort()
 aliases = complete_aliases[::-1]
-
 print(f'aliases: {aliases}')
 
 for i, alias in enumerate(aliases):

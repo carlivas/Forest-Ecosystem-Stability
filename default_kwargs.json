@@ -1,11 +1,12 @@
 {
     "L": 500,
-    "precipitation": -1,
+    "precipitation": 0,
     "time_step": 1,
-    "spawn_rate": 1,
+    "spawn_rate": 1e-6,
     "verbose": true,
     "density_field_resolution": 50,
     "boundary_condition": "periodic",
     "competition_scheme": "all",
-    "land_quality": 0
+    "land_quality": 0.01,
+    "convert_kwargs": true
 }
