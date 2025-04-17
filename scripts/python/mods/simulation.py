@@ -39,12 +39,22 @@ class IDGenerator:
 
 class Simulation:
     def __init__(self, folder, alias='alias', **kwargs):
+        
+        # If the folder does not exist, ask the user if they want to create it
+        if not os.path.exists(folder):
+            create_folder = input(f'Folder "{folder}" does not exist. Do you want to create it? (Y/n): ')
+            if create_folder.lower() != 'y':
+                raise ValueError('Simulation.__init__(): Aborted by user...')
+            os.makedirs(folder, exist_ok=True)
+        
+        # Define paths for the data
         kwargs_path = f'{folder}/kwargs-{alias}.json'
         data_buffer_path = f'{folder}/data_buffer-{alias}.csv'
         state_buffer_path = f'{folder}/state_buffer-{alias}.csv'
         density_field_buffer_path = f'{folder}/density_field_buffer-{alias}.csv'
         figure_folder = f'{folder}/figures'
 
+        # Check if data already exists and ask the user if they want to override it
         override = kwargs.get('override', False)
         override_force = kwargs.get('override_force', False)
         if (override or override_force) and os.path.exists(kwargs_path):
@@ -58,9 +68,11 @@ class Simulation:
                 print("##################################################")
                 print()
                 override_input = 'y'
+            
             if override_input.lower() != 'y':
                 raise ValueError('Simulation.__init__(): Aborted by user...')
             else:
+                # Remove existing files if the user confirms the override
                 for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
                     if os.path.exists(path):
                         os.remove(path)
@@ -69,8 +81,10 @@ class Simulation:
                         if alias in file:
                             os.remove(os.path.join(figure_folder, file))
 
+        # Create the folder for figures if it doesn't exist
         os.makedirs(folder + '/figures', exist_ok=True)
-
+        
+        # Load the kwargs from the file if it exists
         self.species_list = kwargs.get('species_list', [])
         if os.path.exists(kwargs_path):
             print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
@@ -97,23 +111,23 @@ class Simulation:
         self.folder = folder
         self.alias = alias
 
-        # self.plants = []
         self.plants = PlantCollection()
         
-        _m = 1 / self.L
         self.conversion_factors_default = {
-            'r_min': _m,
-            'r_max': _m,
-            'dispersal_range': _m,
-            'spawn_rate': self.time_step,
-            'growth_rate': _m * self.time_step,
-            'density_range': _m,
-            'maturity_size': _m,
+            'r_min': self.L, # m
+            'r_max': self.L, # m
+            'dispersal_range': self.L, # m
+            'density_range': self.L, # m
+            'maturity_size': self.L, # m
+            'spawn_rate': 1/ self.L**2 / self.time_step, # 1/ m2 / yr
+            'growth_rate': self.L/self.time_step, # m / yr
         }
 
-
+        # ensure that the species list is not empty
         if self.species_list == []:
-            self.species_list = [PlantSpecies()]            
+            self.species_list = [PlantSpecies()]
+            
+        # Define species kwargs paths and save them         
         for s in self.species_list:
             species_kwargs_path=f'{folder}/species{str(s.species_id).replace('-', '_')}-{alias}.json'
             
@@ -127,12 +141,14 @@ class Simulation:
                     d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
                 save_dict(path = species_kwargs_path, d=converted_dict)
 
+
         self.maximum_plant_size = max(
             [s.r_max for s in self.species_list])
         self.kt = None
 
         self.id_generator = IDGenerator()
 
+        # Define the buffers and the density field
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
         self.density_field_buffer = FieldBuffer(
@@ -141,11 +157,13 @@ class Simulation:
             resolution=self.density_field_resolution,
         )
         
+        # Import existing data from the data buffer if it exists
         exisiting_data = self.data_buffer.get_data()
         if not exisiting_data.empty:
             self.precipitation = exisiting_data['Precipitation'].iloc[-1]
             self.t = exisiting_data['Time'].iloc[-1]
 
+        # Import existing state from the state buffer if it exists
         if kwargs.get('state', None) is not None:
             print(f'Simulation.__init__(): Loading state from kwargs["state"]')
             self.set_state(kwargs['state'])
@@ -153,9 +171,10 @@ class Simulation:
         elif not override:
             print(f'Simulation.__init__(): Loading state from state_buffer')
             state_df = self.state_buffer.get_last_state()
-            self.set_state(state_df)
+            if not state_df.empty:
+                self.set_state(state_df)
 
-
+        # Convert the kwargs to the correct units if needed
         if kwargs.get('convert_kwargs', True) == True:
             save_dict(path = kwargs_path, d=self.__dict__, exclude=self.exclude_default)
             converted_dict = convert_dict(
@@ -165,7 +184,7 @@ class Simulation:
             converted_dict = convert_dict(
                 d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
             save_dict(path = kwargs_path, d=self.__dict__, exclude=self.exclude_default)
-            
+                    
         if 'convert_kwargs' in self.__dict__:
             self.__dict__.pop('convert_kwargs')
 
@@ -266,7 +285,7 @@ class Simulation:
         try:
             for _ in range(0, n_iter):
                 if _ > transient_period:
-                    self.precipitation = max(0, self.precipitation + delta_p)
+                    self.precipitation = min(1, max(0, self.precipitation + delta_p))
                 self.step()
 
                 # if the population exceeds the maximum allowed, stop the simulation
@@ -429,6 +448,7 @@ class Simulation:
             field=self.density_field.values, t=self.t)
         
     def finalize(self):
+        print(f'Simulation.finalize(): Time: {time.strftime("%H:%M:%S")}')
         self.data_buffer.finalize()
         self.state_buffer.finalize()
         self.density_field_buffer.finalize()
@@ -496,7 +516,7 @@ class Simulation:
         # Generate new positions and species
         new_positions = np.random.uniform(self.box[:, 0], self.box[:, 1], (n, 2))
         new_species = np.random.choice(species_list, n)
-        
+
         self.attempt_germination(new_positions, new_species)
     
     def local_density(self, pos):
@@ -684,7 +704,6 @@ class Simulation:
         'kt',
         'maximum_plant_size',
         'plants',
-        'precipitation',
         'size_buffer',
         'species_list',
         'state_buffer',
@@ -702,6 +721,9 @@ class Simulation:
         for k in exclude:
             if k in kwargs:
                 kwargs.pop(k)
+        # Convert the kwargs to the correct units
+        kwargs = convert_dict(
+            d=kwargs, conversion_factors=self.conversion_factors_default, reverse=True)
         
         for species in self.species_list:
             species_title = species.name

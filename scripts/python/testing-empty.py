@@ -7,44 +7,33 @@ from mods.simulation import Simulation
 from mods.buffers import StateBuffer
 from mods.utilities import *
 from datetime import datetime
-current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-
-save_figs = False
 
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 4000,
+    'L': 2000,
+    'precipitation': 0.0,
     'seed': seed,
-    'land_quality': 0.005,
-    'precipitation': 0.3,
+    'competition_scheme': 'all',
+    'land_quality': 0.01,
+    'spawn_rate': 1e-6,
 }
 
-folder = f'Data/empty'
-alias = f'empty_test'
+current_time = datetime.now().strftime("%y%m%d_%H%M%S")
+folder = f'Data/empty_temp'
+alias = generate_alias(id='empty_test', keys=['land_quality', 'spawn_rate'], abrevs=['LQ', 'SR'], time=True, **kwargs)
+sim = Simulation(folder=folder, alias=alias, **kwargs)
 
+T = 100_000
+dp = 1 / T
+sim.run(T=T, delta_p=dp, max_population=10)
+sim.run(T=1000, delta_p=0, convergence_stop=False)
+sim.run(T=10000, delta_p=0, convergence_stop=True)
 
-alias = alias.replace(' ', '_').replace('-', '_').replace('.', '_')
-os.makedirs(folder, exist_ok=True)
-sim = Simulation(folder=folder, alias=alias, **kwargs, override=False)
-sim.__dict__.update(kwargs)
-
-
-sim.run(T = 100, delta_p=0)
-
-
-# figs, axs, titles = sim.plot_buffers(title=alias)
-figs, axs, titles = zip(DataBuffer.plot(sim.data_buffer.get_data()), sim.plot())
-if save_figs:
-    os.makedirs(folder + '/figures', exist_ok=True)
-    for i, (fig, title) in enumerate(zip(figs, titles)):
-        title = title.replace(' ', '-')
-        fig.savefig(f'{folder}/figures/{title}.png', dpi=600)
-else:
-    plt.show()
-# anim, _ = StateBuffer.animate(
-#     sim.state_buffer.get_data(), skip=10, title=alias, fast=True)
-# anim.save(f'{folder}/figures/state_anim-{alias}.mp4', writer='ffmpeg', dpi=600)
-
-# THINK ABOUT THIS
-# field = pd.DataFrame([[x, y, d] for (x, y), d in zip(self.density_field.positions, self.density_field.values)], columns=['x', 'y', 'd'])
+figs, axs, titles = sim.plot_buffers(title=alias)
+os.makedirs(folder + '/figures', exist_ok=True)
+for i, (fig, title) in enumerate(zip(figs, titles)):
+    title = title.replace(' ', '-')
+    fig.savefig(f'{folder}/figures/{title}.png', dpi=600)
+    
+plt.show()

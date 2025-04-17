@@ -12,6 +12,7 @@ from io import StringIO
 from mods.files import *
 from mods.plant import *
 from mods.spatial import *
+from matplotlib.gridspec import GridSpec
 
 modi_path_kwargs = '../../default_kwargs.json'
 local_path_kwargs = 'default_kwargs.json'
@@ -98,8 +99,7 @@ class DataBuffer:
 
         # Raise an error if the file already exists, as to not override it
         if os.path.exists(self.file_path):
-            raise FileExistsError(f'DataBuffer._initialize_file(): File {
-                                  self.file_path} already exists.')
+            raise FileExistsError(f'DataBuffer._initialize_file(): File {self.file_path} already exists.')
 
         # If the file does not exist, create it and write the column names to it
         else:
@@ -112,8 +112,7 @@ class DataBuffer:
 
     def add(self, data):
         if list(data.keys()) != list(self.columns):
-            raise ValueError(f'DataBuffer.add(): Data keys {list(
-                data.keys())} do not match the expected keys: {self.columns}.')
+            raise ValueError(f'DataBuffer.add(): Data keys {list(data.keys())} do not match the expected keys: {self.columns}.')
         if self.buffer.empty:
             self.buffer = data
         else:
@@ -124,8 +123,7 @@ class DataBuffer:
     def _flush_buffer(self):
         new_rows = pd.DataFrame(
             self.buffer, columns=self.columns, dtype=np.float64)
-        print(
-            f'\n\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+        # print(f'\n\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
         if not os.path.exists(self.file_path):
             self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
@@ -159,7 +157,6 @@ class DataBuffer:
             raise ValueError(
                 f'DataBuffer.plot(): Keys {keys} not found in {data.columns}.')
 
-
         if isinstance(size, (tuple, list, np.ndarray)):
             figsize = size
         else:
@@ -171,6 +168,9 @@ class DataBuffer:
             gs = GridSpec(len(keys), 2, width_ratios=[6, 1], figure=fig)
             ax = [fig.add_subplot(gs[i, 0]) for i in range(len(keys))]
             dict_ax = fig.add_subplot(gs[:, 1])
+            
+            for a in ax:
+                a.sharex(ax[0])
         else:
             fig, ax = plt.subplots(
                 len(keys), 1,
@@ -179,12 +179,12 @@ class DataBuffer:
 
         fig.suptitle(title, fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
-        
+
         if len(data) == 0:
             print(
                 f'DataBuffer.plot(): Not enough data to plot ({len(data)=}).')
             return fig, ax, title
-        
+
         if len(data) == 1:
             marker = '.'
         else:
@@ -201,14 +201,14 @@ class DataBuffer:
             
             ax[i].plot(t_data, y_data, color=cmap((i + 1) / len(keys)), marker=marker)
             ax[i].set_ylabel(key)
-            
+
             if key == 'Biomass' or key == 'Precipitation':
                 ax[i].set_ylim(0, 1)
             else:
                 y_max = np.nanmax(y_data)
                 if y_max != 0:
                     ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
-                    
+
         ax[-1].set_xlabel('Time')
 
         for ax_i in ax:
@@ -292,8 +292,7 @@ class StateBuffer:
     def _flush_buffer(self):
         new_rows = pd.DataFrame(
             self.buffer, columns=self.columns, dtype=np.float64)
-        print(
-            f'\n\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+        # print(f'\n\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
         if not os.path.exists(self.file_path):
             self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
@@ -313,7 +312,7 @@ class StateBuffer:
             print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
         else:
             warnings.warn(
-                f'StateBuffer.get_data(): File {self.file_path} does not exist.')    
+                f'StateBuffer.get_data(): File {self.file_path} does not exist.')
 
         return data # returns an empty dataframe if the file does not exist
     
@@ -336,7 +335,7 @@ class StateBuffer:
                 
         return data
 
-    def get_last_state(self):     
+    def get_last_state(self):
         # if the file does not exist, return an empty dataframe
         if not os.path.exists(self.file_path):
             return pd.DataFrame(columns=self.columns)
@@ -364,13 +363,13 @@ class StateBuffer:
             while val == last_val:
                 move_to_previous_line(f)
                 line = f.readline().decode().strip()
-                
+
                 try:
                     val = float(line.split(',')[-1].strip())
                 except ValueError:
                     print(f'StateBuffer.get_last_state(): Error reading values from line {i} {line = }')
                     break
-                
+
                 move_to_previous_line(f)
 
                 if val == last_val:
@@ -402,13 +401,13 @@ class StateBuffer:
         if state.empty:
             print('StateBuffer.plot_state(): No data to plot.')
             return fig, ax, title
-        
+
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-            
+
         if box is None:
             box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
-        
+
         scale = 1.2
         dim = box[:, 1] - box[:, 0]
         c = 0.5 * (box[:, 0] + box[:, 1])
@@ -416,7 +415,7 @@ class StateBuffer:
         ax.set_xlim(scaled_box[0, 0], scaled_box[0, 1])
         ax.set_ylim(scaled_box[1, 0], scaled_box[1, 1])
         ax.set_aspect('equal', 'box')
-        
+
         # Draw a grey outlined rectangle along the box
         rect = plt.Rectangle(
             (box[0, 0], box[1, 0]),  # Bottom-left corner
@@ -431,16 +430,16 @@ class StateBuffer:
         ax.add_patch(rect)
 
         t = state['t'].iloc[0]
-                    
+
         cmap = plt.colormaps['tab10']
-        
+
         ids = state['id'].values
         positions = state[['x', 'y']].values
         radii = state['r'].values
         species = state['species'].values
         if plot_dead:
             is_dead = state['is_dead'].values
-        
+
         if boundary_condition.lower() == 'periodic':
             if fast:
                 positions_shifted, index_pairs, was_shifted = positions_shift_periodic(box, positions, radii, duplicates=True)
@@ -450,7 +449,7 @@ class StateBuffer:
             is_beyond_plot_boundary = np.any(boundary_check(scaled_box, positions_shifted), axis=1)
             
             index_pairs = index_pairs[~is_beyond_plot_boundary]
-            
+
             ids = ids[index_pairs[:, 0]]
             species = species[index_pairs[:, 0]]
             radii = radii[index_pairs[:, 0]]
@@ -465,8 +464,8 @@ class StateBuffer:
                 alpha = 1.0
             if plot_dead and is_dead[i]:
                 c = 'red'
-            else:   
-                c = cmap(int(species + 3)) 
+            else:
+                c = cmap(int(species + 3))
             if fast:
                 ax.add_artist(plt.Circle((x, y), r,
                                          facecolor='None', edgecolor=c, transform=ax.transData, alpha=alpha))
@@ -477,13 +476,12 @@ class StateBuffer:
         if t is not None:
             t = float(round(t, 2))
             ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
-            
 
         if title != '':
             ax.set_title(title, fontsize=10)
         ax.set_xticks([])
         ax.set_yticks([])
-        
+
         return fig, ax, title
 
     @staticmethod
@@ -510,7 +508,7 @@ class StateBuffer:
             figsize = size
         else:
             figsize = (size*n_cols, size*n_rows)
-        
+
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
@@ -522,8 +520,9 @@ class StateBuffer:
                 a.axis('off')
                 continue
             state = data[data['t'] == times[i]]
-            StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast, box=box, boundary_condition=boundary_condition)
-            
+            StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast,
+                                   box=box, boundary_condition=boundary_condition)
+
         title = title
         return fig, ax, title
 
@@ -601,12 +600,11 @@ class FieldBuffer:
 
     def _flush_buffer(self):
         new_rows = pd.DataFrame(self.buffer, columns=self.columns)
-        print(
-            f'\n\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-        
+        # print(f'\n\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+
         if not os.path.exists(self.file_path):
             self._initialize_file()
-            
+
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
         self.buffer = pd.DataFrame(columns=self.columns)
@@ -657,20 +655,20 @@ class FieldBuffer:
         data.to_csv(path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_field(field, t=None, size=2, title = '', fig=None, ax=None, vmin=0, vmax=None, box=None, boundary_condition=None):
+    def plot_field(field, t=None, size=2, title='', fig=None, ax=None, vmin=0, vmax=None, box=None, boundary_condition=None):
         resolution = np.sqrt(field.size).astype(int)
         field = field.reshape(resolution, resolution)
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-            
+
         if box is None:
             box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
-            
+
         ax.contour(field, levels=[1.0], colors=[
                    'r'], linewidths=[1], alpha=0.5)
         ax.imshow(field, origin='lower', cmap='Greys',
                   vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
-        
+
         if boundary_condition.lower() == 'periodic':
             rect = plt.Rectangle(
                 (box[0, 0], box[1, 0]),  # Bottom-left corner
@@ -695,7 +693,7 @@ class FieldBuffer:
                     ]
                     ax.imshow(field, origin='lower', cmap='Greys',
                               vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
-        
+
         scale = 1.2
         ax.set_xlim(box[0, 0] * scale, box[0, 1] * scale)
         ax.set_ylim(box[1, 0] * scale, box[1, 1] * scale)
@@ -716,7 +714,8 @@ class FieldBuffer:
         times_unique = data['t'].unique()
         b = np.linspace(times_unique.min(), times_unique.max(),
                         min(len(times_unique), n_plots))
-        times = np.unique([times_unique[np.abs(times_unique - t).argmin()] for t in b])
+        times = np.unique(
+            [times_unique[np.abs(times_unique - t).argmin()] for t in b])
         resolution = int(np.sqrt(data.shape[1] - 1))
         fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(
             resolution, resolution) for t in times])
@@ -741,8 +740,9 @@ class FieldBuffer:
                 continue
             field = fields[i]
             t = times[i]
-            FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, box=box, boundary_condition=boundary_condition)
-        
+            FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin,
+                                   vmax=vmax, box=box, boundary_condition=boundary_condition)
+
         title = title
         return fig, ax, title
 
@@ -768,7 +768,8 @@ class FieldBuffer:
         def animate(i):
             ax.clear()
             t = float(round(times[i], 2))
-            FieldBuffer.plot_field(field=fields[i], t=t, size=size, ax=ax, vmin=vmin, vmax=vmax, box=box, boundary_condition=boundary_condition)
+            FieldBuffer.plot_field(field=fields[i], t=t, size=size, ax=ax, vmin=vmin,
+                                   vmax=vmax, box=box, boundary_condition=boundary_condition)
             return ax
 
         ani = animation.FuncAnimation(
@@ -856,7 +857,7 @@ class HistogramBuffer:
                 np.sum(data, axis=1)[:, np.newaxis]
             ylabel = 'density'
         ymax = np.nanmax(data)
-        
+
         title = title or self.title
         if t is None:
             tt = self.get_times()

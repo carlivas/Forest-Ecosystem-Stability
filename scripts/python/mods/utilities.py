@@ -3,21 +3,15 @@ import json
 import numpy as np
 import time
 from scipy.spatial import KDTree
+from datetime import datetime
 
 from mods.plant import *
 from mods.fields import *
 from mods.buffers import *
 
 def linear_regression(x, y, advanced=False):
-    """Calculates the linear regression of a dataset.
-
-    Args:
-        x (ndarray): (N, ) array of the independent variable.
-        y (ndarray): (N, ) array of the dependent variable.
-
-    Returns:
-        tuple: A tuple containing the slope, intercept, regression line, residuals and R2 of the linear regression.
-    """
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
     X = np.vstack([np.ones_like(x), x]).T
 
     # Calculate theta using the equation
@@ -36,6 +30,23 @@ def linear_regression(x, y, advanced=False):
         return intercept, slope, regression_line, residuals, sum_squared_residuals
     else:
         return intercept, slope
+    
+def convergence_check(x, y, trend_threshold=1e-3):
+    dx = x[1] - x[0]
+    # Calculate the linear regression parameters
+    intercept, slope = linear_regression(x, y)
+    # Calculate the regression line
+    regression_line = intercept + slope * x
+
+    # Calculate the convergence factor
+    if np.std(y) != 0:
+        convergence_factor = np.abs(
+            (regression_line[-1] - np.mean(y)) / np.std(y))
+    else:
+        convergence_factor = np.inf
+
+    # Check if the convergence factor is below the threshold
+    return convergence_factor < trend_threshold
 
 def convert_to_serializable(obj):
     try:
@@ -142,9 +153,50 @@ def scientific_notation_parser(float_str):
 
 def convert_dict(d, conversion_factors, reverse=False):
         if reverse:
-            converted_dict = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
-                              for key, value in d.items()}
-        else:
             converted_dict = {key: (value * conversion_factors[key] if key in conversion_factors.keys() else value)
                               for key, value in d.items()}
+        else:
+            converted_dict = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
+                              for key, value in d.items()}
         return converted_dict
+    
+def format_float(val):
+    if val == 0:
+        val_str = '0'
+    else:
+        split_e = str(val).split('e')
+        exponent = int(split_e[1]) if len(split_e) > 1 else 0
+        split_dot = split_e[0].split('.')
+        precision = exponent - len(split_dot[1]) if len(split_dot) > 1 else exponent
+        val_decimal = str(split_e[0]).replace(".", "")
+        
+        trailing_zeros = len(val_decimal) - len(val_decimal.rstrip("0"))
+        
+        val_decimal = val_decimal.strip("0")
+        precision += trailing_zeros
+        
+        val_str = f'{val_decimal}e{precision}' if precision != 0 else val_decimal
+    return val_str
+
+def format_alias(alias):
+    alias = alias.replace(' ', '_').replace('-', '_').replace('.', '_')
+    return alias
+
+def generate_alias(id, keys, abrevs = None, time=False, **kwargs):
+    alias = f'{id}_'
+    for i, key in enumerate(keys):
+        if key in kwargs:
+            if isinstance(abrevs, dict) and key in abrevs:
+                abrev = abrevs[key]
+            elif isinstance(abrevs, list) and i < len(abrevs):
+                abrev = abrevs[i]
+            else:
+                abrev = key[:2].upper()
+            alias += f'{abrev}{format_float(kwargs[key])}_'
+    if time:
+        current_time = datetime.now().strftime("%y%m%d_%H%M%S")
+        alias += f'{current_time}_'
+    alias = alias.rstrip('_')
+    alias = format_alias(alias)
+    
+    return alias
