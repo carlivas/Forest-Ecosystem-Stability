@@ -27,7 +27,7 @@ print(f'{seed = }')
 os.makedirs(folder, exist_ok=True)
 sim = Simulation(folder=folder, alias=alias, **kwargs, override=False)
 
-# sim.initiate_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
+# sim.spawn_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
 
 n_steps = 10
 T = 1000

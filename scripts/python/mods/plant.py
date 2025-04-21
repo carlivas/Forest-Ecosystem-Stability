@@ -128,15 +128,19 @@ class PlantCollection:
         for i, plant in enumerate(self.plants):
             plant.mortality()
             self.is_dead[i] = plant.is_dead
-
-    def append(self, plant):
-        self.add_plant(plant)
         
     def add_plant(self, plant):
         self.plants.append(plant)
         self.positions = np.vstack((self.positions, plant.pos()))
         self.radii = np.append(self.radii, plant.r)
         self.is_dead = np.append(self.is_dead, plant.is_dead)
+
+    def append(self, plant):
+        self.add_plant(plant)
+        
+    def add_plants(self, plants):
+        for plant in plants:
+            self.add_plant(plant)
 
     def remove_dead_plants(self):
         alive_indices = np.where(~self.is_dead)[0]

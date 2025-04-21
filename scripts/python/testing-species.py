@@ -50,11 +50,11 @@ sim = Simulation(folder=folder, alias=alias,
                  species_list=species_list, **kwargs, override=True)
 
 print(f'num_plants: {num_plants}')
-sim.initiate_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
+sim.spawn_non_overlapping(n=num_plants, species_list=sim.species_list, max_attempts=50*num_plants)
 
 T = 30_000
 dp = - kwargs['precipitation'] / (T - 5000)
-sim.run(T=T, min_population=1, delta_p=dp)
+sim.run(T=T, min_population=1, dp=dp)
 
 
 figs, axs, titles = sim.plot_buffers(title=alias)

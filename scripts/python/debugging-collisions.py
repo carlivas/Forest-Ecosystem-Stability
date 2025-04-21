@@ -27,8 +27,8 @@ species.growth_rate = 0.0001 * kwargs['L']
 os.makedirs(folder, exist_ok=True)
 sim = Simulation(folder=folder, alias=alias, **kwargs, override=True, species_list=[species])
 
-sim.initiate_non_overlapping(n = 20, box=np.array([[-0.5, 0.5], [0.2, 0.5]]))
-sim.initiate_non_overlapping(n = 20, box=np.array([[-0.5, 0.5], [-0.2, -0.5]]))
+sim.spawn_non_overlapping(n = 20, box=np.array([[-0.5, 0.5], [0.2, 0.5]]))
+sim.spawn_non_overlapping(n = 20, box=np.array([[-0.5, 0.5], [-0.2, -0.5]]))
 
 
 plants = []

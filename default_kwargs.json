@@ -8,5 +8,9 @@
     "boundary_condition": "periodic",
     "competition_scheme": "all",
     "land_quality": 0.01,
-    "convert_kwargs": true
+    "convert_kwargs": true,
+
+    "t": 0,
+    "box": [[-0.5, 0.5], [-0.5, 0.5]],
+    "density_field_buffer_skip": 100
 }

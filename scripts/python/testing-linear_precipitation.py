@@ -11,26 +11,24 @@ from datetime import datetime
 seed = np.random.randint(0, 1_000_000_000)
 np.random.seed(seed)
 kwargs = {
-    'L': 4000,
+    'L': 2000,
     'precipitation': 0.1,
     'seed': seed,
-    'competition_scheme': 'all'
+    'competition_scheme': 'all',
+    'density_scheme': 'global',
 }
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'../../Data/linear_precipitation/L{kwargs['L']}/new'
-alias = f'lin_prec_L{kwargs['L']}_{current_time}'
+folder = f'Data/linear_precipitation/L{kwargs['L']}/'
+alias = generate_alias(id='linprec_global', keys=['L', 'precipitation'], time=True, **kwargs)
 sim = Simulation(folder=folder, alias=alias, **kwargs)
 
-sim.initiate_non_overlapping(target_density=0.3)
+sim.spawn_non_overlapping(target_density=0.2)
 
-T = 25_000
+T = 50_000
 dp = - kwargs['precipitation'] / T
-sim.run(T=T, delta_p=dp)
+sim.run(T=T, dp=dp)
 
 
-figs, axs, titles = sim.plot_buffers(title=alias)
-os.makedirs(folder + '/figures', exist_ok=True)
-for i, (fig, title) in enumerate(zip(figs, titles)):
-    tilte = title.replace(' ', '-').lower()
-    fig.savefig(f'{folder}/figures/{title}.png', dpi=600)
+figs, axs, titles = sim.plot_buffers(title=alias, save=True, dpi=300)
+plt.show()

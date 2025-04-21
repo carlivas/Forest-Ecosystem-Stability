@@ -25,7 +25,7 @@ os.makedirs(folder, exist_ok=True)
 sim = Simulation(folder=folder, alias=alias, species_list=[species], L=1000, seed=seed, boundary_condition='box')
 sim.precipitation = 1
 
-sim.initiate_non_overlapping(target_density=0.25)
+sim.spawn_non_overlapping(target_density=0.25)
 sim.run(T=5000)
 
 figs, axs, titles = sim.plot_buffers(title=alias)

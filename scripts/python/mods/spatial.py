@@ -1,24 +1,32 @@
 import numpy as np
 from scipy.spatial import KDTree
 
-def boundary_check(boundary, positions, radii=None):
-    # Returns a boolean array indicating whether the positions are beyond the boundary
+def outside_box_check(box, positions, radii=None):
+    box = np.asarray(box, dtype=float)
+    if box.shape != (2, 2):
+        raise ValueError('Box must be a 2x2 array.')
+    if box[0, 0] >= box[0, 1] or box[1, 0] >= box[1, 1]:
+        raise ValueError('Box boundaries are invalid.')
+    
+    # Returns a boolean array indicating whether the positions are outside the box
     # if radii is given returns also circles with centers inside the boundary but with radii that reach outside
     positions = np.atleast_2d(positions)
     radii = np.zeros(len(positions)) if radii is None else np.asarray(radii)
-    is_beyond_boundary_radii = np.column_stack([
-        positions[:, 0] - radii < boundary[0, 0],  # Left boundary
-        positions[:, 0] + radii > boundary[0, 1],  # Right boundary
-        positions[:, 1] - radii < boundary[1, 0],  # Bottom boundary
-        positions[:, 1] + radii > boundary[1, 1]   # Top boundary
+    is_outside_box = np.column_stack([
+        positions[:, 0] - radii < box[0, 0],  # Left boundary
+        positions[:, 0] + radii > box[0, 1],  # Right boundary
+        positions[:, 1] - radii < box[1, 0],  # Bottom boundary
+        positions[:, 1] + radii > box[1, 1]   # Top boundary
     ])
-    is_beyond_boundary_radii = np.atleast_2d(is_beyond_boundary_radii)
-    return is_beyond_boundary_radii
+    is_outside_box = np.atleast_2d(is_outside_box)
+    return is_outside_box
 
+def inside_box_check(box, positions, radii=None):
+    return ~outside_box_check(box, positions, radii)
 
-def positions_shift_periodic_all(boundary, positions):
-    w = boundary[0, 1] - boundary[0, 0]
-    h = boundary[1, 1] - boundary[1, 0]
+def positions_shift_periodic_all(box, positions):
+    w = box[0, 1] - box[0, 0]
+    h = box[1, 1] - box[1, 0]
     
     positions_shifted = np.vstack([
         positions,
@@ -37,7 +45,7 @@ def positions_shift_periodic_all(boundary, positions):
     was_shifted[len(positions_shifted)//9:] = True
     return positions_shifted, index_pairs, was_shifted
     
-def positions_shift_periodic(boundary, positions, radii=None, duplicates=False):
+def positions_shift_periodic(box, positions, radii=None, duplicates=False):
     # Shifts the positions to opposite side(s) of the boundary if they are beyond it, if radii are given, these are included in checking for boundary crossing
     # Returns the shifted positions and an array of pairs of indices of the original positions and it's corresponding shifted position
         
@@ -50,13 +58,13 @@ def positions_shift_periodic(boundary, positions, radii=None, duplicates=False):
         raise ValueError('No positions were given')
     
     positions = np.atleast_2d(positions)
-    is_beyond_boundary_radii = boundary_check(boundary, positions, radii)
-    is_beyond_boundary = boundary_check(boundary, positions)
+    is_beyond_boundary_radii = outside_box_check(box, positions, radii)
+    is_beyond_boundary = outside_box_check(box, positions)
 
-    shifts = -2 * np.array([[boundary[0, 0], 0],
-                            [boundary[0, 1], 0],
-                            [0, boundary[1, 0]],
-                            [0, boundary[1, 1]]])
+    shifts = -2 * np.array([[box[0, 0], 0],
+                            [box[0, 1], 0],
+                            [0, box[1, 0]],
+                            [0, box[1, 1]]])
     for i, p in enumerate(positions):
     
         # If the original position without radius is beyond the boundary

@@ -26,9 +26,9 @@ sim = Simulation(folder=folder, alias=alias, **kwargs)
 
 T = 100_000
 dp = 1 / T
-sim.run(T=T, delta_p=dp, max_population=10)
-sim.run(T=1000, delta_p=0, convergence_stop=False)
-sim.run(T=10000, delta_p=0, convergence_stop=True)
+sim.run(T=T, dp=dp, max_population=10)
+sim.run(T=1000, dp=0, convergence_stop=False)
+sim.run(T=10000, dp=0, convergence_stop=True)
 
 figs, axs, titles = sim.plot_buffers(title=alias)
 os.makedirs(folder + '/figures', exist_ok=True)

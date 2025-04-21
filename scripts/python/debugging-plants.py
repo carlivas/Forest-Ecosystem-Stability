@@ -12,26 +12,28 @@ from datetime import datetime
 seed = 2
 kwargs = {
     'L': 2000,
-    'precipitation': 1.0,
+    'precipitation': 0.0675,
     'seed': seed,
     'boundary_condition': 'periodic',
-    'competition_scheme': 'sparse',
+    'competition_scheme': 'all',
+    'density_scheme': 'global',
 }
 
 current_time = datetime.now().strftime("%y%m%d_%H%M%S")
 folder = f'Data/debugging'
 alias = f'temp'
 
-sim = Simulation(folder=folder, alias=alias, **kwargs, override=True)
-sim.species_list[0].growth_rate = sim.species_list[0].growth_rate*40
+sim = Simulation(folder=folder, alias=alias, **kwargs, override=True, force=True)
+# sim.species_list[0].growth_rate = sim.species_list[0].growth_rate*40
 
-sim.initiate_non_overlapping(n=3000)
+sim.spawn_non_overlapping(target_density=0.3)
+sim.run(T=1000)
 print('\nAFTER INITIATION:')
 print(f'Number of alive plants: {np.sum(~sim.plants.is_dead)}')
 print(f'Number of dead plants: {np.sum(sim.plants.is_dead)}')
 print(f'Number of plants: {len(sim.plants)}')
 print(f'Mean plant size: {np.mean(sim.plants.radii*sim.L)}')
-sim.plot_state(title='Step 0: Initiated' + f' ({kwargs["competition_scheme"]})', fast=True)
+sim.plot_plants(title='Step 0: Initiated' + f' ({kwargs["competition_scheme"]})', fast=True)
 
 sim.plants.grow()
 print('\nAFTER GROWTH:')
@@ -39,14 +41,14 @@ print(f'Number of alive plants: {np.sum(~sim.plants.is_dead)}')
 print(f'Number of dead plants: {np.sum(sim.plants.is_dead)}')
 print(f'Number of plants: {len(sim.plants)}')
 print(f'Mean plant size: {np.mean(sim.plants.radii*sim.L)}')
-sim.plot_state(title='Step 1: Grown' + f' ({kwargs["competition_scheme"]})', fast=True)
+sim.plot_plants(title='Step 1: Grown' + f' ({kwargs["competition_scheme"]})', fast=True)
 
 sim.plants.mortality()
 print('\nAFTER MORTALITY:')
 print(f'Number of alive plants: {np.sum(~sim.plants.is_dead)}')
 print(f'Number of dead plants: {np.sum(sim.plants.is_dead)}')
 print(f'Number of plants: {len(sim.plants)}')
-fig, ax, title = sim.plot_state(title='Step 2: Mortality' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
+fig, ax, title = sim.plot_plants(title='Step 2: Mortality' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
     
 
 disperse_positions, parent_species = sim.plants.disperse(sim)
@@ -56,7 +58,7 @@ print('\nAFTER SPAWNING:')
 print(f'Number of alive plants: {np.sum(~sim.plants.is_dead)}')
 print(f'Number of dead plants: {np.sum(sim.plants.is_dead)}')
 print(f'Number of plants: {len(sim.plants)}')
-sim.plot_state(title='Step 3: After germination and spawn' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
+sim.plot_plants(title='Step 3: After germination and spawn' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
 
 sim.resolve_collisions(positions=sim.plants.positions, radii=sim.plants.radii)
 indices_dead = np.where(sim.plants.is_dead)[0]
@@ -65,14 +67,14 @@ print(f'Number of alive plants: {np.sum(~sim.plants.is_dead)}')
 print(f'Number of dead plants: {np.sum(sim.plants.is_dead)}')
 print(f'Number of plants: {len(sim.plants)}')
 print(f'Indices of dead plants: {indices_dead}')
-fig, ax, title = sim.plot_state(title='Step 4: Collisions' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
+fig, ax, title = sim.plot_plants(title='Step 4: Collisions' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
 
 sim.plants.remove_dead_plants()
 print('\nAFTER DEAD PLANT REMOVAL:')
 print(f'Number of alive plants: {np.sum(~sim.plants.is_dead)}')
 print(f'Number of dead plants: {np.sum(sim.plants.is_dead)}')
 print(f'Number of plants: {len(sim.plants)}')
-sim.plot_state(title='Step 5: After removing dead plants' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
+sim.plot_plants(title='Step 5: After removing dead plants' + f' ({kwargs["competition_scheme"]})', fast=True, plot_dead=True)
 plt.show()
     
 # plant_ids = np.unique([plant.id for plant in sim.plants])

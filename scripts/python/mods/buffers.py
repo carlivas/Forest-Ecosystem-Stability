@@ -202,8 +202,10 @@ class DataBuffer:
             ax[i].plot(t_data, y_data, color=cmap((i + 1) / len(keys)), marker=marker)
             ax[i].set_ylabel(key)
 
-            if key == 'Biomass' or key == 'Precipitation':
-                ax[i].set_ylim(0, 1)
+            if key == 'Biomass':
+                ax[i].set_ylim(0, 0.65)
+            elif key == 'Precipitation':
+                ax[i].set_ylim(0, 0.25)
             else:
                 y_max = np.nanmax(y_data)
                 if y_max != 0:
@@ -398,7 +400,7 @@ class StateBuffer:
 
     @staticmethod
     def plot_state(state, size=2, fig=None, ax=None, title='', box=None, fast=False, boundary_condition=None, plot_dead=False):
-        if state.empty:
+        if len(state) == 0:
             print('StateBuffer.plot_state(): No data to plot.')
             return fig, ax, title
 
@@ -407,6 +409,8 @@ class StateBuffer:
 
         if box is None:
             box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
+        else:
+            box = np.array(box, dtype=float)
 
         scale = 1.2
         dim = box[:, 1] - box[:, 0]
@@ -446,7 +450,7 @@ class StateBuffer:
             else:
                 positions_shifted, index_pairs, was_shifted = positions_shift_periodic_all(box, positions)
             
-            is_beyond_plot_boundary = np.any(boundary_check(scaled_box, positions_shifted), axis=1)
+            is_beyond_plot_boundary = np.any(outside_box_check(scaled_box, positions_shifted), axis=1)
             
             index_pairs = index_pairs[~is_beyond_plot_boundary]
 
@@ -553,11 +557,11 @@ class StateBuffer:
 
 
 class FieldBuffer:
-    def __init__(self, file_path, resolution=100, skip=100):
+    def __init__(self, file_path, resolution, skip):
         self.file_path = file_path
         self.resolution = resolution
         self.skip = skip
-        self.batch_size = 100
+        self.batch_size = max(1, 100//skip)
         self.columns = ['t'] + \
             [f'cell_{i}' for i in range(resolution * resolution)]
 
@@ -655,19 +659,27 @@ class FieldBuffer:
         data.to_csv(path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_field(field, t=None, size=2, title='', fig=None, ax=None, vmin=0, vmax=None, box=None, boundary_condition=None):
+    def plot_field(field, t=None, size=2, title='', fig=None, ax=None, vmin=0, vmax=None, box=None, boundary_condition=None, density_scheme='local'):
         resolution = np.sqrt(field.size).astype(int)
         field = field.reshape(resolution, resolution)
+        
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-
         if box is None:
             box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
 
-        ax.contour(field, levels=[1.0], colors=[
-                   'r'], linewidths=[1], alpha=0.5)
-        ax.imshow(field, origin='lower', cmap='Greys',
-                  vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
+        if density_scheme == 'local':
+            ax.contour(field, levels=[0.1, 0.2, 0.3], colors=[
+                    'r','g','b'], alpha=0.5)
+            ax.imshow(field, origin='lower', cmap='Greens',
+                    vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
+        elif density_scheme == 'global':
+            print('FieldBuffer.plot_field(): Density scheme is global.')
+            cmap = plt.get_cmap('Greens')
+            color = cmap(np.sum(field) / np.max([1., vmax]))
+            ax.scatter(0,0, c=field.flatten(), cmap='Greys', alpha=0.5)
+            title = f'{title}  density = {np.sum(field):.2f}'
+            ax.set_title(title, fontsize=10)
 
         if boundary_condition.lower() == 'periodic':
             rect = plt.Rectangle(
@@ -694,6 +706,12 @@ class FieldBuffer:
                     ax.imshow(field, origin='lower', cmap='Greys',
                               vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
 
+        print(f'FieldBuffer.plot_field(): {density_scheme=}')
+        if density_scheme == 'global':
+            print('FieldBuffer.plot_field(): Density scheme is global.')
+            density = np.sum(field)
+            title = f'{title}  density = {density:.2f}'
+            ax.set_title(title, fontsize=10)
         scale = 1.2
         ax.set_xlim(box[0, 0] * scale, box[0, 1] * scale)
         ax.set_ylim(box[1, 0] * scale, box[1, 1] * scale)
@@ -702,10 +720,11 @@ class FieldBuffer:
             ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
         ax.set_xticks([])
         ax.set_yticks([])
+        
         return fig, ax, title
 
     @staticmethod
-    def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', box=None, boundary_condition=None):
+    def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', box=None, boundary_condition=None, density_scheme='local'):
         title = 'field_buffer-' + title
         if data.empty:
             print('FieldBuffer.plot(): No data to plot.')
@@ -741,7 +760,7 @@ class FieldBuffer:
             field = fields[i]
             t = times[i]
             FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin,
-                                   vmax=vmax, box=box, boundary_condition=boundary_condition)
+                                   vmax=vmax, box=box, boundary_condition=boundary_condition, density_scheme=density_scheme)
 
         title = title
         return fig, ax, title
