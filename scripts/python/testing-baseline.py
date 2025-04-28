@@ -10,7 +10,7 @@ from datetime import datetime
 
 save_figs = True
 
-seed = np.random.randint(0, 1_000_000_000)
+seed = np.random.randint(0, 2**31)
 np.random.seed(seed)
 kwargs = {
     'L': 2000,

@@ -191,8 +191,12 @@ def generate_alias(id, keys, abrevs = None, time=False, **kwargs):
             elif isinstance(abrevs, list) and i < len(abrevs):
                 abrev = abrevs[i]
             else:
-                abrev = key[:2].upper()
-            alias += f'{abrev}{format_float(kwargs[key])}_'
+                abrev = [s[0].upper() for s in key.split('_') if len(s) > 0]
+                abrev = ''.join(abrev)                  
+            if isinstance(kwargs[key], float):
+                alias += f'{abrev}{format_float(kwargs[key])}_'
+            else:
+                alias += f'{abrev}{kwargs[key]}_'            
     if time:
         current_time = datetime.now().strftime("%y%m%d_%H%M%S")
         alias += f'{current_time}_'
@@ -200,3 +204,16 @@ def generate_alias(id, keys, abrevs = None, time=False, **kwargs):
     alias = format_alias(alias)
     
     return alias
+
+def get_unique_aliases(folder, includes=None, excludes=None):        
+    files = os.listdir(folder)
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if f.endswith('.json')]
+    if includes is not None:
+        aliases = [alias for alias in aliases if includes in alias]
+    if excludes is not None:
+        aliases = [alias for alias in aliases if excludes not in alias]
+        
+    aliases = list(set(aliases))
+    aliases.sort()
+    return aliases
+    

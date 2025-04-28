@@ -191,6 +191,7 @@ class Simulation:
         if 'convert_kwargs' in self.__dict__:
             self.__dict__.pop('convert_kwargs')
 
+        self.seed = self.seed or np.random.randint(0, 2**32, dtype=np.uint32)
         np.random.seed(self.seed)
         print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
         print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
@@ -537,11 +538,11 @@ class Simulation:
             # print(f'Simulation.attempt_germination(): {box_check.shape} positions outside the box.')
             # print(f'Simulation.attempt_germination(): {positions_to_germinate.shape} positions to germinate.')
             # print(f'Simulation.attempt_germination(): {parent_species.shape} parent species to germinate.')
-            positions_to_germinate = positions_to_germinate[~np.any(box_check, axis=1)]
-            parent_species = parent_species[~np.any(box_check, axis=1)]
             if np.any(box_check):
                 print(f'Simulation.attempt_germination(): {box_check.sum()} positions outside the box.')
                 print(f'Simulation.attempt_germination(): {len(positions_to_germinate) = } positions to germinate.')
+            positions_to_germinate = positions_to_germinate[~np.any(box_check, axis=1)]
+            parent_species = parent_species[~np.any(box_check, axis=1)]
             
         elif self.boundary_condition.lower() == 'box':
             box_check = np.any(outside_box_check(box=self.box, positions=positions_to_germinate), axis=1)

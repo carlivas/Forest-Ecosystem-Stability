@@ -205,7 +205,7 @@ class DataBuffer:
             if key == 'Biomass':
                 ax[i].set_ylim(0, 0.65)
             elif key == 'Precipitation':
-                ax[i].set_ylim(0, 0.25)
+                ax[i].set_ylim(0, 0.65)
             else:
                 y_max = np.nanmax(y_data)
                 if y_max != 0:
@@ -237,8 +237,8 @@ class DataBuffer:
                  bbox=dict(facecolor="white", edgecolor="black", linewidth=0.8))
 
         title = title
-        print(f'DataBuffer.plot(): {title=}')
         fig.tight_layout()
+        print(f'DataBuffer.plot(): {title=}')
         return fig, ax, title
 
 
@@ -528,6 +528,7 @@ class StateBuffer:
                                    box=box, boundary_condition=boundary_condition)
 
         title = title
+        print(f'StateBuffer.plot(): {title=}')
         return fig, ax, title
 
     @staticmethod
@@ -706,9 +707,7 @@ class FieldBuffer:
                     ax.imshow(field, origin='lower', cmap='Greys',
                               vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
 
-        print(f'FieldBuffer.plot_field(): {density_scheme=}')
         if density_scheme == 'global':
-            print('FieldBuffer.plot_field(): Density scheme is global.')
             density = np.sum(field)
             title = f'{title}  density = {density:.2f}'
             ax.set_title(title, fontsize=10)
@@ -720,7 +719,7 @@ class FieldBuffer:
             ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
         ax.set_xticks([])
         ax.set_yticks([])
-        
+        print(f'FieldBuffer.plot(): {title=}')
         return fig, ax, title
 
     @staticmethod
