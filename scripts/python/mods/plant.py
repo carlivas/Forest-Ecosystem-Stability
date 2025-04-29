@@ -104,7 +104,7 @@ class PlantCollection:
         if plants:
             for plant in plants:
                 self.add_plant(plant)
-            self.update()
+            self.update_values()
     
     def grow(self):
         # COULD BE PARALLELIZED
@@ -141,6 +141,16 @@ class PlantCollection:
     def add_plants(self, plants):
         for plant in plants:
             self.add_plant(plant)
+            
+    def remove_plant(self, plant):
+        index = self.plants.index(plant)
+        self.plants.pop(index)
+        self.positions = np.delete(self.positions, index, axis=0)
+        self.radii = np.delete(self.radii, index)
+        self.is_dead = np.delete(self.is_dead, index)
+    
+    def pop(self, index):
+        self.remove_plant(self.plants[index])
 
     def remove_dead_plants(self):
         alive_indices = np.where(~self.is_dead)[0]
@@ -154,6 +164,9 @@ class PlantCollection:
         for i, plant in enumerate(self.plants):
             self.radii[i] = plant.r
             self.is_dead[i] = plant.is_dead
+    
+    def copy(self):
+        return PlantCollection(plants=[plant.copy() for plant in self.plants])
     
     def __getitem__(self, index):
         return self.plants[index]

@@ -141,10 +141,14 @@ class DataBuffer:
         if os.path.exists(self.file_path):
             data = pd.read_csv(self.file_path)
         
-        if not self.buffer.empty:
-            data = pd.concat([data, self.buffer], ignore_index=True)
-        
-        return data # returns an empty dataframe if the file does not exist
+        if not self.buffer.empty and not data.empty:
+            return pd.concat([data, self.buffer], ignore_index=True)
+        elif not self.buffer.empty:
+            return self.buffer
+        elif not data.empty:
+            return data
+        else:
+            return data
 
     @staticmethod
     def plot(data, size=6, title='', keys=None, dict_to_print=None):
@@ -558,7 +562,7 @@ class StateBuffer:
 
 
 class FieldBuffer:
-    def __init__(self, file_path, resolution, skip):
+    def __init__(self, file_path, resolution, skip = 300):
         self.file_path = file_path
         self.resolution = resolution
         self.skip = skip

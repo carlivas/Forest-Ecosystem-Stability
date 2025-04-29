@@ -191,8 +191,7 @@ class Simulation:
         if 'convert_kwargs' in self.__dict__:
             self.__dict__.pop('convert_kwargs')
 
-        self.seed = self.seed or np.random.randint(0, 2**32, dtype=np.uint32)
-        np.random.seed(self.seed)
+        self.seed = kwargs.get('seed', None)            
         print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
         print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
 
@@ -218,7 +217,7 @@ class Simulation:
         else:
             self.kt = KDTree(plants.positions)
 
-    def step(self):        
+    def step(self):
         # Update all plants based on the current state of the simulation
         self.plants.grow()
         self.plants.mortality()
@@ -268,15 +267,17 @@ class Simulation:
                     print(f'Species counts: {species_counts}')
                     print()
 
-    def run(self, T, min_population=None, max_population=None, transient_period=0, dp=0, convergence_stop=False):
-        
+    def run(self, T, min_population=None, max_population=None, max_biomass = None, transient_period=0, dp=0, convergence_stop=False):
         run_start_time = self.t
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
         print(
             f'Simulation.run(): Running simulation for {n_iter} iterations from t = {self.t}...')
         try:
+            self.set_seed(self.seed)
             self.is_running = True
+            self.print()
+            print('\nSimulation.run(): Starting simulation...')
             for _ in range(0, n_iter):
                 if _ > transient_period:
                     self.precipitation = min(1, max(0, self.precipitation + dp))
@@ -284,10 +285,15 @@ class Simulation:
 
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
+                if isinstance(convergence_stop, int):
+                    conv = self.convergence(t_min=run_start_time, trend_window=convergence_stop)
+                else:
+                    conv = self.convergence(t_min=run_start_time)
                 stop_conditions = [
                     (max_population is not None and l > max_population, f'Population exceeded {max_population}'),
                     (min_population is not None and l < min_population, f'Population below {min_population}'),
-                    (convergence_stop and self.convergence(t_min=run_start_time), f'Convergence reached at t = {self.t}')
+                    (max_biomass is not None and self.get_biomass() > max_biomass, f'Biomass exceeded {max_biomass}'),
+                    (convergence_stop and conv, f'Convergence reached at t = {self.t}')
                 ]
                 for condition, message in stop_conditions:
                     if condition:
@@ -373,7 +379,18 @@ class Simulation:
         self.state_buffer._flush_buffer()
         self.density_field_buffer._flush_buffer()
 
-    def set_folder(self, folder, alias=None, override=False):
+    def set_seed(self, seed=None):
+        if seed == 'random':
+            seed = np.random.randint(0, 2**32, dtype=np.uint32)
+        elif not isinstance(seed, (int, np.int32, np.int64, np.uint32, np.uint64)):
+            raise ValueError(
+                f'Simulation.set_seed(): Seed must be an integer or "random". Got {type(seed)} instead.')
+        self.seed = seed
+        np.random.seed(self.seed)
+        print(f'Simulation.set_seed(): Seed set to {self.seed}')
+        return self.seed
+
+    def set_folder(self, folder, alias=None, override=False, force=False):
         self.folder = folder
         self.alias = alias or self.alias
 
@@ -383,19 +400,24 @@ class Simulation:
         density_field_buffer_path = f'{folder}/density_field_buffer-{self.alias}.csv'
         figure_folder = f'{folder}/figures'
 
-        if override and os.path.exists(kwargs_path):
-            do_override = input(
-                f'Simulation.__init__(): OVERRIDE existing files in folder "{folder}" with alias "{self.alias}"? (Y/n):')
-            if do_override.lower() != 'y':
-                raise ValueError('Simulation.__init__(): Aborted by user...')
-            else:
-                for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
-                    if os.path.exists(path):
-                        os.remove(path)
-                if os.path.exists(figure_folder):
-                    for file in os.listdir(figure_folder):
-                        if self.alias in file:
-                            os.remove(os.path.join(figure_folder, file))
+        if force:
+            print()
+            print("##################################################")
+            print("##### WARNING: FORCED OVERRIDING IS ENABLED. #####")
+            print("##################################################")
+            print()
+            
+        if (force or override) and os.path.exists(folder):
+            if not force:
+                do_override = input(
+                    f'Simulation.set_folder(): OVERRIDE existing files in folder "{folder}" with alias "{self.alias}"? (Y/n):')
+                do_override = do_override.lower()
+                if do_override != 'y':
+                    raise ValueError('Simulation.set_folder(): Aborted by user...')
+            if force or do_override.lower() == 'y':
+                shutil.rmtree(folder, ignore_errors=True)
+                os.makedirs(folder, exist_ok=True)
+                            
 
         os.makedirs(folder + '/figures', exist_ok=True)
 
@@ -413,6 +435,8 @@ class Simulation:
             d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
         save_dict(d=converted_dict, path=kwargs_path,
                   exclude=self.exclude_default)
+        
+        return self
 
     def set_state(self, state_df):
         # self.plants = []
@@ -476,18 +500,34 @@ class Simulation:
         is_converged = is_converged_biomass and is_converged_population
         return is_converged
         
+    # def remove_fraction(self, fraction):
+    #     # Determine the indices of plants to remove
+    #     total_plants = len(self.plants)
+    #     num_to_remove = int(fraction * total_plants)
+    #     indices_to_remove = set(np.random.choice(total_plants, num_to_remove, replace=False))
+
+    #     # Use set difference to determine the indices to keep
+    #     indices_to_keep = set(range(total_plants)) - indices_to_remove
+
+    #     # Create a new PlantCollection with only the plants to keep
+    #     plants_to_keep = [self.plants[i] for i in indices_to_keep]
+    #     self.plants = PlantCollection(plants=plants_to_keep)
+
+    #     # Update the KDTree and density field
+    #     self.update_kdtree(self.plants)
+    #     self.density_field.update(self.plants)
+    
     def remove_fraction(self, fraction):
         # Determine the indices of plants to remove
-        total_plants = len(self.plants)
-        num_to_remove = int(fraction * total_plants)
-        indices_to_remove = set(np.random.choice(total_plants, num_to_remove, replace=False))
-
-        # Use set difference to determine the indices to keep
-        indices_to_keep = set(range(total_plants)) - indices_to_remove
-
-        # Create a new PlantCollection with only the plants to keep
-        plants_to_keep = [self.plants[i] for i in indices_to_keep]
-        self.plants = PlantCollection(plants=plants_to_keep)
+        total_biomass = self.get_biomass()
+        target_biomass = total_biomass * (1 - fraction)
+        
+        plants = self.plants.copy()
+        while len(plants) > 0 and sum(plants.radii**2 * np.pi) > target_biomass:
+            random_index = np.random.randint(0, len(plants))
+            plants.pop(random_index)
+            
+        self.plants = PlantCollection(plants=plants)
 
         # Update the KDTree and density field
         self.update_kdtree(self.plants)
@@ -538,9 +578,9 @@ class Simulation:
             # print(f'Simulation.attempt_germination(): {box_check.shape} positions outside the box.')
             # print(f'Simulation.attempt_germination(): {positions_to_germinate.shape} positions to germinate.')
             # print(f'Simulation.attempt_germination(): {parent_species.shape} parent species to germinate.')
-            if np.any(box_check):
-                print(f'Simulation.attempt_germination(): {box_check.sum()} positions outside the box.')
-                print(f'Simulation.attempt_germination(): {len(positions_to_germinate) = } positions to germinate.')
+            # if np.any(box_check):
+            #     print(f'Simulation.attempt_germination(): {box_check.sum()} positions outside the box.')
+            #     print(f'Simulation.attempt_germination(): {len(positions_to_germinate) = } positions to germinate.')
             positions_to_germinate = positions_to_germinate[~np.any(box_check, axis=1)]
             parent_species = parent_species[~np.any(box_check, axis=1)]
             
@@ -810,16 +850,16 @@ class Simulation:
         axs = []
         titles = []
         if data:
-            fig, axs_db, title = DataBuffer.plot(
+            fig, axs_db, title_db = DataBuffer.plot(
                 data=self.data_buffer.get_data(),
                 title=title,
                 dict_to_print=self.get_kwargs()
                 )
             figs.append(fig)
             axs.append([ax for ax in axs_db])
-            titles.append(title)
+            titles.append(title_db)
         if plants:
-            fig, ax, title = StateBuffer.plot(
+            fig, ax, title_sb = StateBuffer.plot(
             data=self.state_buffer.get_data(),
             title=title,
             n_plots=n_plots,
@@ -829,9 +869,9 @@ class Simulation:
             )
             figs.append(fig)
             axs.append(ax)
-            titles.append(title)
+            titles.append(title_sb)
         if density_field:
-            fig, ax, title = FieldBuffer.plot(
+            fig, ax, title_fb = FieldBuffer.plot(
                 data=self.density_field_buffer.get_data(),
                 title=title,
                 n_plots=n_plots,
@@ -841,7 +881,7 @@ class Simulation:
                 )
             figs.append(fig)
             axs.append(ax)
-            titles.append(title)   
+            titles.append(title_fb)   
             
         if save:
             folder = folder or self.folder
