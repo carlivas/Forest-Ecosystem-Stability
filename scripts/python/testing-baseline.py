@@ -9,27 +9,30 @@ from mods.utilities import *
 from datetime import datetime
 
 save_figs = True
-
-seed = np.random.randint(0, 1_000_000_000)
-np.random.seed(seed)
-kwargs = {
-    'L': 2000,
-    'precipitation': 0.0675,
-    'density_initial': 0.05,
-    'seed': seed,
-    'boundary_condition': 'periodic',
-    'competition_scheme': 'all',
-    'density_scheme': 'global',
-}
-folder = f'Data/baseline/L{kwargs["L"]}'
-alias = generate_alias(id='baseline_global', keys=['L', 'precipitation', 'density_initial'], time=True, **kwargs)
-sim = Simulation(folder=folder, alias=alias, **kwargs)
-sim.spawn_non_overlapping(target_density=kwargs['density_initial'])
-sim.run(T=2500)
-
-
-figs, axs, titles = sim.plot_buffers(title=alias, save=True, dpi=300)
-plt.show()
+Ps = np.arange(0.1, 0.2001, 0.01)
+Ds = [0.0, 0.3]
+for p in Ps:
+    for d in Ds:
+        seed = np.random.randint(0, 1_000_000_000)
+        np.random.seed(seed)
+        kwargs = {
+            'L': 2000,
+            'precipitation': p,
+            'density_initial': d,
+            'seed': seed,
+            'boundary_condition': 'periodic',
+            'competition_scheme': 'all',
+            'density_scheme': 'local',
+        }
+        folder = f'../../Data/baseline/L{kwargs["L"]}'
+        alias = generate_alias(id='baseline2', keys=['L', 'precipitation', 'density_initial'], time=True, **kwargs)
+        sim = Simulation(folder=folder, alias=alias, **kwargs)
+        sim.spawn_non_overlapping(target_density=kwargs['density_initial'])
+        sim.run(T=15000)
+        
+        
+        figs, axs, titles = sim.plot_buffers(title=alias, save=True, dpi=300)
+        # plt.show()
 
 
 # THINK ABOUT THIS

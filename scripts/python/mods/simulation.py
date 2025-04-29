@@ -556,6 +556,9 @@ class Simulation:
             germination_chances = np.maximum(self.land_quality, self.local_density(positions_to_germinate)) * self.precipitation * species_germination_chances
         elif self.density_scheme == 'global':
             germination_chances = np.maximum(self.land_quality, self.get_density()) * self.precipitation * species_germination_chances
+        else:
+            raise ValueError(
+                f'Simulation.attempt_germination(): Density scheme "{self.density_scheme}" not recognized.')
         random_values = np.random.uniform(0, 1, len(positions_to_germinate))
         germination_indices = np.where(germination_chances > random_values)[0]
 
