@@ -10,7 +10,7 @@ from mods.simulation import *
 from mods.buffers import *
 from mods.utilities import *
 
-perturbation_fractions = [0.1, 0.15, 0.2, 0.25, 0.3]
+perturbation_fractions = [0.15, 0.2, 0.25]
 n_experiments = 10
 
 starting_point_folder = 'Data/recovery_rates_test'
@@ -20,6 +20,7 @@ starting_point_alias = 'baseline_global_L2e3_PR1e_1_DE3e_1_250421_122730'
 temp_folder = 'Data/recovery_rates_test/temp'
 os.makedirs(temp_folder, exist_ok=True)
 
+
 for i in range(n_experiments):
     print('\n\n')
     print('---------------------------------')
@@ -28,10 +29,9 @@ for i in range(n_experiments):
     starting_point_sim = Simulation(
         folder=starting_point_folder, alias=starting_point_alias)
     data = starting_point_sim.data_buffer.get_data()
-    seed = np.random.randint(0, 2**32, dtype=np.uint32)
-    np.random.seed(seed)
     
-    random_start_time = np.random.choice(data['Time'].iloc[-3000:])
+    rng = np.random.RandomState()
+    random_start_time = rng.choice(data['Time'].iloc[-3000:])
     var_biomass = data['Biomass'].iloc[3000:].var()
     mean_biomass = data['Biomass'].iloc[3000:].mean()
     target_biomass = mean_biomass
@@ -39,6 +39,7 @@ for i in range(n_experiments):
     starting_state = starting_point_sim.state_buffer.get_specific_data(
         t=random_start_time)
 
+    seed = rng.randint(0, 2**32, dtype=np.uint32)
     save_alias = starting_point_alias.replace('baseline', 'recovery_rates') + f'_{seed}'
     sim = starting_point_sim.set_folder(
         folder=temp_folder, alias=save_alias, force=True)
@@ -51,7 +52,7 @@ for i in range(n_experiments):
     print(f'{start_time=:.6f}')
     print(f'{biomass_pre_perturbation=:.6f}')
     
-    perturbation_fraction = np.random.choice(perturbation_fractions)
+    perturbation_fraction = rng.choice(perturbation_fractions)
     sim.remove_fraction(perturbation_fraction)
     biomass_post_perturbation = sim.get_biomass()
     print(f'{biomass_post_perturbation=:.6f}')
@@ -59,9 +60,10 @@ for i in range(n_experiments):
     print(f'{target_biomass=:.6f}')
     print()
 
-    sim.run(T=1000, min_population=1, convergence_stop=50)
+    sim.run(T=2000, min_population=1, convergence_stop=500)
     
-    did_recover = sim.get_biomass() >= target_biomass
+    did_recover = np.isclose(sim.get_biomass(), target_biomass, rtol=0.05)
+    print(f'{did_recover=}, {sim.get_biomass()=:.4f}, {target_biomass=:.4f}')
     params = [np.nan, np.nan, np.nan]
     if did_recover:
         # Define the exponential function
@@ -117,16 +119,16 @@ for i in range(n_experiments):
 
     df = pd.read_csv(file_path)
     new_row = pd.DataFrame([{
-        'recovery_rate': f'{recovery_rate:.6f}',
-        'precipitation': f'{sim.precipitation:.6f}',
-        'biomass_pre_perturbation': f'{biomass_pre_perturbation:.6f}',
-        'perturbation_fraction': f'{perturbation_fraction:.6f}',
-        'start_time': f'{start_time:.6f}',
-        'L': f'{sim.L:.6f}',
+        'recovery_rate': recovery_rate,
+        'precipitation': sim.precipitation,
+        'biomass_pre_perturbation': biomass_pre_perturbation,
+        'perturbation_fraction': perturbation_fraction,
+        'start_time': start_time,
+        'L': sim.L,
         'density_scheme': sim.density_scheme,
         'boundary_condition': sim.boundary_condition,
-        'seed': seed,
-        'alias': starting_point_alias,
+        'seed': sim.seed,
+        'alias': sim.alias,
     }])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(file_path, index=False)

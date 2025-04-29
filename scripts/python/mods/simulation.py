@@ -154,8 +154,8 @@ class Simulation:
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
         if self.density_scheme == 'global':
             self.density_field_resolution = 1
-        self.density_field_buffer = FieldBuffer(
-            file_path=density_field_buffer_path, resolution=self.density_field_resolution, skip=self.density_field_buffer_skip)
+        # self.density_field_buffer = FieldBuffer(
+        #     file_path=density_field_buffer_path, resolution=self.density_field_resolution, skip=self.density_field_buffer_skip)
         self.density_field = DensityFieldCustom(box=self.box,
             resolution=self.density_field_resolution,
         )
@@ -245,15 +245,15 @@ class Simulation:
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
         do_save_state = prev_mod_state >= mod_state
-        prev_mod_density_field = prev_t % self.density_field_buffer.skip
-        mod_density_field = self.t % self.density_field_buffer.skip
-        do_save_density_field = prev_mod_density_field >= mod_density_field
+        # prev_mod_density_field = prev_t % self.density_field_buffer.skip
+        # mod_density_field = self.t % self.density_field_buffer.skip
+        # do_save_density_field = prev_mod_density_field >= mod_density_field
 
         if do_save_state:
             self.state_buffer.add(plants=self.plants, t=self.t)
-        if do_save_density_field:
-            self.density_field_buffer.add(
-                field=self.density_field.values, t=self.t)
+        # if do_save_density_field:
+        #     self.density_field_buffer.add(
+        #         field=self.density_field.values, t=self.t)
             
         if self.verbose:
             self.print()
@@ -377,7 +377,7 @@ class Simulation:
     def _flush_buffers(self):
         self.data_buffer._flush_buffer()
         self.state_buffer._flush_buffer()
-        self.density_field_buffer._flush_buffer()
+        # self.density_field_buffer._flush_buffer()
 
     def set_seed(self, seed=None):
         if seed == 'random':
@@ -397,7 +397,7 @@ class Simulation:
         kwargs_path = f'{folder}/kwargs-{self.alias}.json'
         data_buffer_path = f'{folder}/data_buffer-{self.alias}.csv'
         state_buffer_path = f'{folder}/state_buffer-{self.alias}.csv'
-        density_field_buffer_path = f'{folder}/density_field_buffer-{self.alias}.csv'
+        # density_field_buffer_path = f'{folder}/density_field_buffer-{self.alias}.csv'
         figure_folder = f'{folder}/figures'
 
         if force:
@@ -415,16 +415,19 @@ class Simulation:
                 if do_override != 'y':
                     raise ValueError('Simulation.set_folder(): Aborted by user...')
             if force or do_override.lower() == 'y':
-                shutil.rmtree(folder, ignore_errors=True)
-                os.makedirs(folder, exist_ok=True)
+                for file in os.listdir(folder):
+                    if self.alias in file:
+                        file_path = os.path.join(folder, file)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
                             
 
         os.makedirs(folder + '/figures', exist_ok=True)
 
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
-        self.density_field_buffer = FieldBuffer(
-            file_path=density_field_buffer_path, resolution=self.density_field_resolution)
+        # self.density_field_buffer = FieldBuffer(
+        #     file_path=density_field_buffer_path, resolution=self.density_field_resolution)
         for s in self.species_list:
             converted_dict = convert_dict(
                 d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
@@ -461,14 +464,14 @@ class Simulation:
         self.density_field.update(self.plants)
         self.data_buffer.add(data=self.get_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
-        self.density_field_buffer.add(
-            field=self.density_field.values, t=self.t)
+        # self.density_field_buffer.add(
+        #     field=self.density_field.values, t=self.t)
         
     def finalize(self):
         print(f'Simulation.finalize(): Time: {time.strftime("%H:%M:%S")}')
         self.data_buffer.finalize()
         self.state_buffer.finalize()
-        self.density_field_buffer.finalize()
+        # self.density_field_buffer.finalize()
         converted_dict = convert_dict(
             d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
         save_dict(d=converted_dict,
@@ -849,7 +852,7 @@ class Simulation:
         figs = []
         axs = []
         titles = []
-        if data:
+        if data and self.data_buffer is not None:
             fig, axs_db, title_db = DataBuffer.plot(
                 data=self.data_buffer.get_data(),
                 title=title,
@@ -858,7 +861,7 @@ class Simulation:
             figs.append(fig)
             axs.append([ax for ax in axs_db])
             titles.append(title_db)
-        if plants:
+        if plants and self.state_buffer is not None:
             fig, ax, title_sb = StateBuffer.plot(
             data=self.state_buffer.get_data(),
             title=title,
@@ -870,7 +873,7 @@ class Simulation:
             figs.append(fig)
             axs.append(ax)
             titles.append(title_sb)
-        if density_field:
+        if density_field and self.density_field_buffer is not None:
             fig, ax, title_fb = FieldBuffer.plot(
                 data=self.density_field_buffer.get_data(),
                 title=title,
