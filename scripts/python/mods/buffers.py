@@ -141,10 +141,14 @@ class DataBuffer:
         if os.path.exists(self.file_path):
             data = pd.read_csv(self.file_path)
         
-        if not self.buffer.empty:
-            data = pd.concat([data, self.buffer], ignore_index=True)
-        
-        return data # returns an empty dataframe if the file does not exist
+        if not self.buffer.empty and not data.empty:
+            return pd.concat([data, self.buffer], ignore_index=True)
+        elif not self.buffer.empty:
+            return self.buffer
+        elif not data.empty:
+            return data
+        else:
+            return data
 
     @staticmethod
     def plot(data, size=6, title='', keys=None, dict_to_print=None):
@@ -205,7 +209,7 @@ class DataBuffer:
             if key == 'Biomass':
                 ax[i].set_ylim(0, 0.65)
             elif key == 'Precipitation':
-                ax[i].set_ylim(0, 0.25)
+                ax[i].set_ylim(0, 0.65)
             else:
                 y_max = np.nanmax(y_data)
                 if y_max != 0:
@@ -237,8 +241,8 @@ class DataBuffer:
                  bbox=dict(facecolor="white", edgecolor="black", linewidth=0.8))
 
         title = title
-        print(f'DataBuffer.plot(): {title=}')
         fig.tight_layout()
+        print(f'DataBuffer.plot(): {title=}')
         return fig, ax, title
 
 
@@ -528,6 +532,7 @@ class StateBuffer:
                                    box=box, boundary_condition=boundary_condition)
 
         title = title
+        print(f'StateBuffer.plot(): {title=}')
         return fig, ax, title
 
     @staticmethod
@@ -557,7 +562,7 @@ class StateBuffer:
 
 
 class FieldBuffer:
-    def __init__(self, file_path, resolution, skip):
+    def __init__(self, file_path, resolution, skip = 300):
         self.file_path = file_path
         self.resolution = resolution
         self.skip = skip
@@ -706,9 +711,7 @@ class FieldBuffer:
                     ax.imshow(field, origin='lower', cmap='Greys',
                               vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
 
-        print(f'FieldBuffer.plot_field(): {density_scheme=}')
         if density_scheme == 'global':
-            print('FieldBuffer.plot_field(): Density scheme is global.')
             density = np.sum(field)
             title = f'{title}  density = {density:.2f}'
             ax.set_title(title, fontsize=10)
@@ -720,7 +723,7 @@ class FieldBuffer:
             ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
         ax.set_xticks([])
         ax.set_yticks([])
-        
+        print(f'FieldBuffer.plot(): {title=}')
         return fig, ax, title
 
     @staticmethod

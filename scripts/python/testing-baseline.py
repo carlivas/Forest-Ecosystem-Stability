@@ -9,12 +9,12 @@ from mods.utilities import *
 from datetime import datetime
 
 save_figs = True
+
 Ps = np.arange(0.1, 0.2001, 0.01)
 Ds = [0.0, 0.3]
 for p in Ps:
     for d in Ds:
-        seed = np.random.randint(0, 1_000_000_000)
-        np.random.seed(seed)
+        seed = np.random.randint(2**32, dtype=np.uint32)
         kwargs = {
             'L': 2000,
             'precipitation': p,
