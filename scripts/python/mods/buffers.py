@@ -181,7 +181,7 @@ class DataBuffer:
                 figsize=figsize,
                 sharex=True)
 
-        fig.suptitle(title, fontsize=10)
+        fig.suptitle(title.rstrip(), fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
 
         if len(data) == 0:
@@ -520,7 +520,7 @@ class StateBuffer:
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
-        fig.suptitle(title, fontsize=8)
+        fig.suptitle(title.rstrip(), fontsize=8)
         if isinstance(ax, plt.Axes):
             ax = np.array([ax])
         for i, a in enumerate(ax.flatten()):

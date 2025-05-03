@@ -30,9 +30,9 @@ def calculate_fit_and_p_value(fit_func, x, y):
     
     return y_fit, p_value
 
-folder = 'D:/linear_precipitation/L2000'
+folder = 'Data/lin_prec_test'
 key = 'Biomass'
-save_fig = True
+save_fig = False
 
 load_folder = os.path.abspath(folder)
 print(f'load_folder: {load_folder}')

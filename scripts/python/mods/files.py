@@ -1,3 +1,4 @@
+import numpy as np
 import os
 
 
@@ -81,6 +82,25 @@ def find_all_lines_key_values_sorted(f, key, vals):
 #             break
 #     return lines
 
+def print_head(f, n=10):
+    # PRINTS THE FIRST N LINES OF A FILE
+    f.seek(0)
+    for i in range(n):
+        line = f.readline().decode('utf-8').strip()
+        print(line)
+        
+def print_tail(f, n=10):
+    # PRINTS THE LAST N LINES OF A FILE
+    f.seek(0, os.SEEK_END)
+    end_line = f.tell()
+    f.seek(end_line - 1)
+    for i in range(n):
+        move_to_previous_line(f)
+        line = f.readline().decode('utf-8').strip()
+        print(line)
+        if f.tell() == 0:
+            break
+
 def find_first_value_sorted(f, key, val):
     # Find which column the key is in
     f.seek(0)
@@ -89,29 +109,59 @@ def find_first_value_sorted(f, key, val):
     key_col = keys.index(key)
     
     val_found = None
-    start_line = 0
+    start_line_bit = f.tell()
     
     # Find the line number of the last line in the file
     f.seek(0, os.SEEK_END)
-    end_line = f.tell()
+    end_line_bit = f.tell()
     
-    while val_found != val and start_line < end_line:
+    f.seek(start_line_bit)
+    start_line = f.readline().decode('utf-8')
+    val_at_start_line = float(start_line.split(',')[key_col])
+    if val_at_start_line > val:
+        print(f'files.find_first_value_sorted(): val_at_start_line > val: {val_at_start_line} > {val}')
+        return None
+    
+    
+    while val_found != val and start_line_bit < end_line_bit:    
         # Find the line number and value in the middle line
-        f.seek((start_line + end_line) // 2)
+        f.seek((start_line_bit + end_line_bit) // 2)
         move_to_previous_line(f)
-        line = f.readline().decode('utf-8')
-        val_found = float(line.split(',')[key_col])
+        mid_line = f.readline().decode('utf-8')
+        val_found = float(mid_line.split(',')[key_col])
         
         # If the value is less than the target value, move the start line to the middle line
         if val_found < val:
-            start_line = f.tell()
+            start_line_bit = f.tell()
         # If the value is greater than the target value, move the end line to the middle line
         elif val_found > val:
-            end_line = f.tell()
+            end_line_bit = f.tell()
         # If the value is equal to the target value, return the line
         else:
             break
         # print(f'files.find_first_value_sorted(): Interval: {start_line = }, {val_found = }, {end_line = }', end=' '*10 + '\r')
+        
+        f.seek(start_line_bit)
+        start_line = f.readline().decode('utf-8')
+        if start_line != '':
+            val_at_start_line = float(start_line.split(',')[key_col])
+        else:
+            val_at_start_line = -np.inf
+        
+        f.seek(end_line_bit)
+        end_line = f.readline().decode('utf-8')
+        if end_line != '':
+            val_at_end_line = float(end_line.split(',')[key_col])
+        else:
+            val_at_end_line = np.inf
+        
+        if val_at_start_line > val:
+            print(f'files.find_first_value_sorted(): val_at_start_line > val: {val_at_start_line} > {val}')
+            return None
+        elif val_at_end_line < val:
+            print(f'files.find_first_value_sorted(): val_at_end_line < val: {val_at_end_line} < {val}')
+            return None
+        
     
     val = val_found
     # Loop back through the lines from the first line with the value
@@ -129,13 +179,6 @@ def find_first_value_sorted(f, key, val):
     if val_found < val:
         f.seek(prev_line_num)
     return line
-    
-    
-    
-    
-    
-
-    
 
 # def read_lines(lines, f):
 #     # READS SPECIFIC LINES FROM A FILE

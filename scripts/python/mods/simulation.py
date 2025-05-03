@@ -494,6 +494,8 @@ class Simulation:
         x, biomass, population = data['Time'].values, data['Biomass'].values, data['Population'].values
         
         # If the whole window has not yet passed t_min return False
+        if len(x) < 1:
+            return False
         if x[0] < t_min:
             return False
         
@@ -671,7 +673,7 @@ class Simulation:
         self.data_buffer.add(data=self.get_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
         
-    def spawn_non_overlapping(self, n=None, target_density=0.1, max_attempts=100_000, species_list=[], box=None, force=False, gaussian=False, verbose=True):
+    def spawn_non_overlapping(self, n=None, target_density=0.1, max_attempts=100_000, r_min=None, r_max=None, species_list=[], box=None, force=False, gaussian=False, verbose=True):
         if n is None and target_density is None:
             raise ValueError("Simulation.spawn_non_overlapping(): Either n or target_density must be specified.")
         if n is None:
@@ -722,8 +724,16 @@ class Simulation:
                         weights /= weights.sum()
                 
                 current_species = np.random.choice(species_list, p=weights)
-              
-                new_r = np.random.uniform(current_species.r_min, current_species.r_max)
+                if r_min is None:
+                    r_min = current_species.r_min
+                if r_max is None:
+                    r_max = current_species.r_max
+                if r_min > r_max:
+                    raise ValueError("Simulation.spawn_non_overlapping(): r_min must be less than r_max.")
+                if r_min < 0 or r_max < 0:
+                    raise ValueError("Simulation.spawn_non_overlapping(): r_min and r_max must be positive.")
+                
+                new_r = np.random.uniform(r_min, r_max)
                 if gaussian:
                     center_of_box  = np.array([box[0, 0] + (box[0, 1] - box[0, 0]) / 2, box[1, 0] + (box[1, 1] - box[1, 0]) / 2])
                     scale = np.random.uniform((box[0, 1] - box[0, 0])* 0.01,
