@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+import pandas as pd
 import copy
 from itertools import compress
 
@@ -27,8 +28,9 @@ class Plant:
         self.is_colliding = False
 
     def grow(self):
+        # linear growth
         self.r = self.r + self.growth_rate
-
+        
     def mortality(self):
         if self.r > self.r_max:
             self.is_dead = True
@@ -106,10 +108,10 @@ class PlantCollection:
                 self.add_plant(plant)
             self.update_values()
     
-    def grow(self):
+    def grow(self, sim):
         # COULD BE PARALLELIZED
         for i, plant in enumerate(self.plants):
-            plant.grow()
+            plant.grow(sim)
             self.radii[i] = plant.r
                 
     def disperse(self, sim):
@@ -164,6 +166,18 @@ class PlantCollection:
         for i, plant in enumerate(self.plants):
             self.radii[i] = plant.r
             self.is_dead[i] = plant.is_dead
+            
+    @staticmethod
+    def from_state_buffer(state_buffer, species_kwargs):
+        if not isinstance(state_buffer, pd.DataFrame):
+            raise ValueError("State buffer must be a pandas DataFrame")
+                
+        plants = PlantCollection()
+        for _, row in state_buffer.iterrows():
+            plant = Plant(id=row['id'], x=row['x'], y=row['y'], r=row['r'], **species_kwargs)
+            plants.add_plant(plant)
+            
+        return plants
     
     def copy(self):
         return PlantCollection(plants=[plant.copy() for plant in self.plants])

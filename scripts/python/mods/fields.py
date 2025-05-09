@@ -96,8 +96,6 @@ class DensityFieldCustom:
             box = np.array(box, dtype=float)
 
         print('DensityFieldCustom: DensityField is using global density scheme.')
-        density = np.sum(field)
-        title = f'{title} (density: {density:.2f})'
         im = ax.imshow(field, origin='lower', cmap='Greens',
                     vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
         ax.set_title(title, fontsize=7)
@@ -127,9 +125,9 @@ class DensityFieldCustom:
                     ax.imshow(field, origin='lower', cmap='Greys',
                               vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
 
-        box_area = np.prod(np.diff(box, axis=1))
-        density = np.sum(field) / box_area
-        title = f'{title}  density = {density:.2f}'
+        
+        density = np.sum(field) / (resolution**2)
+        title = f'{title}  total density = {density:.2f}'
         ax.set_title(title, fontsize=10)
             
         scale = 1.2

@@ -40,7 +40,7 @@ class IDGenerator:
 
 class Simulation:
     def __init__(self, folder, alias='alias', **kwargs):
-        
+        self.verbose = kwargs.get('verbose', False)
         # If the folder does not exist, ask the user if they want to create it
         if not os.path.exists(folder):
             create_folder = input(f'Folder "{folder}" does not exist. Do you want to create it? (Y/n): ')
@@ -88,9 +88,11 @@ class Simulation:
         # Load the kwargs from the file if it exists
         self.species_list = kwargs.get('species_list', [])
         if os.path.exists(kwargs_path):
-            print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
+            if self.verbose:
+                print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
             with open(kwargs_path, 'r') as file:
-                kwargs = json.load(file)
+                kwargs_file = json.load(file)
+            kwargs.update(kwargs_file)
 
             species_files = [f for f in os.listdir(folder) if f.startswith(
                 'species') and f.endswith(f'-{alias}.json')]
@@ -102,8 +104,8 @@ class Simulation:
                     species_list.append(species)
             self.species_list = sorted(
                 species_list, key=lambda x: x.species_id)
-            print(
-                f'Simulation.__init__(): Loaded {len(self.species_list)} species.')
+            if self.verbose:
+                print(f'Simulation.__init__(): Loaded {len(self.species_list)} species.')
 
         self.__dict__.update(default_kwargs)
         self.__dict__.update(kwargs)
@@ -133,14 +135,14 @@ class Simulation:
             species_kwargs_path=f'{folder}/species{str(s.species_id).replace('-', '_')}-{alias}.json'
             
             if kwargs.get('convert_kwargs', True) == True:
-                save_dict(path = species_kwargs_path, d=s.__dict__)
+                save_dict(path = species_kwargs_path, d=s.__dict__, verbose=self.verbose)
                 converted_dict = convert_dict(
                     d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
                 s.__dict__.update(converted_dict)
             else:
                 converted_dict = convert_dict(
                     d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
-                save_dict(path = species_kwargs_path, d=converted_dict)
+                save_dict(path = species_kwargs_path, d=converted_dict, verbose=self.verbose)
 
 
         self.maximum_plant_size = max(
@@ -168,11 +170,13 @@ class Simulation:
 
         # Import existing state from the state buffer if it exists
         if kwargs.get('state', None) is not None:
-            print(f'Simulation.__init__(): Loading state from kwargs["state"]')
+            if self.verbose:
+                print(f'Simulation.__init__(): Loading state from kwargs["state"]')
             self.set_state(kwargs['state'])
             self.__dict__.pop('state')
         elif not override:
-            print(f'Simulation.__init__(): Loading state from state_buffer')
+            if self.verbose:
+                print(f'Simulation.__init__(): Loading state from state_buffer')
             state_df = self.state_buffer.get_last_state()
             if not state_df.empty:
                 self.set_state(state_df)
@@ -191,9 +195,10 @@ class Simulation:
         if 'convert_kwargs' in self.__dict__:
             self.__dict__.pop('convert_kwargs')
 
-        self.seed = kwargs.get('seed', None)            
-        print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
-        print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
+        self.seed = kwargs.get('seed', None)
+        if self.verbose:
+            print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
+            print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
 
     def add(self, plant):
         if isinstance(plant, Plant):
@@ -218,8 +223,11 @@ class Simulation:
             self.kt = KDTree(plants.positions)
 
     def step(self):
+        if not self.is_running:
+            raise ValueError(
+                'Simulation.step(): Simulation is not running. Please call run() first or set Simulation.is_running = True.')
         # Update all plants based on the current state of the simulation
-        self.plants.grow()
+        self.plants.grow(self)
         self.plants.mortality()
         
         # Disperse and spawn new plants
@@ -259,25 +267,25 @@ class Simulation:
             self.print()
             
             if self.t % 100 == 0:
-                print()
                 if len(self.species_list) > 1:
                     species_counts = {species.species_id: 0 for species in self.species_list}
                     for plant in self.plants:
                         species_counts[plant.species_id] += 1
-                    print(f'Species counts: {species_counts}')
-                    print()
+                    if self.verbose:
+                        print(f'Species counts: {species_counts}')
 
     def run(self, T, min_population=None, max_population=None, max_biomass = None, transient_period=0, dp=0, convergence_stop=False):
         run_start_time = self.t
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
-        print(
-            f'Simulation.run(): Running simulation for {n_iter} iterations from t = {self.t}...')
+        
+        print(f'Simulation.run(): Running simulation for {n_iter} iterations from t = {self.t}...')
         try:
             self.set_seed(self.seed)
             self.is_running = True
             self.print()
-            print('\nSimulation.run(): Starting simulation...')
+            if self.verbose:
+                print('\nSimulation.run(): Starting simulation...')
             for _ in range(0, n_iter):
                 if _ > transient_period:
                     self.precipitation = min(1, max(0, self.precipitation + dp))
@@ -387,7 +395,8 @@ class Simulation:
                 f'Simulation.set_seed(): Seed must be an integer or "random". Got {type(seed)} instead.')
         self.seed = seed
         np.random.seed(self.seed)
-        print(f'Simulation.set_seed(): Seed set to {self.seed}')
+        if self.verbose:
+            print(f'Simulation.set_seed(): Seed set to {self.seed}')
         return self.seed
 
     def set_folder(self, folder, alias=None, override=False, force=False):

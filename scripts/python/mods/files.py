@@ -16,23 +16,26 @@ def move_to_previous_line(f):
         # Move the file pointer two bytes back from the current position
         f.seek(-2, os.SEEK_CUR)
 
-def find_all_lines_key_values_sorted(f, key, vals):
+def find_all_lines_key_values_sorted(f, key, vals, verbose=False):
     # Ensure vals is a set for faster lookup
     vals_set = set(vals)
     
     # Find which column the key is in
     f.seek(0)
     line = f.readline().decode('utf-8').strip()
-    print(f'files.find_all_lines_key_values_sorted(): Found keys: {line}')
+    if verbose:
+        print(f'files.find_all_lines_key_values_sorted(): Found keys: {line}')
     keys = line.split(',')
-    print(f'files.find_all_lines_key_values_sorted(): Found keys: {keys}')
+    if verbose:
+        print(f'files.find_all_lines_key_values_sorted(): Found keys: {keys}')
     key_col = keys.index(key)
     
     lines = []
     for val in vals:
         # Find the first line with the value
-        line = find_first_value_sorted(f, key, val)
-        print(f'files.find_all_lines_key_values_sorted(): Reading at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
+        line = find_first_value_sorted(f, key, val, verbose)
+        if verbose:
+            print(f'files.find_all_lines_key_values_sorted(): Reading at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
         # Loop through the lines from the first line with the value
         f.seek(f.tell())
         while True:
@@ -42,8 +45,11 @@ def find_all_lines_key_values_sorted(f, key, vals):
             val_found = float(line.split(',')[key_col])
             if val_found != val:
                 break
-            print(f'files.find_all_lines_key_values_sorted(): Found value at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
+            if verbose:
+                print(f'files.find_all_lines_key_values_sorted(): Found value at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
             lines.append(line)
+    if verbose:
+        print(f'\nfiles.find_all_lines_key_values_sorted(): Found {len(lines)} lines with key \'{key}\' and values {vals}')
     return lines
 
 # def find_all_lines_key_values(f, key, vals, assume_sorted=False):
@@ -101,7 +107,7 @@ def print_tail(f, n=10):
         if f.tell() == 0:
             break
 
-def find_first_value_sorted(f, key, val):
+def find_first_value_sorted(f, key, val, verbose=False):
     # Find which column the key is in
     f.seek(0)
     line = f.readline().decode('utf-8').strip()
@@ -119,7 +125,8 @@ def find_first_value_sorted(f, key, val):
     start_line = f.readline().decode('utf-8')
     val_at_start_line = float(start_line.split(',')[key_col])
     if val_at_start_line > val:
-        print(f'files.find_first_value_sorted(): val_at_start_line > val: {val_at_start_line} > {val}')
+        if verbose:
+            print(f'files.find_first_value_sorted(): val_at_start_line > val: {val_at_start_line} > {val}')
         return None
     
     
@@ -156,10 +163,12 @@ def find_first_value_sorted(f, key, val):
             val_at_end_line = np.inf
         
         if val_at_start_line > val:
-            print(f'files.find_first_value_sorted(): val_at_start_line > val: {val_at_start_line} > {val}')
+            if verbose:
+                print(f'files.find_first_value_sorted(): val_at_start_line > val: {val_at_start_line} > {val}')
             return None
         elif val_at_end_line < val:
-            print(f'files.find_first_value_sorted(): val_at_end_line < val: {val_at_end_line} < {val}')
+            if verbose:
+                print(f'files.find_first_value_sorted(): val_at_end_line < val: {val_at_end_line} < {val}')
             return None
         
     
@@ -174,7 +183,8 @@ def find_first_value_sorted(f, key, val):
         except ValueError:
             break
         move_to_previous_line(f)
-        print(f'files.find_first_value_sorted(): Found value at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
+        if verbose:
+            print(f'files.find_first_value_sorted(): Found value at stream position {f.tell()}: \'{key}\' = {val}', end=' '*10 + '\r')
     # If the value is less than the minimum value, move the pointer to the next line
     if val_found < val:
         f.seek(prev_line_num)
