@@ -78,17 +78,17 @@ def rewrite_density_field_buffer_data(density_field_buffer_df: pd.DataFrame) -> 
 
 
 class DataBuffer:
-    def __init__(self, file_path):
+    def __init__(self, file_path, verbose=False):
         self.file_path = file_path
         self.batch_size = 1000
+        self.verbose = verbose
+        self.columns = ['Time', 'Biomass', 'Population', 'Precipitation']
 
         if os.path.exists(self.file_path):
-            print(
-                f'DataBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
+            if self.verbose:
+                print(
+                    f'DataBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
             self.columns = list(pd.read_csv(self.file_path).keys())
-        else:
-            self.columns = ['Time', 'Biomass', 'Population', 'Precipitation']
-            # self._initialize_file()
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -136,19 +136,27 @@ class DataBuffer:
             self._flush_buffer()
 
     def get_data(self):
-        data = pd.DataFrame(columns=self.columns)
+        data = DataBuffer.get_data_static(self.file_path, columns=self.columns, verbose=self.verbose)
         
-        if os.path.exists(self.file_path):
-            data = pd.read_csv(self.file_path)
-        
-        if not self.buffer.empty and not data.empty:
-            return pd.concat([data, self.buffer], ignore_index=True)
-        elif not self.buffer.empty:
-            return self.buffer
-        elif not data.empty:
-            return data
+        if not self.buffer.empty:
+            return pd.concat([data, self.buffer], ignore_index=True) if not data.empty else self.buffer
         else:
             return data
+
+    @staticmethod
+    def get_data_static(file_path, columns=['Time','Biomass','Population','Precipitation'], verbose=False):
+        if not os.path.exists(file_path):
+            if verbose:
+                print(f'StateBuffer.get_specific_data(): File {file_path} does not exist.')
+            return pd.DataFrame(columns=columns)
+        
+        data = pd.read_csv(file_path)
+        if data.empty:
+            if verbose:
+                print(f'StateBuffer.get_specific_data(): File {file_path} is empty.')
+            return pd.DataFrame(columns=columns)
+            
+        return data
 
     @staticmethod
     def plot(data, size=6, title='', keys=None, dict_to_print=None):
@@ -165,7 +173,8 @@ class DataBuffer:
             figsize = size
         else:
             figsize = (size, size * len(keys) / 3)
-
+            
+        
         # Create the figure and gridspec
         if dict_to_print is not None:
             fig = plt.figure(figsize=figsize)
@@ -181,7 +190,7 @@ class DataBuffer:
                 figsize=figsize,
                 sharex=True)
 
-        fig.suptitle(title, fontsize=10)
+        fig.suptitle(title.rstrip(), fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
 
         if len(data) == 0:
@@ -247,17 +256,17 @@ class DataBuffer:
 
 
 class StateBuffer:
-    def __init__(self, file_path, skip=1):
+    def __init__(self, file_path, skip=1, verbose=False):
         self.file_path = file_path
         self.skip = skip
         self.batch_size = 100_000
+        self.verbose = verbose
 
         self.columns = ['id', 'x', 'y', 'r', 'species', 't']
         if os.path.exists(self.file_path):
-            print(
-                f'StateBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
-        # else:
-        #     self._initialize_file()
+            if self.verbose:
+                print(
+                    f'StateBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -309,35 +318,85 @@ class StateBuffer:
         if not self.buffer.empty:
             self._flush_buffer()
 
-    def get_data(self):
-        print(f'StateBuffer.get_data(): {self.columns=}')
-        data = pd.DataFrame(columns=self.columns)
+    # def get_data(self):
+    #     print(f'StateBuffer.get_data(): {self.columns=}')
+    #     data = pd.DataFrame(columns=self.columns)
         
-        if os.path.exists(self.file_path):
-            data = pd.read_csv(self.file_path)
-            print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
+    #     if os.path.exists(self.file_path):
+    #         data = pd.read_csv(self.file_path)
+    #         if self.verbose == True:
+    #             print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
+    #     else:
+    #         warnings.warn(
+    #             f'StateBuffer.get_data(): File {self.file_path} does not exist.')
+
+    #     return data # returns an empty dataframe if the file does not exist
+    
+    # def get_specific_data(self, t):
+    #     if not isinstance(t, (list, np.ndarray, pd.Series)):
+    #         t = [t]
+            
+    #     if self.verbose == True:
+    #         print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
+    #     with open(self.file_path, 'rb') as f:
+    #         # lines = find_all_lines_key_values(f, 't', t, assume_sorted=True)
+    #         lines = find_all_lines_key_values_sorted(f, 't', t, verbose=self.verbose)
+            
+    #         if not lines:
+    #             return pd.DataFrame(columns=self.columns)
+            
+    #         data = pd.read_csv(StringIO('\n'.join(lines)), header=None, names=self.columns)
+                
+    #     return data
+    
+    def get_data(self):
+        data = StateBuffer.get_data_static(self.file_path, columns=self.columns, verbose=self.verbose)
+        return data
+    
+    def get_specific_data(self, t):
+        data = StateBuffer.get_specific_data_static(self.file_path, t, columns=self.columns, verbose=self.verbose)
+        return data
+    
+    @staticmethod
+    def get_data_static(file_path, columns=['id','x','y','r','species','t'], verbose=False):
+        if not os.path.exists(file_path):
+            print(f'StateBuffer.get_data_static(): File {file_path} does not exist.')
+            return pd.DataFrame(columns=columns)
+        
+        if verbose:
+            print(f'StateBuffer.get_data_static(): {columns=}')
+        data = pd.DataFrame(columns=columns)
+        
+        if os.path.exists(file_path):
+            data = pd.read_csv(file_path)
+            if verbose:
+                print(f'StateBuffer.get_data_static(): {data.shape[0]} rows loaded.')
         else:
             warnings.warn(
-                f'StateBuffer.get_data(): File {self.file_path} does not exist.')
+                f'StateBuffer.get_data_static(): File {file_path} does not exist.')
 
         return data # returns an empty dataframe if the file does not exist
     
-    def get_specific_data(self, t=None):
-        if t is None:
-            print(f'StateBuffer.get_specific_data(): t not specified, returning all data.')
-            return self.get_data()
+    @staticmethod
+    def get_specific_data_static(file_path, t, columns=['id','x','y','r','species','t'], verbose=False):
+        
+        if not os.path.exists(file_path):
+            if verbose:
+                print(f'StateBuffer.get_specific_data(): File {file_path} does not exist.')
+            return pd.DataFrame(columns=columns)
+    
         if not isinstance(t, (list, np.ndarray, pd.Series)):
             t = [t]
         
-        print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
-        with open(self.file_path, 'rb') as f:
-            # lines = find_all_lines_key_values(f, 't', t, assume_sorted=True)
-            lines = find_all_lines_key_values_sorted(f, 't', t)
+        if verbose:
+            print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
+        with open(file_path, 'rb') as f:
+            lines = find_all_lines_key_values_sorted(f, 't', t, verbose)
             
             if not lines:
-                return pd.DataFrame(columns=self.columns)
+                return pd.DataFrame(columns=columns)
             
-            data = pd.read_csv(StringIO('\n'.join(lines)), header=None, names=self.columns)
+            data = pd.read_csv(StringIO('\n'.join(lines)), header=None, names=columns)
                 
         return data
 
@@ -520,7 +579,7 @@ class StateBuffer:
         fig, ax = plt.subplots(
             n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
-        fig.suptitle(title, fontsize=8)
+        fig.suptitle(title.rstrip(), fontsize=8)
         if isinstance(ax, plt.Axes):
             ax = np.array([ax])
         for i, a in enumerate(ax.flatten()):
@@ -562,20 +621,19 @@ class StateBuffer:
 
 
 class FieldBuffer:
-    def __init__(self, file_path, resolution, skip = 300):
+    def __init__(self, file_path, resolution, skip = 300, verbose=False):
         self.file_path = file_path
         self.resolution = resolution
         self.skip = skip
         self.batch_size = max(1, 100//skip)
         self.columns = ['t'] + \
             [f'cell_{i}' for i in range(resolution * resolution)]
+        self.verbose = verbose
 
         if os.path.exists(self.file_path):
-            print(
+            if self.verbose:
+                print(
                 f'FieldBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
-        # else:
-        #     self._initialize_file()
-
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
     def _initialize_file(self):

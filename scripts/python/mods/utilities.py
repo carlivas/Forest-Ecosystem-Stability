@@ -83,7 +83,7 @@ def convert_to_serializable(obj):
         return val
     return val
 
-def save_dict(d, path, exclude=None):
+def save_dict(d, path, exclude=None, verbose=False):
     if exclude is not None:
         d = {k: v for k, v in d.items() if k not in exclude}
     d = dict(sorted(d.items()))
@@ -94,7 +94,9 @@ def save_dict(d, path, exclude=None):
     with open(path, 'w') as f:
         serializable_dictionary = convert_to_serializable(d)
         json.dump(serializable_dictionary, f, indent=4)
-    print(f'utilities.save_dict: Kwargs saved at path {path}')
+    
+    if verbose:
+        print(f'utilities.save_dict: Kwargs saved at path {path}')
 
 
 def dbh_to_crown_radius(dbh):
