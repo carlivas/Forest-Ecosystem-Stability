@@ -494,6 +494,8 @@ class Simulation:
         x, biomass, population = data['Time'].values, data['Biomass'].values, data['Population'].values
         
         # If the whole window has not yet passed t_min return False
+        if len(x) < 1:
+            return False
         if x[0] < t_min:
             return False
         

@@ -10,8 +10,8 @@ from datetime import datetime
 
 save_figs = True
 
-Ps = np.arange(0.1, 0.2001, 0.01)
-Ds = [0.0, 0.3]
+Ps = [0.05, 0.06, 0.07, 0.08, 0.09]
+Ds = [0.3, 0.3]
 for p in Ps:
     for d in Ds:
         seed = np.random.randint(2**32, dtype=np.uint32)
@@ -22,7 +22,7 @@ for p in Ps:
             'seed': seed,
             'boundary_condition': 'periodic',
             'competition_scheme': 'all',
-            'density_scheme': 'local',
+            'density_scheme': 'global',
         }
         folder = f'../../Data/baseline/L{kwargs["L"]}'
         alias = generate_alias(id='baseline2', keys=['L', 'precipitation', 'density_initial'], time=True, **kwargs)

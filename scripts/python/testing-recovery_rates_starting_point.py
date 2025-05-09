@@ -11,13 +11,27 @@ from mods.buffers import *
 from mods.utilities import *
 
 perturbation_fractions = [0.15, 0.2, 0.25]
-n_experiments = 10
+n_experiments = 11
 
-starting_point_folder = 'Data/recovery_rates_test'
-# starting_point_alias = 'baseline1_L2e3_PR1e_1_DE3e_1_250427_131238_local'
-starting_point_alias = 'baseline_global_L2e3_PR1e_1_DE3e_1_250421_122730'
+starting_point_folder = '../../Data/baseline/L2000/'
 
-temp_folder = 'Data/recovery_rates_test/temp'
+# P = 0.20
+# starting_point_alias = 'baseline_global_L2e3_PR2e_1_DE3e_1_250421_144655' # GLOBAL
+# starting_point_alias = 'baseline_L2e3_PR2e_1_DE3e_1_250426_104739'        # LOCAL
+
+# P = 0.15
+# starting_point_alias = 'baseline_L2e3_PR15000000000000002e_17_DE3e_1_250425_190110' # GLOBAL
+# starting_point_alias = 'baseline_L2e3_PR15000000000000002e_17_DE3e_1_250425_192944' # LOCAL
+
+# P = 0.10
+starting_point_alias = 'baseline_global_L2e3_PR1e_1_DE3e_1_250421_122730' # GLOBAL
+# starting_point_alias = 'baseline1_L2e3_PR1e_1_DE3e_1_250427_131238'       # LOCAL
+
+# P = 0.08
+# starting_point_alias = 'baseline_global_L2e3_PR8e_2_DE3e_1_250421_122817' # GLOBAL
+# starting_point_alias = 'baseline_L2000_PR8e_2_DE3e_1_250413_142609'       # LOCAL
+
+temp_folder = '../../Data/recovery_rates/'
 os.makedirs(temp_folder, exist_ok=True)
 
 
@@ -101,7 +115,7 @@ for i in range(n_experiments):
         exp_fit = exponential(data['Time'] - data['Time'].iloc[0], *params)
         ax.plot(data['Time'], exp_fit, label='Exponential Fit', linestyle='--')
 
-    file_path = f'Data/recovery_rates_test/data/recovery_rates.csv'
+    file_path = f'../../Data/recovery_rates/recovery_rates.csv'
 
     if not os.path.exists(file_path):
         df = pd.DataFrame(columns=[

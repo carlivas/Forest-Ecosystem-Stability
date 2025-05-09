@@ -14,19 +14,17 @@ kwargs = {
     'L': 2000,
     'precipitation': 0.1,
     'seed': seed,
-    'competition_scheme': 'all',
     'density_scheme': 'global',
 }
 
-current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-folder = f'Data/linear_precipitation/L{kwargs['L']}/'
-alias = generate_alias(id='linprec_global', keys=['L', 'precipitation'], time=True, **kwargs)
+folder = f'../../Data/linear_precipitation/L{kwargs['L']}/new/'
+alias = generate_alias(id=f'linprec_{kwargs["density_scheme"]}', keys=['L'], time=True, **kwargs)
 sim = Simulation(folder=folder, alias=alias, **kwargs)
 
 sim.spawn_non_overlapping(target_density=0.2)
 
-T = 50_000
-dp = - kwargs['precipitation'] / T
+T = 30_000
+dp = - kwargs['precipitation'] / 25_000
 sim.run(T=T, dp=dp)
 
 
