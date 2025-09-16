@@ -1,4 +1,7 @@
 #!/bin/bash
+'''
+This document is used to generate and save plots of data from multiple simulations at once
+'''
 
 # Navigate to the vscode directory
 cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit 1

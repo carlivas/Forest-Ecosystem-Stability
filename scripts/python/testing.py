@@ -1,3 +1,7 @@
+'''
+This document is used for generating a simulation and running it, and is the main source 
+'''
+
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
@@ -8,23 +12,23 @@ from mods.simulation import Simulation, _m_from_m2pp, _m_from_domain_sides
 from mods.utilities import save_kwargs, print_nested_dict, convert_to_serializable
 
 save_results = True
-plot_results = True
+plot_results = False
 
-np.random.seed(0)
+# np.random.seed(0)
 
-num_plants = 3000
-T = 10000
+num_plants = 300
+T = 1000
 kwargs = {
-    'L': 4500,
+    'L': 1000,
     'T': T,
     'dispersal_range': 90,
-    'precipitation': 6150e-5,
+    'precipitation': 0000e-5,
     'spawn_rate': 1,
     'growth_rate': 0.1,
 
     'time_step': 1,
     
-    'density_field_resolution': 100,
+    'density_field_resolution': 20,
 
     'buffer_size': T,
     'buffer_skip': 1,

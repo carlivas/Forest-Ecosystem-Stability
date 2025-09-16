@@ -4,3 +4,4 @@
 scripts/python/trees_venv
 scripts/python/mods/__pycache__
 scripts/python/mods/build
+scripts/python/.ipynb_checkpoints/

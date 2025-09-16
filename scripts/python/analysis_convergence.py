@@ -1,3 +1,7 @@
+'''
+This document makes a simple linear regression of the last part of a imulation run to evaluate whether the run has converged, and is only used as a test for the method.
+'''
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -41,7 +45,7 @@ def linear_regression(x, y, advanced=False):
         return intercept, slope
 
 
-load_folder = r'Data\lq_rc_ensemble_n100'
+load_folder = r'Data\temp\dfres_2_20'
 
 trend_window = 5000
 trend_threshold = 1e-3
@@ -77,7 +81,7 @@ for idx, i in enumerate(sim_nums[:]):
     _, slope_P, regression_line_P, _, _ = linear_regression(
         x, y_P, advanced=True)
 
-    fig, ax = data_buffer.plot(keys=['biomass', 'population'])
+    fig, ax = data_buffer.plot()
 
     rel_slope_B = slope_B/y_B.max()
     rel_slope_P = slope_P/y_P.max()

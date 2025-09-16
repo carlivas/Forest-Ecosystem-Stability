@@ -11,9 +11,8 @@ kwargs = {
 
 sim = Simulation(**kwargs, verbose=True)
 
-
 sim.initiate_uniform_radii(n=1000, r_min=0.1, r_max=0.3)
-sim.run(n_iter=10000, max_population=25_000)
+sim.run(T=10000, max_population=25_000)
 sim.data_buffer.plot()
 sim.state_buffer.plot()
 sim.density_field_buffer.plot()

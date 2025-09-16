@@ -1,12 +1,11 @@
-import numpy as np
+'''
+    This document is designed to be initiated by the bash script plotting.sh, and will plot all the simulations specified in that script.
+'''
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import os
 import sys
 
-from mods.plant import Plant
-from mods.simulation import Simulation
 from mods.buffers import DataBuffer, FieldBuffer, StateBuffer
 from mods.utilities import print_nested_dict
 

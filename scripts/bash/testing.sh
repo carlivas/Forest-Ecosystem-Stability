@@ -1,5 +1,9 @@
 #!/bin/bash
 
+'''
+This document is used to generate batch simulations for running on the UCPH MODI cluster
+'''
+
 # Navigate to the vscode directory
 cd C:/Users/carla/Dropbox/_CARL/UNI/KANDIDAT/PROJEKT/Code || exit
 
