@@ -1,16 +1,23 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib import animation
 import os
 import copy
 import warnings
 import json
+from io import StringIO
 
-from mods.plant import Plant
-from matplotlib.colors import ListedColormap
-from matplotlib import animation
+from mods.files import *
+from mods.plant import *
+from mods.spatial import *
+from matplotlib.gridspec import GridSpec
 
-path_kwargs = '../../default_kwargs.json'
+modi_path_kwargs = '../../default_kwargs.json'
+local_path_kwargs = 'default_kwargs.json'
+path_kwargs = modi_path_kwargs if os.path.exists(modi_path_kwargs) else local_path_kwargs
+
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -55,29 +62,33 @@ def rewrite_density_field_buffer_data(density_field_buffer_df: pd.DataFrame) -> 
     if 't' in density_field_buffer_df.keys():
         print('Density field buffer already rewritten')
         return density_field_buffer_df
-    
+
     input('State buffer needs to be rewritten. Press Enter to continue... (or Ctrl+C to cancel)')
     old_keys = [float(d) for d in density_field_buffer_df.columns.tolist()]
-    density_field_buffer_df.loc[-1] = old_keys  # Add old keys as the first line of data
+    # Add old keys as the first line of data
+    density_field_buffer_df.loc[-1] = old_keys
     density_field_buffer_df.index = density_field_buffer_df.index + 1  # Shift index
-    density_field_buffer_df = density_field_buffer_df.sort_index()  # Sort by index to place the old keys at the top
+    # Sort by index to place the old keys at the top
+    density_field_buffer_df = density_field_buffer_df.sort_index()
 
-    keys = ['t'] + ['cell_' + str(i) for i in range(len(density_field_buffer_df.columns) - 1)]
+    keys = ['t'] + ['cell_' +
+                    str(i) for i in range(len(density_field_buffer_df.columns) - 1)]
     density_field_buffer_df.columns = keys
     return density_field_buffer_df
 
 
 class DataBuffer:
-    def __init__(self, file_path):
+    def __init__(self, file_path, verbose=False):
         self.file_path = file_path
         self.batch_size = 1000
+        self.verbose = verbose
+        self.columns = ['Time', 'Biomass', 'Population', 'Precipitation']
 
         if os.path.exists(self.file_path):
-            print(f'DataBuffer.__init__(): Loading data from already existing file {self.file_path}.')
+            if self.verbose:
+                print(
+                    f'DataBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
             self.columns = list(pd.read_csv(self.file_path).keys())
-        else:
-            self.columns = ['Time', 'Biomass', 'Population']
-            self._initialize_file()
 
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
@@ -88,69 +99,109 @@ class DataBuffer:
 
         # Raise an error if the file already exists, as to not override it
         if os.path.exists(self.file_path):
-            raise FileExistsError(f'DataBuffer._initialize_file(): File {
-                                  self.file_path} already exists.')
+            raise FileExistsError(f'DataBuffer._initialize_file(): File {self.file_path} already exists.')
 
         # If the file does not exist, create it and write the column names to it
         else:
-            print(f"DataBuffer._initialize_file(): Creating file {self.file_path}...")
+            print(
+                f"DataBuffer._initialize_file(): Creating file {self.file_path}...")
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             empty_df = pd.DataFrame(columns=self.columns)
             with open(self.file_path, 'w') as f:
                 empty_df.to_csv(f, index=False, float_format='%.18e')
-            
 
     def add(self, data):
         if list(data.keys()) != list(self.columns):
-            raise ValueError(f'DataBuffer.add(): Data keys {list(
-                data.keys())} do not match the expected keys: {self.columns}.')
+            raise ValueError(f'DataBuffer.add(): Data keys {list(data.keys())} do not match the expected keys: {self.columns}.')
         if self.buffer.empty:
             self.buffer = data
         else:
             self.buffer = pd.concat([self.buffer, data], ignore_index=True)
-        # print(f'DataBuffer.add(): Added data to buffer. {self.buffer=}')
         if self.buffer.shape[0] >= self.batch_size:
             self._flush_buffer()
 
     def _flush_buffer(self):
-        new_rows = pd.DataFrame(self.buffer, columns=self.columns, dtype=np.float64)
-        print(f'\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-
+        new_rows = pd.DataFrame(
+            self.buffer, columns=self.columns, dtype=np.float64)
+        # print(f'\n\nDataBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+        if not os.path.exists(self.file_path):
+            self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
 
         self.buffer = pd.DataFrame(columns=self.columns)
-    
+
     def finalize(self):
         if not self.buffer.empty:
             self._flush_buffer()
 
     def get_data(self):
-        return pd.read_csv(self.file_path)
+        data = DataBuffer.get_data_static(self.file_path, columns=self.columns, verbose=self.verbose)
+        
+        if not self.buffer.empty:
+            return pd.concat([data, self.buffer], ignore_index=True) if not data.empty else self.buffer
+        else:
+            return data
 
-    def plot(self, size=6, title='DataBuffer', keys=None):
-        data = self.get_data()
-        if len(data) < 2:
-            print(f'DataBuffer.plot(): Not enough data to plot ({len(data) = }).')
-            return
+    @staticmethod
+    def get_data_static(file_path, columns=['Time','Biomass','Population','Precipitation'], verbose=False):
+        if not os.path.exists(file_path):
+            if verbose:
+                print(f'StateBuffer.get_specific_data(): File {file_path} does not exist.')
+            return pd.DataFrame(columns=columns)
+        
+        data = pd.read_csv(file_path)
+        if data.empty:
+            if verbose:
+                print(f'StateBuffer.get_specific_data(): File {file_path} is empty.')
+            return pd.DataFrame(columns=columns)
+            
+        return data
+
+    @staticmethod
+    def plot(data, size=6, title='', keys=None, dict_to_print=None):
+        title = 'data_buffer-' + title
+
         # Specify which keys need to be plotted
         if keys is None:
-            keys = [key for key in self.columns if key != 'Time']
-        elif not all(key in self.columns for key in keys):
+            keys = [key for key in data.columns if key != 'Time']
+        elif not all(key in data.columns for key in keys):
             raise ValueError(
-                f'DataBuffer.plot(): Keys {keys} not found in {self.columns}.')
+                f'DataBuffer.plot(): Keys {keys} not found in {data.columns}.')
+
+        if isinstance(size, (tuple, list, np.ndarray)):
+            figsize = size
+        else:
+            figsize = (size, size * len(keys) / 3)
+            
         
-        # Create the figure and axes
-        fig, ax = plt.subplots(
-            len(keys), 1,
-            figsize=(size, size * len(keys) / 3),
-            sharex=True)
+        # Create the figure and gridspec
+        if dict_to_print is not None:
+            fig = plt.figure(figsize=figsize)
+            gs = GridSpec(len(keys), 2, width_ratios=[6, 1], figure=fig)
+            ax = [fig.add_subplot(gs[i, 0]) for i in range(len(keys))]
+            dict_ax = fig.add_subplot(gs[:, 1])
+            
+            for a in ax:
+                a.sharex(ax[0])
+        else:
+            fig, ax = plt.subplots(
+                len(keys), 1,
+                figsize=figsize,
+                sharex=True)
 
-        # Set the title of the figure
-        if title is not None:
-            fig.suptitle(title, fontsize=10)
-
+        fig.suptitle(title.rstrip(), fontsize=10)
         fig.tight_layout(pad=3.0, h_pad=0.0)
+
+        if len(data) == 0:
+            print(
+                f'DataBuffer.plot(): Not enough data to plot ({len(data)=}).')
+            return fig, ax, title
+
+        if len(data) == 1:
+            marker = '.'
+        else:
+            marker = ''
 
         cmap = ListedColormap(
             ['#012626', '#1A402A', '#4B7340', '#7CA653', '#A9D962'])
@@ -158,165 +209,377 @@ class DataBuffer:
         if isinstance(ax, plt.Axes):
             ax = np.array([ax])
         for i, key in enumerate(keys):
-            x_data = data['Time']
+            t_data = data['Time']
             y_data = data[key]
+            
+            ax[i].plot(t_data, y_data, color=cmap((i + 1) / len(keys)), marker=marker)
+            ax[i].set_ylabel(key)
 
-            ax[i].plot(x_data, y_data,
-                       label=key, color=cmap((i + 1) / len(keys)))
-            y_max = np.nanmax(y_data)
-            if y_max != 0:
-                ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
-            ax[i].grid()
-            ax[i].legend()
+            if key == 'Biomass':
+                ax[i].set_ylim(0, 0.65)
+            elif key == 'Precipitation':
+                ax[i].set_ylim(0, 0.65)
+            else:
+                y_max = np.nanmax(y_data)
+                if y_max != 0:
+                    ax[i].set_ylim(-0.1 * y_max, 1.1 * y_max)
+
         ax[-1].set_xlabel('Time')
 
         for ax_i in ax:
             ax_i.grid()
-            ax_i.legend()
-        return fig, ax
+
+        if dict_to_print is not None:
+            dict_ax.axis('off')
+
+            def format_dict(d, indent=0):
+                lines = []
+                for key, value in d.items():
+                    if isinstance(value, dict):
+                        lines.append("")  # Add an empty line before the dict title
+                        lines.append(f'{" " * indent}{key}:')
+                        lines.extend(format_dict(value, indent + 5))
+                    else:
+                        lines.append(f'{" " * indent}{key}: {value}')
+                return lines
+
+            dict_text = '\n'.join(format_dict(dict_to_print))
+            dict_ax.text(x=0, y=0.99, s=dict_text, transform=dict_ax.transAxes,
+                 fontsize=7, verticalalignment='top', horizontalalignment='left',
+                 linespacing=1.5,
+                 bbox=dict(facecolor="white", edgecolor="black", linewidth=0.8))
+
+        title = title
+        fig.tight_layout()
+        print(f'DataBuffer.plot(): {title=}')
+        return fig, ax, title
 
 
 class StateBuffer:
-    def __init__(self, file_path, skip=1):
+    def __init__(self, file_path, skip=1, verbose=False):
         self.file_path = file_path
         self.skip = skip
         self.batch_size = 100_000
+        self.verbose = verbose
 
-        self.columns=['id', 'x', 'y', 'r', 't']
+        self.columns = ['id', 'x', 'y', 'r', 'species', 't']
         if os.path.exists(self.file_path):
-            print(f'StateBuffer.__init__(): Loading data from already existing file {self.file_path}.')
-        else:
-            self._initialize_file()
-        
+            if self.verbose:
+                print(
+                    f'StateBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
+
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
     def _initialize_file(self):
         # Check if the file path ends with '.csv', if not, add it
         if not self.file_path.endswith('.csv'):
             self.file_path += '.csv'
-        
+
         # Raise an error if the file already exists, as to not override it
         if os.path.exists(self.file_path):
-            raise FileExistsError(f'StateBuffer._initialize_file(): File {self.file_path} already exists.')
+            raise FileExistsError(
+                f'StateBuffer._initialize_file(): File {self.file_path} already exists.')
         # If the file does not exist, create it and write the column names to it
         else:
-            print(f"StateBuffer._initialize_file(): Creating file {self.file_path}...")
+            print(
+                f"StateBuffer._initialize_file(): Creating file {self.file_path}...")
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             empty_df = pd.DataFrame(columns=self.columns)
             with open(self.file_path, 'w') as f:
                 empty_df.to_csv(f, index=False, float_format='%.18e')
 
-
     def add(self, plants, t):
         new_data = pd.DataFrame(
-            [[plant.id, plant.x, plant.y, plant.r, t] for plant in plants],
-            columns=['id', 'x', 'y', 'r', 't']
+            [[plant.id, plant.x, plant.y, plant.r, plant.species_id, t] for plant in plants],
+            columns=['id', 'x', 'y', 'r', 'species', 't']
         )
         if new_data.empty:
             return
-        
+
         if self.buffer.empty:
             self.buffer = new_data
         else:
             self.buffer = pd.concat([self.buffer, new_data], ignore_index=True)
-        
+
         if self.buffer.shape[0] >= self.batch_size:
             self._flush_buffer()
 
     def _flush_buffer(self):
-        new_rows = pd.DataFrame(self.buffer, columns=self.columns, dtype=np.float64)
-        print(f'\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-        
+        new_rows = pd.DataFrame(
+            self.buffer, columns=self.columns, dtype=np.float64)
+        # print(f'\n\nStateBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+        if not os.path.exists(self.file_path):
+            self._initialize_file()
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
-    
+
     def finalize(self):
         if not self.buffer.empty:
             self._flush_buffer()
 
+    # def get_data(self):
+    #     print(f'StateBuffer.get_data(): {self.columns=}')
+    #     data = pd.DataFrame(columns=self.columns)
+        
+    #     if os.path.exists(self.file_path):
+    #         data = pd.read_csv(self.file_path)
+    #         if self.verbose == True:
+    #             print(f'StateBuffer.get_data(): {data.shape[0]} rows loaded.')
+    #     else:
+    #         warnings.warn(
+    #             f'StateBuffer.get_data(): File {self.file_path} does not exist.')
+
+    #     return data # returns an empty dataframe if the file does not exist
+    
+    # def get_specific_data(self, t):
+    #     if not isinstance(t, (list, np.ndarray, pd.Series)):
+    #         t = [t]
+            
+    #     if self.verbose == True:
+    #         print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
+    #     with open(self.file_path, 'rb') as f:
+    #         # lines = find_all_lines_key_values(f, 't', t, assume_sorted=True)
+    #         lines = find_all_lines_key_values_sorted(f, 't', t, verbose=self.verbose)
+            
+    #         if not lines:
+    #             return pd.DataFrame(columns=self.columns)
+            
+    #         data = pd.read_csv(StringIO('\n'.join(lines)), header=None, names=self.columns)
+                
+    #     return data
+    
     def get_data(self):
-        data = pd.read_csv(self.file_path)
-        if 'id' not in data.keys():
-            data = rewrite_state_buffer_data(data)
-            self.override_data(data)
+        data = StateBuffer.get_data_static(self.file_path, columns=self.columns, verbose=self.verbose)
         return data
     
-    def get_last_state(self):
-        data = self.get_data()
-        if data.shape[0] < 1:
-            print('StateBuffer.get_last_state(): No data in buffer...')
-            return pd.DataFrame(columns=self.columns)
-        else:
-            last_t = data['t'].unique()[-1]
-            last_state = data[data['t'] == last_t]
-            return last_state
+    def get_specific_data(self, t):
+        data = StateBuffer.get_specific_data_static(self.file_path, t, columns=self.columns, verbose=self.verbose)
+        return data
     
+    @staticmethod
+    def get_data_static(file_path, columns=['id','x','y','r','species','t'], verbose=False):
+        if not os.path.exists(file_path):
+            print(f'StateBuffer.get_data_static(): File {file_path} does not exist.')
+            return pd.DataFrame(columns=columns)
+        
+        if verbose:
+            print(f'StateBuffer.get_data_static(): {columns=}')
+        data = pd.DataFrame(columns=columns)
+        
+        if os.path.exists(file_path):
+            data = pd.read_csv(file_path)
+            if verbose:
+                print(f'StateBuffer.get_data_static(): {data.shape[0]} rows loaded.')
+        else:
+            warnings.warn(
+                f'StateBuffer.get_data_static(): File {file_path} does not exist.')
+
+        return data # returns an empty dataframe if the file does not exist
+    
+    @staticmethod
+    def get_specific_data_static(file_path, t, columns=['id','x','y','r','species','t'], verbose=False):
+        
+        if not os.path.exists(file_path):
+            if verbose:
+                print(f'StateBuffer.get_specific_data(): File {file_path} does not exist.')
+            return pd.DataFrame(columns=columns)
+    
+        if not isinstance(t, (list, np.ndarray, pd.Series)):
+            t = [t]
+        
+        if verbose:
+            print(f'StateBuffer.get_specific_data(): Searching for times {t = }...')
+        with open(file_path, 'rb') as f:
+            lines = find_all_lines_key_values_sorted(f, 't', t, verbose)
+            
+            if not lines:
+                return pd.DataFrame(columns=columns)
+            
+            data = pd.read_csv(StringIO('\n'.join(lines)), header=None, names=columns)
+                
+        return data
+
+    def get_last_state(self):
+        # if the file does not exist, return an empty dataframe
+        if not os.path.exists(self.file_path):
+            return pd.DataFrame(columns=self.columns)
+        
+        columns = []
+        with open(self.file_path, 'r') as f:
+            columns = f.readline().strip().split(',')
+        last_state_df = pd.DataFrame(columns=columns)
+        
+        # Open the state buffer file in binary read mode
+        with open(self.file_path, 'rb') as f:
+
+            #### FIND THE LAST VALUE IN THE LAST ROW OF THE FILE ####
+            move_to_previous_line(f)
+
+            # Read the last line of the file and its last value
+            last_line = f.readline().decode().strip()
+            try:
+                last_val = float(last_line.split(',')[-1].strip())
+            except ValueError:
+                return last_state_df
+
+            val = last_val
+            i = 0
+            while val == last_val:
+                move_to_previous_line(f)
+                line = f.readline().decode().strip()
+
+                try:
+                    val = float(line.split(',')[-1].strip())
+                except ValueError:
+                    print(f'StateBuffer.get_last_state(): Error reading values from line {i} {line = }')
+                    break
+
+                move_to_previous_line(f)
+
+                if val == last_val:
+                    last_state_df.loc[i] = [float(val)
+                                            for val in line.split(',')]
+                i += 1
+
+        last_state_df = last_state_df.iloc[::-1].reset_index(drop=True)
+        return last_state_df
+
     def override_data(self, data):
         with open(self.file_path, 'w', newline='') as f:
             data.to_csv(f, index=False, float_format='%.18e', header=True)
-    
+
     def save(self, file_path):
         if not file_path.endswith('.csv'):
             file_path = file_path + '.csv'
-        
+
         # Raise an error if the file already exists, as to not override it
         if os.path.exists(file_path):
-            raise FileExistsError(f'StateBuffer.save(): File {file_path} already exists.')
-        
+            raise FileExistsError(
+                f'StateBuffer.save(): File {file_path} already exists.')
+
         data = self.get_data()
         data.to_csv(file_path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_state(state, size=2, fig=None, ax=None, half_width=0.5, half_height=0.5, fast=False):
+    def plot_state(state, size=2, fig=None, ax=None, title='', box=None, fast=False, boundary_condition=None, plot_dead=False):
+        if len(state) == 0:
+            print('StateBuffer.plot_state(): No data to plot.')
+            return fig, ax, title
+
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        ax.set_xlim(-half_width, half_width)
-        ax.set_ylim(-half_height, half_height)
+
+        if box is None:
+            box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
+        else:
+            box = np.array(box, dtype=float)
+
+        scale = 1.2
+        dim = box[:, 1] - box[:, 0]
+        c = 0.5 * (box[:, 0] + box[:, 1])
+        scaled_box = c + scale * dim/2 * np.array([[-1, 1], [-1, 1]])
+        ax.set_xlim(scaled_box[0, 0], scaled_box[0, 1])
+        ax.set_ylim(scaled_box[1, 0], scaled_box[1, 1])
         ax.set_aspect('equal', 'box')
-        
-        ## JUST FOR DEBUGGING, REMOVE LATER
-        if state['t'].nunique() > 1:
-            warnings.warn('StateBuffer.plot_state(): More than one unique time in state.')
-        
+
+        # Draw a grey outlined rectangle along the box
+        rect = plt.Rectangle(
+            (box[0, 0], box[1, 0]),  # Bottom-left corner
+            box[0, 1] - box[0, 0],  # Width
+            box[1, 1] - box[1, 0],  # Height
+            edgecolor='grey',
+            facecolor='none',
+            linestyle='-',
+            linewidth=1,
+            alpha=0.5
+        )
+        ax.add_patch(rect)
+
         t = state['t'].iloc[0]
 
-        for id, x, y, r in state[['id', 'x', 'y', 'r']].values:
-            if fast and r > 0.005:
+        cmap = plt.colormaps['tab10']
+
+        ids = state['id'].values
+        positions = state[['x', 'y']].values
+        radii = state['r'].values
+        species = state['species'].values
+        if plot_dead:
+            is_dead = state['is_dead'].values
+
+        if boundary_condition.lower() == 'periodic':
+            if fast:
+                positions_shifted, index_pairs, was_shifted = positions_shift_periodic(box, positions, radii, duplicates=True)
+            else:
+                positions_shifted, index_pairs, was_shifted = positions_shift_periodic_all(box, positions)
+            
+            is_beyond_plot_boundary = np.any(outside_box_check(scaled_box, positions_shifted), axis=1)
+            
+            index_pairs = index_pairs[~is_beyond_plot_boundary]
+
+            ids = ids[index_pairs[:, 0]]
+            species = species[index_pairs[:, 0]]
+            radii = radii[index_pairs[:, 0]]
+            positions = positions_shifted[index_pairs[:, 1]]
+            if plot_dead:
+                is_dead = is_dead[index_pairs[:, 0]]
+
+        for i, (id, (x, y), r, species) in enumerate(zip(ids, positions, radii, species)):
+            if boundary_condition.lower() == 'periodic' and was_shifted[i]:
+                alpha = 0.5
+            else:
+                alpha = 1.0
+            if plot_dead and is_dead[i]:
+                c = 'red'
+            else:
+                c = cmap(int(species + 3))
+            if fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         color='green', fill=False, transform=ax.transData))
+                                         facecolor='None', edgecolor=c, transform=ax.transData, alpha=alpha))
             elif not fast:
                 ax.add_artist(plt.Circle((x, y), r,
-                                         color='green', fill=True, transform=ax.transData))
+                                         facecolor=c, edgecolor='None', transform=ax.transData, alpha=alpha))
 
         if t is not None:
             t = float(round(t, 2))
-            ax.text(0.0, -0.6, f'{t = }', ha='center', fontsize=7)
+            ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
 
+        if title != '':
+            ax.set_title(title, fontsize=10)
         ax.set_xticks([])
         ax.set_yticks([])
-        return fig, ax
 
-    def plot(self, size=2, title='StateBuffer', fast=False, n_plots=20):
-        data = self.get_data()
+        return fig, ax, title
+
+    @staticmethod
+    def plot(data, size=2, title='', fast=False, n_plots=20, box=None, boundary_condition=None):
+        title = 'state_buffer-' + title
         if data.empty:
             print('StateBuffer.plot(): No data to plot.')
-            return
+            fig, ax = plt.subplots(1, 1, figsize=(size, size))
+            return fig, ax, title
         if fast:
             print(
                 'StateBuffer.plot(): Faster plotting is enabled, some elements might be missing in the plots.')
             title += ' (Fast)'
         times_unique = data['t'].unique()
-        b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
-        times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
+        b = np.linspace(times_unique.min(), times_unique.max(),
+                        min(len(times_unique), n_plots))
+        times = np.unique(
+            [times_unique[np.abs(times_unique - t).argmin()] for t in b])
         T = len(times)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
 
+        if isinstance(size, (tuple, list, np.ndarray)):
+            figsize = size
+        else:
+            figsize = (size*n_cols, size*n_rows)
+
         fig, ax = plt.subplots(
-            n_rows, n_cols, figsize=(size*n_cols, size*n_rows))
+            n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
-        fig.suptitle(title, fontsize=8)
+        fig.suptitle(title.rstrip(), fontsize=8)
         if isinstance(ax, plt.Axes):
             ax = np.array([ax])
         for i, a in enumerate(ax.flatten()):
@@ -324,62 +587,53 @@ class StateBuffer:
                 a.axis('off')
                 continue
             state = data[data['t'] == times[i]]
-            # plot_state(state=state, size=size, ax=a, fast=fast)
-            self.plot_state(state=state, size=size, ax=a, fast=fast)
-        return fig, ax
+            StateBuffer.plot_state(state=state, size=size, ax=a, fast=fast,
+                                   box=box, boundary_condition=boundary_condition)
 
-    def animate(self, size=6, title=None, fast=False):
-        print('StateBuffer.animation(): Animating StateBuffer...')
-        data = self.get_data()
-        times = data['t'].unique()
-        states = [data[data['t'] == t] for t in times]
+        title = title
+        print(f'StateBuffer.plot(): {title=}')
+        return fig, ax, title
+
+    @staticmethod
+    def animate(data, size=6, title='', fast=False, skip=1, interval=None, box=None, boundary_condition=None):
+        print('StateBuffer.animate(): Animating StateBuffer...')
+        times = data['t'].unique()[::skip]
         time_step = times[1] - times[0]
         T = len(times)
-        print(f'StateBuffer.animation(): {T = }')
 
-        if title is None:
-            title = 'StateBuffer Animation'
         fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        fig.suptitle(title, fontsize=10)
+        fig.suptitle(title, fontsize=15)
         fig.tight_layout()
 
-        ax.set_xlim(-0.5, 0.5)
-        ax.set_ylim(-0.5, 0.5)
-        ax.set_aspect('equal', 'box')
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-        circles = [plt.Circle((x, y), r, color='green',
-                              fill=not fast) for x, y, r in states[0][['x', 'y', 'r']].values]
-        for circle in circles:
-            ax.add_artist(circle)
-
-        def animate(i):
-            t = float(round(times[i], 2))
-            ax.set_title(f'{t = }', fontsize = 8)
-            for circle, (x, y, r) in zip(circles, states[i][['x', 'y', 'r']].values):
-                circle.center = (x, y)
-                circle.radius = r
+        def animate_func(i):
+            ax.clear()
+            t = times[i]
+            state = data[data['t'] == t]
+            StateBuffer.plot_state(state=state, size=size, ax=ax, fast=fast, box=box, boundary_condition=boundary_condition)
+            print(f'StateBuffer.animate(): i = {i + 1}/{len(times)} ({(i+1)/len(times)*100:.2f}%)', end='\r')
             return ax
 
+        interval = interval or 25 * time_step
+
         ani = animation.FuncAnimation(
-            fig, animate, frames=T, interval= 10 * time_step, repeat=True)
-        return ani
+            fig, animate_func, frames=T, interval=interval, repeat=True)
+        return ani, title
 
 
 class FieldBuffer:
-    def __init__(self, file_path, resolution=100, skip=100):
+    def __init__(self, file_path, resolution, skip = 300, verbose=False):
         self.file_path = file_path
         self.resolution = resolution
         self.skip = skip
-        self.batch_size = 100
-        self.columns = ['t'] + [f'cell_{i}' for i in range(resolution * resolution)]
+        self.batch_size = max(1, 100//skip)
+        self.columns = ['t'] + \
+            [f'cell_{i}' for i in range(resolution * resolution)]
+        self.verbose = verbose
 
         if os.path.exists(self.file_path):
-            print(f'FieldBuffer.__init__(): Loading data from already existing file {self.file_path}.')
-        else:
-            self._initialize_file()
-
+            if self.verbose:
+                print(
+                f'FieldBuffer.__init__(): Succesfully conected to already existing file {self.file_path}.')
         self.buffer = pd.DataFrame(columns=self.columns, dtype=np.float64)
 
     def _initialize_file(self):
@@ -388,10 +642,12 @@ class FieldBuffer:
             self.file_path += '.csv'
         # Raise an error if the file already exists, as to not override it
         if os.path.exists(self.file_path):
-            raise FileExistsError(f'FieldBuffer._initialize_file(): File {self.file_path} already exists.')
+            raise FileExistsError(
+                f'FieldBuffer._initialize_file(): File {self.file_path} already exists.')
         # If the file does not exist, create it and write the column names to it
         else:
-            print(f"FieldBuffer._initialize_file(): Creating file {self.file_path}...")
+            print(
+                f"FieldBuffer._initialize_file(): Creating file {self.file_path}...")
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             empty_df = pd.DataFrame(columns=self.columns)
             with open(self.file_path, 'w') as f:
@@ -411,28 +667,48 @@ class FieldBuffer:
 
     def _flush_buffer(self):
         new_rows = pd.DataFrame(self.buffer, columns=self.columns)
-        print(f'\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
-        
+        # print(f'\n\nFieldBuffer._flush_buffer(): Flushing {new_rows.shape[0]} rows to file.', end='\n')
+
+        if not os.path.exists(self.file_path):
+            self._initialize_file()
+
         with open(self.file_path, 'a', newline='') as f:
             new_rows.to_csv(f, header=False, index=False, float_format='%.18e')
         self.buffer = pd.DataFrame(columns=self.columns)
-    
+
     def finalize(self):
         if not self.buffer.empty:
             self._flush_buffer()
 
     def get_data(self):
-        data = pd.read_csv(self.file_path)
-        if 't' not in data.keys():
-            data = rewrite_density_field_buffer_data(data)
-            self.override_data(data)
+        data = pd.DataFrame(columns=self.columns)
+        if os.path.exists(self.file_path):
+            data = pd.read_csv(self.file_path)
+            if 't' not in data.keys():
+                data = rewrite_density_field_buffer_data(data)
+                self.override_data(data)
+        
+        return data # returns an empty dataframe if the file does not exist        
+
+    def get_specific_data(self, t=None):
+        if t is None:
+            print(f'FieldBuffer.get_specific_data(): t not specified, returning all data.')
+            return self.get_data()
+        t = np.atleast_1d(t)
+        data = self.get_data()
+        if data.empty:
+            return data
+        times = data['t'].unique()
+        times_to_get = np.unique([times[np.abs(times - t).argmin()] for t in t])
+        data = data[data['t'].isin(times_to_get)]
         return data
 
-    def get_fields(self):
-        data = self.get_data()
+    def get_specific_fields(self, t=None):
+        data = self.get_specific_data(t)
         times = data['t'].unique()
-        fields = [data[data['t'] == t].iloc[:, 1:].values.reshape(self.resolution, self.resolution) for t in times]
-        return fields
+        fields = [data[data['t'] == t].iloc[:, 1:].values.reshape(
+            self.resolution, self.resolution) for t in times]
+        return fields[0] if len(fields) == 1 else fields
 
     def override_data(self, data):
         with open(self.file_path, 'w', newline='') as f:
@@ -446,34 +722,94 @@ class FieldBuffer:
         data.to_csv(path, index=False, float_format='%.18e')
 
     @staticmethod
-    def plot_field(field, t=None, size=2, fig=None, ax=None, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+    def plot_field(field, t=None, size=2, title='', fig=None, ax=None, vmin=0, vmax=None, box=None, boundary_condition=None, density_scheme='local'):
+        resolution = np.sqrt(field.size).astype(int)
+        field = field.reshape(resolution, resolution)
+        
         if ax is None:
             fig, ax = plt.subplots(1, 1, figsize=(size, size))
-        ax.contour(field, levels=[1.0], colors=['r'], linewidths=[1], alpha=0.5)
-        ax.imshow(field, origin='lower', cmap='Greys', vmin=vmin, vmax=vmax, extent=extent)
+        if box is None:
+            box = np.array([[-0.5, 0.5], [-0.5, 0.5]])
+
+        if density_scheme == 'local':
+            ax.contour(field, levels=[0.1, 0.2, 0.3], colors=[
+                    'r','g','b'], alpha=0.5)
+            ax.imshow(field, origin='lower', cmap='Greens',
+                    vmin=vmin, vmax=vmax, extent=[box[0, 0], box[0, 1], box[1, 0], box[1, 1]])
+        elif density_scheme == 'global':
+            print('FieldBuffer.plot_field(): Density scheme is global.')
+            cmap = plt.get_cmap('Greens')
+            color = cmap(np.sum(field) / np.max([1., vmax]))
+            ax.scatter(0,0, c=field.flatten(), cmap='Greys', alpha=0.5)
+            title = f'{title}  density = {np.sum(field):.2f}'
+            ax.set_title(title, fontsize=10)
+
+        if boundary_condition.lower() == 'periodic':
+            rect = plt.Rectangle(
+                (box[0, 0], box[1, 0]),  # Bottom-left corner
+                box[0, 1] - box[0, 0],  # Width
+                box[1, 1] - box[1, 0],  # Height
+                edgecolor='black',
+                facecolor='none',
+                linestyle='-',
+                linewidth=1,
+                alpha=0.2
+            )
+            ax.add_patch(rect)
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                    extent_shifted = [
+                        box[0, 0] + dx * (box[0, 1] - box[0, 0]),
+                        box[0, 1] + dx * (box[0, 1] - box[0, 0]),
+                        box[1, 0] + dy * (box[1, 1] - box[1, 0]),
+                        box[1, 1] + dy * (box[1, 1] - box[1, 0]),
+                    ]
+                    ax.imshow(field, origin='lower', cmap='Greys',
+                              vmin=vmin, vmax=vmax, extent=extent_shifted, alpha=1)
+
+        if density_scheme == 'global':
+            density = np.sum(field)
+            title = f'{title}  density = {density:.2f}'
+            ax.set_title(title, fontsize=10)
+        scale = 1.2
+        ax.set_xlim(box[0, 0] * scale, box[0, 1] * scale)
+        ax.set_ylim(box[1, 0] * scale, box[1, 1] * scale)
         if t is not None:
             t = float(round(t, 2))
-            ax.text(0.0, -0.6, f'{t=}', ha='center', fontsize=7)
+            ax.text(0.0, -0.6*scale, f'{t=}', ha='center', fontsize=7)
         ax.set_xticks([])
         ax.set_yticks([])
-        return fig, ax
+        print(f'FieldBuffer.plot(): {title=}')
+        return fig, ax, title
 
-    def plot(self, size=2, n_plots=20, vmin=0, vmax=None, title='FieldBuffer', extent=[-0.5, 0.5, -0.5, 0.5]):
-        data = self.get_data()
+    @staticmethod
+    def plot(data, size=2, n_plots=20, vmin=0, vmax=None, title='', box=None, boundary_condition=None, density_scheme='local'):
+        title = 'field_buffer-' + title
         if data.empty:
             print('FieldBuffer.plot(): No data to plot.')
-            return
+            fig, ax = plt.subplots(1, 1, figsize=(size, size))
+            return fig, ax, title
         times_unique = data['t'].unique()
-        b = np.linspace(times_unique.min(), times_unique.max(), min(len(times_unique), n_plots))
-        times = [times_unique[np.abs(times_unique - t).argmin()] for t in b]
-        fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(self.resolution, self.resolution) for t in times])
-        if vmax is None:
-            vmax = np.nanmax(fields)
+        b = np.linspace(times_unique.min(), times_unique.max(),
+                        min(len(times_unique), n_plots))
+        times = np.unique(
+            [times_unique[np.abs(times_unique - t).argmin()] for t in b])
+        resolution = int(np.sqrt(data.shape[1] - 1))
+        fields = np.array([data[data['t'] == t].iloc[:, 1:].values.reshape(
+            resolution, resolution) for t in times])
+        vmax = vmax or np.nanmax(fields)
         T = len(times)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
-        
-        fig, ax = plt.subplots(n_rows, n_cols, figsize=(size * n_cols, size * n_rows))
+
+        if isinstance(size, (tuple, list, np.ndarray)):
+            figsize = size
+        else:
+            figsize = (size * n_cols, size * n_rows)
+
+        fig, ax = plt.subplots(n_rows, n_cols, figsize=figsize)
         fig.tight_layout()
         fig.suptitle(title, fontsize=8)
         if isinstance(ax, plt.Axes):
@@ -484,15 +820,18 @@ class FieldBuffer:
                 continue
             field = fields[i]
             t = times[i]
-            # plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, extent=extent)
-            self.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin, vmax=vmax, extent=extent)
-        return fig, ax
+            FieldBuffer.plot_field(field=field, t=t, size=size, ax=a, vmin=vmin,
+                                   vmax=vmax, box=box, boundary_condition=boundary_condition, density_scheme=density_scheme)
 
-    def animate(self, size=6, vmin=0, vmax=None, extent=[-0.5, 0.5, -0.5, 0.5]):
+        title = title
+        return fig, ax, title
+
+    def animate(self, size=6, vmin=0, vmax=None, box=None, boundary_condition=None):
         print('FieldBuffer.animation(): Animating FieldBuffer...')
         data = self.get_data()
         times = data['t'].unique()
-        fields = [data[data['t'] == t].iloc[:, 1:].values.reshape(self.resolution, self.resolution) for t in times]
+        fields = [data[data['t'] == t].iloc[:, 1:].values.reshape(
+            self.resolution, self.resolution) for t in times]
         time_step = times[1] - times[0]
         T = len(times)
 
@@ -509,13 +848,12 @@ class FieldBuffer:
         def animate(i):
             ax.clear()
             t = float(round(times[i], 2))
-            ax.set_title(f'{t=}')
-            ax.imshow(fields[i], origin='lower', cmap='Greys', vmin=vmin, vmax=vmax, extent=extent)
-            ax.set_xticks([])
-            ax.set_yticks([])
+            FieldBuffer.plot_field(field=fields[i], t=t, size=size, ax=ax, vmin=vmin,
+                                   vmax=vmax, box=box, boundary_condition=boundary_condition)
             return ax
 
-        ani = animation.FuncAnimation(fig, animate, frames=T, interval=10 * time_step, repeat=True)
+        ani = animation.FuncAnimation(
+            fig, animate, frames=T, interval=10 * time_step, repeat=True)
         plt.show()
         return ani
 
@@ -544,7 +882,8 @@ class HistogramBuffer:
 
         size = self.values.shape[0]
         if len(self.values) > size:
-            print(f'\nHistogramBuffer.add(): !Warning! HistogramBuffer is full, previous data will be overridten.')
+            print(
+                f'\nHistogramBuffer.add(): !Warning! HistogramBuffer is full, previous data will be overridten.')
             self.values.pop(0)
             self.length = size
 
@@ -587,18 +926,19 @@ class HistogramBuffer:
         self.end = self.bin_vals[-1]
         self.length = self.values.shape[0]
 
-    def plot(self, size=2, t=None, nplots=20, title=None, density=False, xscale=1, xlabel='', ylabel='frequency'):
-        values = self.get_values()
+    @staticmethod
+    def plot(data, size=2, t=None, nplots=20, title='', density=False, xscale=1, xlabel='', ylabel='frequency'):
+        title = 'histogram_buffer-' + title
         start = self.start * xscale
         end = self.end * xscale
         xx = np.linspace(start, end, self.bins)
         if density:
-            values = values / \
-                np.sum(values, axis=1)[:, np.newaxis]
+            data = data / \
+                np.sum(data, axis=1)[:, np.newaxis]
             ylabel = 'density'
-        ymax = np.nanmax(values)
-        if title is None:
-            title = self.title
+        ymax = np.nanmax(data)
+
+        title = title or self.title
         if t is None:
             tt = self.get_times()
         elif isinstance(t, (int, float)):
@@ -621,7 +961,7 @@ class HistogramBuffer:
             idx = ii[i]
             t = tt[idx]
 
-            ax_i.bar(xx, values[idx], width=(
+            ax_i.bar(xx, data[idx], width=(
                 end - start) / self.bins, color='black', alpha=0.5)
 
             xticks = (xx[0], xx[-1])
@@ -654,9 +994,7 @@ class HistogramBuffer:
             ylabel = 'density'
         ymax = np.nanmax(values)
 
-        if title is None:
-            title = self.title + ' Animation'
-
+        title = title or self.title + 'animation'
         fig, ax = plt.subplots(1, 1, figsize=(size, 2*size//3))
         # fig.tight_layout()
 

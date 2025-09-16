@@ -16,18 +16,18 @@ path = 'D:/partial48775395'
 folder = os.path.abspath(path)
 print(f'folder: {folder}')
 
-surfixes = [f.split('_')[-1].split('.')[0]
-            for f in os.listdir(folder) if 'kwargs' in f][::-1]
-surfixes = sorted(surfixes, key=lambda x: int(x.split('-')[-1]))
-print(f'{len(surfixes)=}')
+aliases = [f.split('-')[-1].split('.')[0]
+            for f in os.listdir(folder) if 'kwargs-' in f][::-1]
+aliases = sorted(aliases, key=lambda x: int(x.split('-')[-1]))
+print(f'{len(aliases)=}')
 
 fast_plot = False
 
 states = pd.DataFrame()
-for i, surfix in enumerate(surfixes):
-    if int(surfix.split('-')[-1]) < 7:
+for i, alias in enumerate(aliases):
+    if int(alias.split('-')[-1]) < 7:
         continue
-    state_buffer_path = f'{folder}/state_buffer_{surfix}.csv'
+    state_buffer_path = f'{folder}/state_buffer-{alias}.csv'
     state_buffer = StateBuffer(state_buffer_path)
     
     skip_times = 1000

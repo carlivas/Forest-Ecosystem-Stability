@@ -19,7 +19,7 @@ for trend_window in trend_windows:
     print(f'Analysing trend for window: {trend_window}')
     trend_threshold = 3
 
-    sim_nums = [f.split('_')[-1].split('.')[0]
+    sim_nums = [f.split('-')[-1].split('.')[0]
                 for f in os.listdir(load_folder) if 'data_buffer' in f]
     convergence_list = pd.DataFrame(
         columns=['sim_num', 'guess was right', 'truth', 'convergence_factor'])

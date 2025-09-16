@@ -1,14 +1,18 @@
 {
-    "buffer_size": 20,
-    "buffer_skip": 20,
-    "density_check_radius": 100,
-    "density_field_resolution": 100,
-    "dispersal_range": 90,
-    "growth_rate": 0.1,
-    "r_max": 30,
-    "r_min": 0.1,
-    "precipitation": -1,
-    "spawn_rate": 1,
+    "L": 500,
+    "precipitation": 0,
     "time_step": 1,
-    "verbose": true
+    "spawn_rate": 1e-6,
+    "verbose": true,
+    "density_field_resolution": 50,
+    "boundary_condition": "periodic",
+    "competition_scheme": "all",
+    "land_quality": 0.01,
+    "convert_kwargs": true,
+    "density_scheme": "local",
+    "density_initial": 0.0,
+
+    "t": 0,
+    "box": [[-0.5, 0.5], [-0.5, 0.5]],
+    "density_field_buffer_skip": 100
 }

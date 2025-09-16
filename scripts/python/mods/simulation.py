@@ -4,285 +4,27 @@ import time
 import warnings
 import os
 from typing import *
+import shutil
 
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
 from scipy.stats import gaussian_kde
 
-from mods.buffers import (DataBuffer, FieldBuffer, HistogramBuffer, StateBuffer,
-                          rewrite_density_field_buffer_data,
-                          rewrite_hist_buffer_data, rewrite_state_buffer_data)
-from mods.fields import DensityFieldSPH as DensityField
-from mods.plant import Plant
-from mods.utilities import print_nested_dict, save_kwargs, convert_to_serializable, linear_regression, dbh_to_crown_radius
+from mods.buffers import *
+from mods.fields import *
+from mods.plant import *
+from mods.utilities import *
+from mods.spatial import *
 
 
-def check_pos_collision(pos: np.ndarray, plant: Plant) -> bool:
-    plant_pos = np.array([plant.x, plant.y])
-    return np.sum((pos - plant_pos) ** 2) < plant.r ** 2
+modi_path_kwargs = '../../default_kwargs.json'
+local_path_kwargs = 'default_kwargs.json'
+path_kwargs = modi_path_kwargs if os.path.exists(
+    modi_path_kwargs) else local_path_kwargs
 
-
-def check_collision(p1: Plant, p2: Plant) -> bool:
-    pos1 = np.array([p1.x, p1.y])
-    pos2 = np.array([p2.x, p2.y])
-    r1 = p1.r
-    r2 = p2.r
-    return np.sum((pos1 - pos2) ** 2) < (r1 + r2) ** 2
-
-
-def save_simulation_results(
-    sim,
-    save_folder,
-    surfix='test',
-    kwargs=False,
-    data_buffer=False,
-    size_buffer=False,
-    biomass_buffer=False,
-    state_buffer=False,
-    density_field_buffer=False,
-    save_all_buffers=True
-):
-    if save_all_buffers:
-        biomass_buffer = True
-        data_buffer = True
-        density_field_buffer = True
-        size_buffer = True
-        state_buffer = True
-        kwargs = True
-
-    if not os.path.exists(save_folder):
-        os.makedirs(save_folder)
-
-    if kwargs:
-        sim.save_dict(path=f'{save_folder}/kwargs_{surfix}')
-    if data_buffer:
-        sim.data_buffer.save(f'{save_folder}/data_buffer_{surfix}')
-    if size_buffer:
-        sim.size_buffer.save(f'{save_folder}/size_buffer_{surfix}')
-    if biomass_buffer:
-        sim.biomass_buffer.save(f'{save_folder}/biomass_buffer_{surfix}')
-    if state_buffer:
-        sim.state_buffer.save(f'{save_folder}/state_buffer_{surfix}')
-    if density_field_buffer:
-        sim.density_field_buffer.save(
-            f'{save_folder}/density_field_buffer_{surfix}')
-    print('Data saved in folder:', save_folder)
-
-
-def plot_simulation_results(
-    sim,
-    title=None,
-    convergence=True,
-    state_buffer=False,
-    density_field_buffer=False,
-    data_buffer=False,
-    biomass_buffer=False,
-    size_buffer=False,
-    kwargs=False,
-    plot_all_buffers=True
-):
-
-    if plot_all_buffers:
-        biomass_buffer = True
-        data_buffer = True
-        density_field_buffer = True
-        size_buffer = True
-        state_buffer = True
-        kwargs = True
-
-    print('Plotting...')
-    L = sim.L
-    N0 = len(sim.state_buffer.states[0])
-    if title is None:
-        title = f'{L =}, $N_0$ = {N0}'
-    else:
-        title = title + '  ' + f'{L =}, $N_0$ = {N0}'
-    if kwargs:
-        sim.print_dict()
-    if state_buffer:
-        sim.state_buffer.plot(title=f'{title}')
-    if density_field_buffer:
-        sim.density_field_buffer.plot(title=f'{title}')
-    if data_buffer:
-        fig, ax = sim.data_buffer.plot(title=f'{title}')
-        if convergence & (sim.data_buffer.size > 1):
-            is_converged, convergence_factor, regression_line = sim.convergence_check()
-            time = sim.data_buffer.get_data(
-                keys=['Time'])[-len(regression_line):]
-            slope = (regression_line[-1] -
-                     regression_line[0]) / (time[-1] - time[0])
-            slope = slope[0]
-            color = 'g' if is_converged else 'r'
-            label = 'Converged' if is_converged else 'Not converged'
-            label += f' ({convergence_factor:.3e})'
-            ax[0].plot(time, regression_line, label=label,
-                       color=color, linestyle='--')
-            ax[0].legend()
-
-    if biomass_buffer:
-        sim.biomass_buffer.plot(title=f'Biomass')
-    if size_buffer:
-        sim.size_buffer.plot(title=f'Sizes')
-    plt.show()
-
-
-def load_sim_data(
-    load_folder,
-    surfix,
-    state_buffer=False,
-    density_field_buffer=False,
-    data_buffer=False,
-    biomass_buffer=False,
-    size_buffer=False,
-    kwargs=False,
-    load_all_buffers=True
-):
-    biomass_buffer_df = pd.DataFrame([])
-    data_buffer_df = pd.DataFrame([])
-    density_field_buffer_df = pd.DataFrame([])
-    size_buffer_df = pd.DataFrame([])
-    state_buffer_df = pd.DataFrame([])
-    kwargs_dict = {}
-
-    if load_all_buffers:
-        biomass_buffer = True
-        data_buffer = True
-        density_field_buffer = True
-        size_buffer = True
-        state_buffer = True
-        kwargs = True
-
-    if biomass_buffer:
-        biomass_buffer_df = pd.read_csv(
-            f'{load_folder}/biomass_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-        if 't' not in biomass_buffer_df.iloc[0, :].values:
-            biomass_buffer_df, note = rewrite_hist_buffer_data(
-                biomass_buffer_df)
-            save_permission = input(f"Biomass buffer data at '{load_folder}' with surfix '{surfix}' needs rewriting. Do you want to rewrite and save it? (Y/n): ")
-            if save_permission.lower() == 'y':
-                biomass_buffer_df.to_csv(
-                    f'{load_folder}/biomass_buffer_{surfix}.csv', index=False, header=True)
-                with open(f'{load_folder}/biomass_buffer_{surfix}.csv', 'w') as file:
-                    # file.write(f"# {note.replace('\n', '\n# ')}\n")
-                    biomass_buffer_df.to_csv(file, index=False)
-
-        if biomass_buffer_df.iloc[0, 0] == 't':
-            biomass_buffer_df = pd.read_csv(
-                f'{load_folder}/biomass_buffer_{surfix}.csv', header=0, comment='#')
-
-    if data_buffer:
-        data_buffer_df = pd.read_csv(
-            f'{load_folder}/data_buffer_{surfix}.csv', header=0, comment='#')
-
-    if density_field_buffer:
-        density_field_buffer_df = pd.read_csv(
-            f'{load_folder}/density_field_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-        if 't' not in density_field_buffer_df.iloc[0, :].values:
-            density_field_buffer_df = rewrite_density_field_buffer_data(
-                density_field_buffer_df)
-            save_permission = input(f"Density field buffer data at '{load_folder}' with surfix '{surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
-            if save_permission.lower() == 'y':
-                density_field_buffer_df.to_csv(
-                    f'{load_folder}/density_field_buffer_{surfix}.csv', index=False, header=True)
-        if density_field_buffer_df.iloc[0, 0] == 't':
-            density_field_buffer_df = pd.read_csv(
-                f'{load_folder}/density_field_buffer_{surfix}.csv', header=0, comment='#')
-
-    if kwargs:
-        with open(f'{load_folder}/kwargs_{surfix}.json', 'r') as file:
-            kwargs_dict = json.load(file)
-
-    if size_buffer:
-        size_buffer_df = pd.read_csv(
-            f'{load_folder}/size_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-        if 't' not in size_buffer_df.iloc[0, :].values:
-            size_buffer_df, note = rewrite_hist_buffer_data(size_buffer_df)
-            save_permission = input(f"Size buffer data at '{load_folder}' with surfix '{surfix}' is missing 'bins' keys. Do you want to rewrite and save it? (Y/n): ")
-            if save_permission.lower() == 'y':
-                size_buffer_df.to_csv(
-                    f'{load_folder}/size_buffer_{surfix}.csv', index=False, header=True)
-                with open(f'{load_folder}/size_buffer_{surfix}.csv', 'w') as file:
-                    # file.write(f"# {note.replace('\n', '\n# ')}\n")
-                    size_buffer_df.to_csv(file, index=False)
-        if size_buffer_df.iloc[0, 0] == 't':
-            size_buffer_df = pd.read_csv(
-                f'{load_folder}/size_buffer_{surfix}.csv', header=0, comment='#')
-
-    if state_buffer:
-        state_buffer_df = pd.read_csv(
-            f'{load_folder}/state_buffer_{surfix}.csv', header=None, low_memory=False, comment='#')
-        if 'id' != state_buffer_df.iloc[0, 0]:
-            state_buffer_df = rewrite_state_buffer_data(state_buffer_df)
-            save_permission = input(f"State buffer data at '{load_folder}' with surfix '{surfix}' is missing 'id'. Do you want to rewrite and save it? (Y/n): ")
-            if save_permission.lower() == 'y':
-                state_buffer_df.to_csv(
-                    f'{load_folder}/state_buffer_{surfix}.csv', index=False, header=True)
-        if state_buffer_df.loc[0, 0] == 'id':
-            state_buffer_df = pd.read_csv(
-                f'{load_folder}/state_buffer_{surfix}.csv', header=0, comment='#')
-
-    return state_buffer_df, density_field_buffer_df, data_buffer_df, biomass_buffer_df, size_buffer_df, kwargs_dict
-
-
-def sim_from_data(sim_data, times_to_load='last'):
-    state_buffer_df, density_field_buffer_df, data_buffer_df, biomass_buffer_df, size_buffer_df, kwargs = sim_data
-    times = state_buffer_df['t'].unique()
-    if times_to_load == 'last':
-        times_to_load = [times[-1]]
-    elif times_to_load == 'all':
-        times_to_load = times
-    elif isinstance(times_to_load, (int, list, np.ndarray)):
-        times_to_load = [t for t in times if t in times_to_load]
-    elif isinstance(times_to_load, slice):
-        start = times_to_load.start if times_to_load.start is not None else 0
-        stop = times_to_load.stop if times_to_load.stop is not None else len(
-            times)
-        step = times_to_load.step if times_to_load.step is not None else 1
-        times_to_load = times[start:stop:step]
-    else:
-        raise ValueError(
-            "times_to_load must be 'last', 'all', an integer, or a list of values")
-    sim = Simulation(**kwargs)
-
-    if state_buffer_df is not None:
-        state_buffer_df = state_buffer_df[state_buffer_df['t'].isin(
-            times_to_load)]
-        sim.state_buffer = StateBuffer(data=state_buffer_df, **kwargs)
-        sim.state = sim.state_buffer.states[-1]
-        sim.t = sim.state_buffer.times[-1]
-
-    if density_field_buffer_df is not None:
-        density_field_buffer_df = density_field_buffer_df[density_field_buffer_df['t'].isin(
-            times_to_load)]
-        sim.density_field_buffer = FieldBuffer(data=density_field_buffer_df)
-        sim.density_field = DensityField(half_height=sim.half_height, half_width=sim.half_width,
-                                         density_radius=sim.density_check_radius, resolution=sim.density_field_resolution)
-
-    if data_buffer_df is not None:
-        data_buffer_df = data_buffer_df[data_buffer_df['Time'].isin(
-            times_to_load)]
-        sim.data_buffer = DataBuffer(data=data_buffer_df)
-
-    if biomass_buffer_df is not None:
-        biomass_buffer_df = biomass_buffer_df[biomass_buffer_df['t'].isin(
-            times_to_load)]
-        sim.biomass_buffer = HistogramBuffer(
-            data=biomass_buffer_df, start=0, end=sim.r_max**2 * np.pi, title='Biomass')
-
-    if size_buffer_df is not None:
-        size_buffer_df = size_buffer_df[size_buffer_df['t'].isin(
-            times_to_load)]
-        sim.size_buffer = HistogramBuffer(
-            data=size_buffer_df, start=sim.r_min, end=sim.r_max, title='Sizes')
-
-    sim.initiate()
-    print(f'Simulation loaded at t = {sim.t}')
-    return sim
-
-
-path_kwargs = '../../default_kwargs.json'
 with open(path_kwargs, 'r') as file:
     default_kwargs = json.load(file)
 
@@ -297,79 +39,172 @@ class IDGenerator:
 
 
 class Simulation:
-    def __init__(self, folder, alias=None, override=False, **kwargs):
-        kwargs_path = f'{folder}/kwargs_{alias}.json'
-        data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
-        state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
-        density_field_buffer_path = f'{folder}/density_field_buffer_{alias}.csv'
+    def __init__(self, folder, alias='alias', **kwargs):
+        self.verbose = kwargs.get('verbose', False)
+        # If the folder does not exist, ask the user if they want to create it
+        if not os.path.exists(folder):
+            create_folder = input(f'Folder "{folder}" does not exist. Do you want to create it? (Y/n): ')
+            if create_folder.lower() != 'y':
+                raise ValueError('Simulation.__init__(): Aborted by user...')
+            os.makedirs(folder, exist_ok=True)
+        
+        # Define paths for the data
+        kwargs_path = f'{folder}/kwargs-{alias}.json'
+        data_buffer_path = f'{folder}/data_buffer-{alias}.csv'
+        state_buffer_path = f'{folder}/state_buffer-{alias}.csv'
+        density_field_buffer_path = f'{folder}/density_field_buffer-{alias}.csv'
+        figure_folder = f'{folder}/figures'
 
-        if override:
-            do_override = input(
-                f'Simulation.__init__(): OVERRIDE existing files in folder {folder}? (Y/n):')
-            if do_override.lower() != 'y':
+        # Check if data already exists and ask the user if they want to override it
+        override = kwargs.get('override', False)
+        force = kwargs.get('force', False)
+        if (override or force) and os.path.exists(kwargs_path):
+            if not force:
+                override_input = input(
+                    f'Simulation.__init__(): OVERRIDE existing files in folder "{folder}" with alias "{alias}"? (Y/n):')
+            else:
+                print()
+                print("##################################################")
+                print("##### WARNING: FORCED OVERRIDING IS ENABLED. #####")
+                print("##################################################")
+                print()
+                override_input = 'y'
+            
+            if not (override_input.lower() == 'y' or force):
                 raise ValueError('Simulation.__init__(): Aborted by user...')
             else:
+                # Remove existing files if the user confirms the override
                 for path in [kwargs_path, data_buffer_path, state_buffer_path, density_field_buffer_path]:
                     if os.path.exists(path):
                         os.remove(path)
+                if os.path.exists(figure_folder):
+                    for file in os.listdir(figure_folder):
+                        if alias in file:
+                            os.remove(os.path.join(figure_folder, file))
 
+        # Create the folder for figures if it doesn't exist
+        os.makedirs(folder + '/figures', exist_ok=True)
+        
+        # Load the kwargs from the file if it exists
+        self.species_list = kwargs.get('species_list', [])
         if os.path.exists(kwargs_path):
-            print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
+            if self.verbose:
+                print(f'Simulation.__init__(): Loading kwargs from {kwargs_path}')
             with open(kwargs_path, 'r') as file:
-                kwargs = json.load(file)
+                kwargs_file = json.load(file)
+            kwargs.update(kwargs_file)
+
+            species_files = [f for f in os.listdir(folder) if f.startswith(
+                'species') and f.endswith(f'-{alias}.json')]
+            species_list = []
+            for species_file in species_files:
+                with open(os.path.join(folder, species_file), 'r') as sf:
+                    species_kwargs = json.load(sf)
+                    species = PlantSpecies(**species_kwargs)
+                    species_list.append(species)
+            self.species_list = sorted(
+                species_list, key=lambda x: x.species_id)
+            if self.verbose:
+                print(f'Simulation.__init__(): Loaded {len(self.species_list)} species.')
 
         self.__dict__.update(default_kwargs)
         self.__dict__.update(kwargs)
+        self.box = np.array(self.box, dtype=float)
+        
         self.folder = folder
-
-        if alias is None:
-            alias = 'test'
         self.alias = alias
 
-        self.t = 0
-        self.plants = []
-        self.land_quality = 0.001
+        self.plants = PlantCollection()
+        
+        self.conversion_factors_default = {
+            'r_min': self.L, # m
+            'r_max': self.L, # m
+            'dispersal_range': self.L, # m
+            'density_range': self.L, # m
+            'maturity_size': self.L, # m
+            'spawn_rate': 1/ self.L**2 / self.time_step, # 1/ m2 / yr
+            'growth_rate': self.L/self.time_step, # m / yr
+        }
 
-        self.half_width = 0.5
-        self.half_height = 0.5
+        # ensure that the species list is not empty
+        if self.species_list == []:
+            self.species_list = [PlantSpecies()]
+            
+        # Define species kwargs paths and save them         
+        for s in self.species_list:
+            species_kwargs_path=f'{folder}/species{str(s.species_id).replace('-', '_')}-{alias}.json'
+            
+            if kwargs.get('convert_kwargs', True) == True:
+                save_dict(path = species_kwargs_path, d=s.__dict__, verbose=self.verbose)
+                converted_dict = convert_dict(
+                    d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
+                s.__dict__.update(converted_dict)
+            else:
+                converted_dict = convert_dict(
+                    d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+                save_dict(path = species_kwargs_path, d=converted_dict, verbose=self.verbose)
 
-        self._m = 1 / self.L
-        self.r_min = self.r_min * self._m
-        self.r_max = self.r_max * self._m
-        self.dispersal_range = self.dispersal_range * self._m
-        self.spawn_rate = self.spawn_rate * self.time_step
-        self.growth_rate = self.growth_rate * self._m * self.time_step
-        self.density_check_radius = self.density_check_radius * self._m
+
+        self.maximum_plant_size = max(
+            [s.r_max for s in self.species_list])
         self.kt = None
 
         self.id_generator = IDGenerator()
 
-        self.save_dict(path=kwargs_path)
+        # Define the buffers and the density field
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
-        self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)
-        self.density_field = DensityField(
-            half_width=self.half_width,
-            half_height=self.half_height,
-            density_radius=self.density_check_radius,
+        if self.density_scheme == 'global':
+            self.density_field_resolution = 1
+        # self.density_field_buffer = FieldBuffer(
+        #     file_path=density_field_buffer_path, resolution=self.density_field_resolution, skip=self.density_field_buffer_skip)
+        self.density_field = DensityFieldCustom(box=self.box,
             resolution=self.density_field_resolution,
         )
+        
+        # Import existing data from the data buffer if it exists
+        exisiting_data = self.data_buffer.get_data()
+        if not exisiting_data.empty:
+            self.precipitation = exisiting_data['Precipitation'].iloc[-1]
+            self.t = exisiting_data['Time'].iloc[-1]
 
-        last_state_df = self.state_buffer.get_last_state()
-        if not last_state_df.empty:
-            self.plants = [Plant(id=id, x=x, y=y, r=r, **self.__dict__) for (id, x, y, r)
-                           in last_state_df[['id', 'x', 'y', 'r']].values]
-            self.t = last_state_df['t'].values[-1]
-        self.initiate()
+        # Import existing state from the state buffer if it exists
+        if kwargs.get('state', None) is not None:
+            if self.verbose:
+                print(f'Simulation.__init__(): Loading state from kwargs["state"]')
+            self.set_state(kwargs['state'])
+            self.__dict__.pop('state')
+        elif not override:
+            if self.verbose:
+                print(f'Simulation.__init__(): Loading state from state_buffer')
+            state_df = self.state_buffer.get_last_state()
+            if not state_df.empty:
+                self.set_state(state_df)
 
-    def initiate(self):
-        self.update_kdtree(self.plants)
-        self.density_field.update(self.plants)
-        print(f'\nSimulation.initiate(): Time: {time.strftime("%H:%M:%S")}')
+        # Convert the kwargs to the correct units if needed
+        if kwargs.get('convert_kwargs', True) == True:
+            save_dict(path = kwargs_path, d=self.__dict__, exclude=self.exclude_default)
+            converted_dict = convert_dict(
+                d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=False)
+            self.__dict__.update(converted_dict)
+        else:
+            converted_dict = convert_dict(
+                d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+            save_dict(path = kwargs_path, d=self.__dict__, exclude=self.exclude_default)
+                    
+        if 'convert_kwargs' in self.__dict__:
+            self.__dict__.pop('convert_kwargs')
 
-    def add(self, plant: Union[Plant, List[Plant], np.ndarray]):
+        self.seed = kwargs.get('seed', None)
+        if self.verbose:
+            print(f'Simulation.__init__(): Time: {time.strftime("%H:%M:%S")}')
+            print(f'Simulation.__init__(): Folder: {folder}, Alias: {alias}')
+
+    def add(self, plant):
         if isinstance(plant, Plant):
             self.plants.append(plant)
+        elif isinstance(plant, PlantCollection):
+            self.plants.add_plants(plant.plants)
         elif isinstance(plant, (list, np.ndarray)):
             for p in plant:
                 if isinstance(p, Plant):
@@ -381,97 +216,103 @@ class Simulation:
             raise ValueError(
                 "Input must be a Plant object or an array_like of Plant objects")
 
-    def update_kdtree(self, state):
-        if len(state) == 0:
+    def update_kdtree(self, plants):
+        if len(plants) == 0:
             self.kt = None
         else:
-            self.kt = KDTree(
-                [(plant.x, plant.y) for plant in state])
+            self.kt = KDTree(plants.positions)
 
     def step(self):
-        n = self.spawn_rate
-        self.attempt_spawn(n=n)
-
-        n0 = len(self.plants)
-        # First Phase: Update all plants based on the current state of the simulation
-        for plant in self.plants:
-            plant.update(self)
-
-        # Second Phase: Collect non-dead plants and add them to the new state, and make sure all new plants get a unique id
-        new_plants = []
-        for plant in self.plants:
-            if not plant.is_dead:
-                new_plants.append(plant)
-
-        self.plants = new_plants
+        if not self.is_running:
+            raise ValueError(
+                'Simulation.step(): Simulation is not running. Please call run() first or set Simulation.is_running = True.')
+        # Update all plants based on the current state of the simulation
+        self.plants.grow(self)
+        self.plants.mortality()
+        
+        # Disperse and spawn new plants
+        disperse_positions, parent_species = self.plants.disperse(self)
+        self.attempt_germination(disperse_positions, parent_species)
+        self.attempt_spawn(n=self.spawn_rate)
+        
+        # Check for and resolve collisions
+        self.resolve_collisions(positions=self.plants.positions, radii=self.plants.radii)
+        
+        # Remove dead plants
+        self.plants.remove_dead_plants()
 
         prev_t = self.t
         self.t += self.time_step
 
         # Update necessary data structures
-        self.density_field.update(self.plants)
+        self.density_field.update(self.plants, density_scheme=self.density_scheme)
         self.update_kdtree(self.plants)
 
-        self.data_buffer.add(self.collect_data())
+        self.data_buffer.add(self.get_data())
 
         prev_mod_state = prev_t % self.state_buffer.skip
         mod_state = self.t % self.state_buffer.skip
         do_save_state = prev_mod_state >= mod_state
-        prev_mod_density_field = prev_t % self.density_field_buffer.skip
-        mod_density_field = self.t % self.density_field_buffer.skip
-        do_save_density_field = prev_mod_density_field >= mod_density_field
+        # prev_mod_density_field = prev_t % self.density_field_buffer.skip
+        # mod_density_field = self.t % self.density_field_buffer.skip
+        # do_save_density_field = prev_mod_density_field >= mod_density_field
 
         if do_save_state:
             self.state_buffer.add(plants=self.plants, t=self.t)
-        if do_save_density_field:
-            self.density_field_buffer.add(
-                field=self.density_field.values, t=self.t)
+        # if do_save_density_field:
+        #     self.density_field_buffer.add(
+        #         field=self.density_field.values, t=self.t)
+            
+        if self.verbose:
+            self.print()
+            
+            if self.t % 100 == 0:
+                if len(self.species_list) > 1:
+                    species_counts = {species.species_id: 0 for species in self.species_list}
+                    for plant in self.plants:
+                        species_counts[plant.species_id] += 1
+                    if self.verbose:
+                        print(f'Species counts: {species_counts}')
 
-    def run(self, T, max_population=None, transient_period=2):
-
+    def run(self, T, min_population=None, max_population=None, max_biomass = None, transient_period=0, dp=0, convergence_stop=False):
+        run_start_time = self.t
         start_time = time.time()
         n_iter = int(np.ceil(T / self.time_step))
-        print(f'Simulation.run(): Running simulation for {n_iter} iterations...')
+        
+        print(f'Simulation.run(): Running simulation for {n_iter} iterations from t = {self.t}...')
         try:
+            self.set_seed(self.seed)
+            self.is_running = True
+            self.print()
+            if self.verbose:
+                print('\nSimulation.run(): Starting simulation...')
             for _ in range(0, n_iter):
+                if _ > transient_period:
+                    self.precipitation = min(1, max(0, self.precipitation + dp))
                 self.step()
-                is_converged, convergence_factor = self.convergence_check()[:2]
 
-                if self.verbose:
-                    elapsed_time = time.time() - start_time
-                    hours, rem = divmod(elapsed_time, 3600)
-                    minutes, seconds = divmod(rem, 60)
-                    elapsed_time_str = f"{str(int(hours))}".rjust(
-                        2, '0') + ":" + f"{str(int(minutes))}".rjust(2, '0') + ":" + f"{str(int(seconds))}".rjust(2, '0')
-
-                    if _ % 3 == 0:
-                        dots = '.  '
-                    elif _ % 3 == 1:
-                        dots = '.. '
-                    else:
-                        dots = '...'
-
-                    data = self.collect_data()
-                    t, biomass, population = data[[
-                        'Time', 'Biomass', 'Population']].values.reshape(-1)
-                    t = float(round(t, 2))
-
-                    print(f'{dots} Elapsed time: {elapsed_time_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  conv = {np.round(convergence_factor, 8):<10}', end='\r')
                 # if the population exceeds the maximum allowed, stop the simulation
                 l = len(self.plants)
-                if (max_population is not None and l > max_population):
-                    print(
-                        f'\nSimulation.run(): Population exceeded {max_population}. Stopping simulation...')
+                if isinstance(convergence_stop, int):
+                    conv = self.convergence(t_min=run_start_time, trend_window=convergence_stop)
+                else:
+                    conv = self.convergence(t_min=run_start_time)
+                stop_conditions = [
+                    (max_population is not None and l > max_population, f'Population exceeded {max_population}'),
+                    (min_population is not None and l < min_population, f'Population below {min_population}'),
+                    (max_biomass is not None and self.get_biomass() > max_biomass, f'Biomass exceeded {max_biomass}'),
+                    (convergence_stop and conv, f'Convergence reached at t = {self.t}')
+                ]
+                for condition, message in stop_conditions:
+                    if condition:
+                        print(f'\nSimulation.run(): {message}. Stopping simulation...')
+                        break
+                if condition:
                     break
-                elif is_converged:
-                    print(
-                        f'\nSimulation.run(): Convergence reached at t = {self.t}. Stopping simulation...')
-                    break
-
 
         except KeyboardInterrupt:
             print('\nInterrupted by user...')
-
+        self.is_running = False
         self.finalize()
 
         elapsed_time = time.time() - start_time
@@ -483,147 +324,316 @@ class Simulation:
         print(f'Simulation.run(): Done. Elapsed time: {elapsed_time_str}')
         print()
 
-    def set_path(self, folder, alias=None, override=False):
+    def find_collision_losers(self, collision_indices, radii, competition_scheme):
+            if len(collision_indices) == 0:
+                return np.empty(0, dtype=int)
+            
+            collision_indices = np.random.permutation(collision_indices)
+            
+            if competition_scheme.lower() == 'all':
+                return np.unique([
+                    j if radii[i] > radii[j] else i
+                    for i, j in collision_indices
+                ])
+            elif competition_scheme.lower() == 'sparse':
+                collision_losers_indices = set()
+                for i, j in collision_indices:
+                    if i not in collision_losers_indices and j not in collision_losers_indices:
+                        if radii[i] > radii[j]:
+                            collision_losers_indices.add(j)
+                        else:
+                            collision_losers_indices.add(i)
+                return np.array(list(collision_losers_indices), dtype=int)
+            else:
+                raise ValueError(
+                    f'Simulation.resolve_collisions(): Competition scheme "{competition_scheme}" not recognized.')
+
+    def resolve_collisions(self, positions, radii, boundary_condition=None, competition_scheme=None):
+        if len(positions) == 0:
+            return np.empty(0, dtype=int)
+        
+        boundary_condition = boundary_condition or self.boundary_condition
+        competition_scheme = competition_scheme or self.competition_scheme
+        indices_dead = np.empty(0, dtype=int)
+
+        if boundary_condition.lower() == 'periodic':
+            positions_shifted, index_pairs, was_shifted = positions_shift_periodic(
+                box=self.box, positions=positions, radii=radii, duplicates=True)
+            radii_shifted = radii[index_pairs[:, 0]]
+            collision_indices_shifted = get_all_collisions(positions_shifted, radii_shifted)
+            
+            collision_losers_indices = self.find_collision_losers(collision_indices_shifted, radii_shifted, competition_scheme)
+            indices_dead_shifted = list(set(index_pairs[:, 1][~was_shifted]).intersection(collision_losers_indices))
+            indices_dead = index_pairs[:, 0][indices_dead_shifted]
+
+        elif boundary_condition.lower() == 'box':
+            collision_indices = get_all_collisions(positions, radii)
+            
+            collision_losers_indices = self.find_collision_losers(collision_indices, radii, competition_scheme)
+            indices_dead = collision_losers_indices
+
+        else:
+            raise ValueError(
+                f'Simulation.step(): Boundary condition "{boundary_condition}" not recognized.')
+
+        self.plants.is_dead[indices_dead] = True
+        ### SHOULD BE OPTIMIZED ###
+        for i in indices_dead:
+            self.plants[i].is_dead = True
+        return indices_dead
+        
+    def _flush_buffers(self):
+        self.data_buffer._flush_buffer()
+        self.state_buffer._flush_buffer()
+        # self.density_field_buffer._flush_buffer()
+
+    def set_seed(self, seed=None):
+        if seed == 'random':
+            seed = np.random.randint(0, 2**32, dtype=np.uint32)
+        elif not isinstance(seed, (int, np.int32, np.int64, np.uint32, np.uint64)):
+            raise ValueError(
+                f'Simulation.set_seed(): Seed must be an integer or "random". Got {type(seed)} instead.')
+        self.seed = seed
+        np.random.seed(self.seed)
+        if self.verbose:
+            print(f'Simulation.set_seed(): Seed set to {self.seed}')
+        return self.seed
+
+    def set_folder(self, folder, alias=None, override=False, force=False):
         self.folder = folder
-        self.alias = alias
-        data_buffer_path = f'{folder}/data_buffer_{alias}.csv'
-        state_buffer_path = f'{folder}/state_buffer_{alias}.csv'
-        density_field_buffer_path = f'{folder}/density_field_buffer_{alias}.csv'
-        if override and os.path.exists(data_buffer_path):
-            do_override = input(
-                f'Simulation.set_path(): OVERRIDE existing files in folder {folder} with alias {alias}? (Y/n):')
-            if do_override.lower() != 'y':
-                for path in [data_buffer_path, state_buffer_path, density_field_buffer_path]:
-                    if os.path.exists(path):
-                        os.remove(path)       
-                else:
-                    raise ValueError('Simulation.set_path(): Aborted by user...')             
+        self.alias = alias or self.alias
+
+        kwargs_path = f'{folder}/kwargs-{self.alias}.json'
+        data_buffer_path = f'{folder}/data_buffer-{self.alias}.csv'
+        state_buffer_path = f'{folder}/state_buffer-{self.alias}.csv'
+        # density_field_buffer_path = f'{folder}/density_field_buffer-{self.alias}.csv'
+        figure_folder = f'{folder}/figures'
+
+        if force:
+            print()
+            print("##################################################")
+            print("##### WARNING: FORCED OVERRIDING IS ENABLED. #####")
+            print("##################################################")
+            print()
+            
+        if (force or override) and os.path.exists(folder):
+            if not force:
+                do_override = input(
+                    f'Simulation.set_folder(): OVERRIDE existing files in folder "{folder}" with alias "{self.alias}"? (Y/n):')
+                do_override = do_override.lower()
+                if do_override != 'y':
+                    raise ValueError('Simulation.set_folder(): Aborted by user...')
+            if force or do_override.lower() == 'y':
+                for file in os.listdir(folder):
+                    if self.alias in file:
+                        file_path = os.path.join(folder, file)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            
+
+        os.makedirs(folder + '/figures', exist_ok=True)
+
         self.data_buffer = DataBuffer(file_path=data_buffer_path)
         self.state_buffer = StateBuffer(file_path=state_buffer_path)
-        self.density_field_buffer = FieldBuffer(file_path=density_field_buffer_path, resolution=self.density_field_resolution)
-        
-        self.data_buffer.add(self.collect_data())
-        self.data_buffer._flush_buffer()
-        self.state_buffer.add(plants=self.plants, t=self.t)
-        self.state_buffer._flush_buffer()
-        self.density_field_buffer.add(
-                        field=self.density_field.values, t=self.t)
-        self.density_field_buffer._flush_buffer()
+        # self.density_field_buffer = FieldBuffer(
+        #     file_path=density_field_buffer_path, resolution=self.density_field_resolution)
+        for s in self.species_list:
+            converted_dict = convert_dict(
+                d=s.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+            save_dict(
+                path=f'{folder}/species_{s.species_id}-{self.alias}.json', d=converted_dict)
 
+        converted_dict = convert_dict(
+            d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+        save_dict(d=converted_dict, path=kwargs_path,
+                  exclude=self.exclude_default)
+        
+        return self
+
+    def set_state(self, state_df):
+        # self.plants = []
+        self.plants = PlantCollection()
+        if not state_df.empty:
+            if 'species' not in state_df.columns:
+                warnings.warn(
+                    'Simulation.set_state(): "species" column not found in state_buffer. Assuming species_id = -1 for all plants.')
+                state_df['species'] = -1
+
+            for (id, x, y, r, species_id) in state_df[['id', 'x', 'y', 'r', 'species']].values:
+                s = next(
+                    (s for s in self.species_list if s.species_id == species_id), None)
+                if s is None:
+                    raise ValueError(
+                        f'Simulation.set_state(): Species with id {species_id} not found in species_list.')
+                self.plants.append(s.create_plant(id=id, x=x, y=y, r=r))
+
+            self.t = state_df['t'].values[-1]
+
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+        self.data_buffer.add(data=self.get_data())
+        self.state_buffer.add(plants=self.plants, t=self.t)
+        # self.density_field_buffer.add(
+        #     field=self.density_field.values, t=self.t)
+        
     def finalize(self):
+        print(f'Simulation.finalize(): Time: {time.strftime("%H:%M:%S")}')
         self.data_buffer.finalize()
         self.state_buffer.finalize()
-        self.density_field_buffer.finalize()
-        self.save_dict(path=f'{self.folder}/kwargs_{self.alias}')
-        print(f'Simulation.finalize(): Time: {time.strftime("%H:%M:%S")}')
+        # self.density_field_buffer.finalize()
+        converted_dict = convert_dict(
+            d=self.__dict__, conversion_factors=self.conversion_factors_default, reverse=True)
+        save_dict(d=converted_dict,
+                  path=f'{self.folder}/kwargs-{self.alias}', exclude=self.exclude_default)
 
-    def convergence_check(self, trend_window=6000, trend_threshold=1):
-        data = self.data_buffer.get_data()[['Time', 'Biomass']]
-        if data.shape[0] < 2:
-            return False, -1, None
-        time = data['Time'].values
-        biomass = data['Biomass'].values
-        time_step = time[1] - time[0]
-        window = np.min([int(trend_window//time_step), len(time)])
-        x = time[-window:]
-        y = biomass[-window:]
-        σy = np.std(y)
-        μy = np.mean(y)
-        if σy == 0:
-            _, slope_norm, regression_line_norm, _, _ = linear_regression(
-                x, y, advanced=True)
-            regression_line = regression_line_norm
-        else:
-            y_norm = (y - μy) / σy
-            _, slope_norm, regression_line_norm, _, _ = linear_regression(
-                x, y_norm, advanced=True)
-            regression_line = regression_line_norm * σy + μy
+    def convergence(self, trend_window=1500, trend_threshold=1e-1, t_min=0):
+        # If there are not enough data points to calculate convergence, return False
+        if self.t - t_min < 2:
+            return False
+        
+        # Calculate the number of time steps in the window
+        window = int(trend_window//self.time_step)
+        
+        # If the number of available data points is less than the window, return False
+        if self.t - t_min < window:
+            return False
+        
+        # Get the last 'window' data points
+        data = self.data_buffer.get_data().tail(window)
+        x, biomass, population = data['Time'].values, data['Biomass'].values, data['Population'].values
+        
+        # If the whole window has not yet passed t_min return False
+        if len(x) < 1:
+            return False
+        if x[0] < t_min:
+            return False
+        
+        # Calculate whether the windowed data is converged
+        is_converged_biomass = convergence_check(x, biomass, trend_threshold=trend_threshold)
+        is_converged_population = convergence_check(x, population, trend_threshold=trend_threshold)
+        is_converged = is_converged_biomass and is_converged_population
+        return is_converged
+        
+    # def remove_fraction(self, fraction):
+    #     # Determine the indices of plants to remove
+    #     total_plants = len(self.plants)
+    #     num_to_remove = int(fraction * total_plants)
+    #     indices_to_remove = set(np.random.choice(total_plants, num_to_remove, replace=False))
 
-        convergence_factor = np.abs(slope_norm) * \
-            trend_window - trend_threshold
-        is_converged = bool(convergence_factor < 0) & bool(
-            self.t > trend_window)
-        return is_converged, convergence_factor, regression_line
+    #     # Use set difference to determine the indices to keep
+    #     indices_to_keep = set(range(total_plants)) - indices_to_remove
 
-    def attempt_spawn(self, n: int):
+    #     # Create a new PlantCollection with only the plants to keep
+    #     plants_to_keep = [self.plants[i] for i in indices_to_keep]
+    #     self.plants = PlantCollection(plants=plants_to_keep)
 
-        # Take care of the decimal part of n
+    #     # Update the KDTree and density field
+    #     self.update_kdtree(self.plants)
+    #     self.density_field.update(self.plants)
+    
+    def remove_fraction(self, fraction):
+        # Determine the indices of plants to remove
+        total_biomass = self.get_biomass()
+        target_biomass = total_biomass * (1 - fraction)
+        
+        plants = self.plants.copy()
+        while len(plants) > 0 and sum(plants.radii**2 * np.pi) > target_biomass:
+            random_index = np.random.randint(0, len(plants))
+            plants.pop(random_index)
+            
+        self.plants = PlantCollection(plants=plants)
+
+        # Update the KDTree and density field
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+
+    def attempt_spawn(self, n, species_list=[]):
+        if species_list == []:
+            species_list = self.species_list
+
+        # Take care of the decimal part of the spawn rate n
         decimal_part = n - int(n)
         n = int(n)
         if np.random.rand() < decimal_part:
             n += 1
 
-        new_positions = np.random.uniform(-self.half_width,
-                                          self.half_width, (n, 2))
+        # Generate new positions and species
+        new_positions = np.random.uniform(self.box[:, 0], self.box[:, 1], (n, 2))
+        new_species = np.random.choice(species_list, n)
 
-        densities = self.density_field.query(new_positions)
+        self.attempt_germination(new_positions, new_species)
+    
+    def local_density(self, pos):
+        return self.density_field.query(pos)
+        
+    def get_density(self):
+        return np.sum(self.density_field.values)
 
-        random_values = np.random.uniform(0, 1, n)
-
-        probabilities = np.clip(
-            densities * self.precipitation, self.land_quality, 1)
-
-        spawn_indices = np.where(
-            probabilities > random_values)[0]
-
-        new_plants = [
-            Plant(
-                id=self.id_generator.get_next_id(),
-                x=new_positions[i][0],
-                y=new_positions[i][1],
-                r=self.r_min,
-                r_min=self.r_min,
-                r_max=self.r_max,
-                growth_rate=self.growth_rate,
-                dispersal_range=self.dispersal_range
-            )
-            for i in spawn_indices
-        ]
-
-        self.add(new_plants)
-
-    def get_collisions(self, plant: Plant) -> List[Plant]:
-        """
-        Get a list of plants that collide with the given plant.
-
-        Parameters:
-        -----------
-        plant : Plant
-            The plant to check for collisions.
-
-        Returns:
-        --------
-        List[Plant]
-            A list of plants that collide with the given plant.
-        """
-        plant.is_colliding = False
-        collisions = []
-        if self.kt is not None:
-            indices = self.kt.query_ball_point(
-                x=(plant.x, plant.y), r=plant.d, workers=-1)
-            for i in indices:
-                other_plant = self.plants[i]
-                if other_plant != plant:
-                    if check_collision(plant, other_plant):
-                        plant.is_colliding = True
-                        other_plant.is_colliding = True
-                        collisions.append(other_plant)
-        return collisions
-
-    def pos_in_box(self, pos: np.ndarray) -> bool:
-        pos_in_box = np.abs(pos[0]) < self.half_width and np.abs(
-            pos[1]) < self.half_height
-        return pos_in_box
-
-    def local_density(self, pos: np.ndarray) -> float:
-        if self.pos_in_box(pos):
-            return self.density_field.query(pos)
+    def attempt_germination(self, positions_to_germinate, parent_species):
+        if len(positions_to_germinate) == 0:
+            return
+        
+        parent_species = np.atleast_1d(parent_species)
+        if len(parent_species) == 1:
+            parent_species = np.repeat(parent_species, len(positions_to_germinate))
+        elif len(parent_species) != len(positions_to_germinate):
+            raise ValueError(
+                'Simulation.attempt_germination(): The number of parent species must match the number of positions.')
+        
+        # ENFORCE BOUNDARIES
+        if self.boundary_condition.lower() == 'periodic':
+            positions_new, index_pairs, was_shifted = positions_shift_periodic(box=self.box, positions=positions_to_germinate, duplicates=False)
+                        
+            positions_to_germinate = positions_new
+            parent_species = parent_species[index_pairs[:, 0]]
+            
+            
+            box_check = outside_box_check(box=self.box, positions=positions_to_germinate)
+            # print(f'Simulation.attempt_germination(): {box_check.shape} positions outside the box.')
+            # print(f'Simulation.attempt_germination(): {positions_to_germinate.shape} positions to germinate.')
+            # print(f'Simulation.attempt_germination(): {parent_species.shape} parent species to germinate.')
+            # if np.any(box_check):
+            #     print(f'Simulation.attempt_germination(): {box_check.sum()} positions outside the box.')
+            #     print(f'Simulation.attempt_germination(): {len(positions_to_germinate) = } positions to germinate.')
+            positions_to_germinate = positions_to_germinate[~np.any(box_check, axis=1)]
+            parent_species = parent_species[~np.any(box_check, axis=1)]
+            
+        elif self.boundary_condition.lower() == 'box':
+            box_check = np.any(outside_box_check(box=self.box, positions=positions_to_germinate), axis=1)
+            positions_to_germinate = positions_to_germinate[~box_check]
+            parent_species = parent_species[~box_check]
         else:
-            return 0
+            raise ValueError(
+                f'Simulation.attempt_germination(): Boundary condition "{self.boundary_condition}" not recognized.')
+        
+        species_germination_chances = np.array([s.germination_chance for s in parent_species])
+        if self.density_scheme == 'local':
+            germination_chances = np.maximum(self.land_quality, self.local_density(positions_to_germinate)) * self.precipitation * species_germination_chances
+        elif self.density_scheme == 'global':
+            germination_chances = np.maximum(self.land_quality, self.get_density()) * self.precipitation * species_germination_chances
+        else:
+            raise ValueError(
+                f'Simulation.attempt_germination(): Density scheme "{self.density_scheme}" not recognized.')
+        random_values = np.random.uniform(0, 1, len(positions_to_germinate))
+        germination_indices = np.where(germination_chances > random_values)[0]
 
-    def collect_data(self):
-        sizes = np.array([plant.r for plant in self.plants])
-        biomass = np.array([plant.area for plant in self.plants])
+        new_plants = []
+        for i in germination_indices:
+            new_plant = parent_species[i].create_plant(
+                id=self.id_generator.get_next_id(), 
+                x=positions_to_germinate[i, 0], 
+                y=positions_to_germinate[i, 1], 
+                r=parent_species[i].r_min,
+                is_dead=False
+            )
+            new_plants.append(new_plant)
+                    
+        if len(new_plants) > 0:
+            self.add(new_plants)
+            # print(f'Simulation.attempt_germination(): {len(new_plants)} plants germinated.')
+
+    def get_data(self):
+        biomass = self.plants.radii**2 * np.pi
         biomass_total = sum(biomass)
         population = len(self.plants)
         data = pd.DataFrame(
@@ -631,199 +641,314 @@ class Simulation:
                 'Time': [self.t],
                 'Biomass': [biomass_total],
                 'Population': [population],
+                'Precipitation': [self.precipitation],
             }
         )
         return data
+    
+    def get_biomass(self):
+        return sum(self.plants.radii**2 * np.pi)
+    
+    def get_population(self):
+        return len(self.plants)
 
-    # def initiate_uniform_lifetimes(self, n: int, t_min: float, t_max: float, growth_rate: float):
-        # if self.plants != []:
-        # raise ValueError(
-        #     "Simulation.initiate_uniform_lifetimes(): The simulation is not empty. Please initialize an empty simulation.")
-    #     r_min = t_min * growth_rate
-    #     r_max = t_max * growth_rate
-    #     plants = [
-    #         Plant(
-    #             id=self.id_generator.get_next_id(),
-    #             x=np.random.uniform(-self.half_width, self.half_width),
-    #             y=np.random.uniform(-self.half_height, self.half_height),
-    #             r=np.random.uniform(r_min, r_max),
-    #             r_min=r_min,
-    #             r_max=r_max,
-    #             growth_rate=growth_rate,
-    #             dispersal_range=self.dispersal_range
-    #         )
-    #         for i in range(n)
-    #     ]
-    #     self.add(plants)
-    #     self.initiate()
-        # self.data_buffer.add(data=self.collect_data())
-        # self.state_buffer.add(plants=self.plants, t=self.t)
-
-    def initiate_uniform_radii(self, n: int, r_min: float, r_max: float):
-        if self.plants != []:
+    def initiate_uniform_radii(self, n, species_list=[], box=None):
+        if len(self.plants) != 0:
             raise ValueError(
                 "Simulation.initiate_uniform_radii(): The simulation is not empty. Please initialize an empty simulation.")
-        r_min = r_min * self._m
-        r_max = r_max * self._m
 
-        new_plants = [
-            Plant(
-                id=self.id_generator.get_next_id(),
-                x=np.random.uniform(-self.half_width, self.half_width),
-                y=np.random.uniform(-self.half_height, self.half_height),
-                r=np.random.uniform(r_min, r_max),
-                r_min=r_min,
-                r_max=r_max,
-                growth_rate=self.growth_rate,
-                dispersal_range=self.dispersal_range
+        if species_list == []:
+            species_list = self.species_list
+
+        if box is None:
+            box = np.asarray(self.box, dtype=float)
+
+        new_plants = []
+        # COULD BE PARALLELIZED
+        for i in range(n):
+            current_species = np.random.choice(species_list)
+            new_plants.append(
+                current_species.create_plant(
+                    id=self.id_generator.get_next_id(),
+                    x=np.random.uniform(*box[0]),
+                    y=np.random.uniform(*box[1]),
+                    r=np.random.uniform(current_species.r_min,
+                                        current_species.r_max))
             )
-            for i in range(n)
-        ]
+
         self.add(new_plants)
-        self.initiate()
-        self.data_buffer.add(data=self.collect_data())
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+        self.data_buffer.add(data=self.get_data())
         self.state_buffer.add(plants=self.plants, t=self.t)
+        
+    def spawn_non_overlapping(self, n=None, target_density=0.1, max_attempts=100_000, r_min=None, r_max=None, species_list=[], box=None, force=False, gaussian=False, verbose=True):
+        if n is None and target_density is None:
+            raise ValueError("Simulation.spawn_non_overlapping(): Either n or target_density must be specified.")
+        if n is None:
+            n = np.inf
+        if target_density is None:
+            target_density = np.inf
+        if target_density > 1:
+            raise ValueError("Simulation.spawn_non_overlapping(): target_density must be within range(-inf, 1].)")
+            
+        if len(self.plants) > 0 and not force:
+            print(f"Simulation.spawn_non_overlapping(): {len(self.plants) = }")
+            print(f"Simulation.spawn_non_overlapping(): {force = }")
+            print(f"Simulation.spawn_non_overlapping(): {len(self.plants) > 0 and not force =}")
+            warnings.warn("Simulation.spawn_non_overlapping(): The simulation is not empty. Do you want to continue? (Y/n):")
+            user_input = input()
+            if user_input.lower() != 'y':
+                raise ValueError("Simulation.spawn_non_overlapping(): Aborted by user.")
+        if species_list == []:
+            species_list = self.species_list
+        L = self.L
+        new_plants = PlantCollection()
+        attempts = 0
+        if max_attempts is None:
+            max_attempts = 200 * n if n is not None else 50 * L
+        species_counts = {s.species_id: 0 for s in species_list}
+        weights = np.ones(len(species_list)) / len(species_list)
+        
+        if box is None:
+            box = self.box
+        else:
+            box = np.array(box)
+            if box.shape != (2, 2):
+                raise ValueError("Simulation.spawn_non_overlapping(): Box must be a 2x2 array.")
+            if box[0, 0] >= box[0, 1] or box[1, 0] >= box[1, 1]:
+                raise ValueError("Simulation.spawn_non_overlapping(): Box coordinates are invalid.")
+        
+        try:
+            stop_condition = False
+            biomass = 0
+            while stop_condition is False:
+                if len(new_plants) > 0:
+                    fractions = np.array([species_counts[s.species_id]
+                            for s in species_list]) / len(new_plants)
+                    weights = 1 - fractions
+                    if weights.sum() == 0:
+                        weights = np.ones(len(species_list)) / len(species_list)
+                    else:
+                        weights /= weights.sum()
+                
+                current_species = np.random.choice(species_list, p=weights)
+                if r_min is None:
+                    r_min = current_species.r_min
+                if r_max is None:
+                    r_max = current_species.r_max
+                if r_min > r_max:
+                    raise ValueError("Simulation.spawn_non_overlapping(): r_min must be less than r_max.")
+                if r_min < 0 or r_max < 0:
+                    raise ValueError("Simulation.spawn_non_overlapping(): r_min and r_max must be positive.")
+                
+                new_r = np.random.uniform(r_min, r_max)
+                if gaussian:
+                    center_of_box  = np.array([box[0, 0] + (box[0, 1] - box[0, 0]) / 2, box[1, 0] + (box[1, 1] - box[1, 0]) / 2])
+                    scale = np.random.uniform((box[0, 1] - box[0, 0])* 0.01,
+                                              (box[0, 1] - box[0, 0]))
+                    new_x = np.random.normal(loc=center_of_box[0], scale=scale)
+                    new_y = np.random.normal(loc=center_of_box[1], scale=scale)
+                else:
+                    new_x = np.random.uniform(*box[0])
+                    new_y = np.random.uniform(*box[1])
+                new_pos = np.array([new_x, new_y])
 
-    # def initiate_dense_distribution(self, n: int):
-        # if self.plants != []:
-        #     raise ValueError(
-        #         "Simulation.initiate_dense_distribution(): The simulation is not empty. Please initialize an empty simulation.")
-    #     mean_dbhs = np.array([0.05, 0.2, 0.4, 0.6, 0.85, 1.50])  # in m
-    #     mean_rs = dbh_to_crown_radius(mean_dbhs) * self._m
-    #     freqs = np.array([5800, 378.8, 50.98, 13.42, 5.62, 0.73])
 
-    #     # Apply log transformation to the data
-    #     log_mean_rs = np.log(mean_rs)
+                attempts += 1
+                if all(np.linalg.norm(new_pos - plant.pos()) >= new_r + plant.r for plant in new_plants):
+                    new_plants.append(current_species.create_plant(
+                    id=len(new_plants), x=new_x,  y=new_y, r=new_r))
+                    species_counts[current_species.species_id] += 1
+                    
+                    
+                    # biomass = sum([np.pi * plant.r**2 for plant in new_plants])
+                    box = np.array(box)
+                    biomass_in_box = sum([np.pi * plant.r**2 for plant in new_plants if np.all(np.logical_and(plant.pos() >= box[:, 0], plant.pos() <= box[:, 1]))])
+                    box_area = (box[0, 1] - box[0, 0]) * (box[1, 1] - box[1, 0])
+                    if box_area <= 0:
+                        raise ValueError("Simulation.spawn_non_overlapping(): Box area is zero or negative.")
+                    
+                    density = biomass_in_box / box_area
+                    # print()
+                    # print(f"Simulation.spawn_non_overlapping(): {biomass_in_box =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {box_area =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {density =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {target_density =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {len(new_plants) = }")
+                    # print(f"Simulation.spawn_non_overlapping(): {len(new_plants) >= n =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {density >= target_density =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {attempts >= max_attempts =}")
+                    # print(f"Simulation.spawn_non_overlapping(): {stop_condition =}")
 
-    #     # Calculate the KDE of the log-transformed data
-    #     kde = gaussian_kde(log_mean_rs, weights=freqs, bw_method='silverman')
+                    if verbose:
+                        print(f'Simulation.spawn_non_overlapping(): {len(new_plants) = :>5}/{n}   {density = :.3f}/{target_density:.3f}   {attempts = :>6}/{max_attempts}', end='\r')
+                    # print(
+                    # f'Simulation.spawn_non_overlapping(): {len(new_plants) = :>5}/{n}   {density = :.3f}/{target_density:.3f}   {attempts = :>6}/{max_attempts}', end='\r')
+                        
+                
+                stop_condition = (len(new_plants) >= n) or (density >= target_density) or (attempts >= max_attempts)
+        except KeyboardInterrupt:
+            print('\nInterrupted by user...')
+        
+        if verbose:
+            print(f'Simulation.spawn_non_overlapping(): {len(new_plants) = :>5}/{n}   {density = :.3f}/{target_density:.3f}   {attempts = :>6}/{max_attempts}', end=' ' * 20 + '\r')
 
-    #     # Resample from the KDE and transform back to the original space
-    #     log_samples = kde.resample(n)[0]
-    #     samples = np.exp(log_samples)
+        self.add(new_plants)
+        self.update_kdtree(self.plants)
+        self.density_field.update(self.plants)
+        self.data_buffer.add(data=self.get_data())
+        self.state_buffer.add(plants=self.plants, t=self.t)
+        
+        return new_plants, density, attempts
 
-    #     # Create the plants
-    #     plants = [
-    #         Plant(
-    #             id=self.id_generator.get_next_id(),
-    #               x = np.random.uniform(-self.half_width, self.half_width),
-    #               y = np.random.uniform(-self.half_height, self.half_height),
-    #             r=r,
-    #             r_min=self.r_min,
-    #             r_max=self.r_max,
-    #             growth_rate=self.growth_rate,
-    #             dispersal_range=self.dispersal_range
-    #         )
-    #         for i, r in enumerate(samples)
-    #     ]
-    #     self.add(plants)
-    #     self.initiate()
-    #     self.data_buffer.add(data=self.collect_data())
-    #     self.state_buffer.add(plants=state=self.plants, t=self.t)
-
-    # def initiate_packed_distribution(self, r: float):
-        # if self.plants != []:
-        #     raise ValueError(
-        #         "Simulation.initiate_packed_distribution(): The simulation is not empty. Please initialize an empty simulation.")
-    #     plants = []
-    #     dx = 2 * r
-    #     dy = np.sqrt(3) * r
-
-    #     for i, x in enumerate(np.arange(-self.half_width + r, self.half_width - r, dx)):
-    #         for j, y in enumerate(np.arange(-self.half_height + r, self.half_height - r, dy)):
-
-    #             if j % 2 == 0:
-    #                 x += r
-    #             if j % 2 == 1:
-    #                 x -= r
-    #             pos = np.array([x, y])
-    #             plants.append(
-    #                 Plant(
-    #                     id=self.id_generator.get_next_id(),
-    #                     pos=pos,
-    #                     r=r,
-    #                     r_min=self.r_min,
-    #                     r_max=self.r_max,
-    #                     growth_rate=self.growth_rate,
-    #                     dispersal_range=self.dispersal_range
-    #                 )
-    #             )
-
-    #     self.add(plants)
-    #     self.initiate()
     exclude_default = [
         'alias',
         'biomass_buffer',
         'buffer_preset_times',
+        'buffer_size',
+        'buffer_skip',
+        'conversion_factors_default',
         'data_buffer',
+        'density_check_radius',
         'density_field',
         'density_field_buffer',
         'folder',
         'half_height',
         'half_width',
+        'box',
         'id_generator',
         'kt',
-        'size_buffer',
+        'maximum_plant_size',
         'plants',
+        'size_buffer',
+        'species_list',
         'state_buffer',
-        'verbose'
+        'state',
+        'convert_dict',
+        'verbose',
+        '_m'
     ]
 
-    def save_dict(self, path: str, exclude: Optional[List[str]] = exclude_default):
-        conversion_factors = {
-            'r_min': self._m,
-            'r_max': self._m,
-            'dispersal_range': self._m,
-            'spawn_rate': self.time_step,
-            'growth_rate': self._m * self.time_step,
-            'density_check_radius': self._m
-        }
-        dict_temp = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
-                     for key, value in self.__dict__.items()}
+    def print(self, exclude=None):
+        print(self.__str__(), end='\r')
+    
+    def __str__(self):
+        if self.is_running:
+            runtime_str = time.strftime("%H:%M:%S")
+            dots = ['.  ', '.. ', '...'][int(self.t % 3)]
+            data = self.get_data()
+            t, biomass, population, precipitation = data[[
+                'Time', 'Biomass', 'Population', 'Precipitation']].values.reshape(-1)
+            t = float(round(t, 2))
 
-        save_kwargs(dict_temp, path, exclude=exclude)
+            s = f'{dots} Time: {runtime_str}' + ' '*5 + f'|  {t=:^8}  |  N = {population:<6}  |  B = {np.round(biomass, 4):<6}  |  P = {np.round(precipitation, 6):<8}'
+        else: 
+            s = f'Simulation {self.alias} is not running.'
+            s += '\n'
+        return s
+        
 
-    def print_dict(self, exclude=exclude_default):
-        """
-        Print the keyword arguments of the simulation.
-        """
-        conversion_factors = {
-            'r_min': self._m,
-            'r_max': self._m,
-            'dispersal_range': self._m,
-            'spawn_rate': self.time_step,
-            'growth_rate': self._m * self.time_step,
-            'density_check_radius': self._m
-        }
-        dict_temp = {key: (value / conversion_factors[key] if key in conversion_factors.keys() else value)
-                     for key, value in self.__dict__.items()}
+    def get_kwargs(self, exclude=None):
+        exclude = exclude or self.exclude_default
+        exclude = exclude if isinstance(exclude, list) else [exclude]
+        
+        kwargs = copy.deepcopy(self.__dict__)
+        for k in exclude:
+            if k in kwargs:
+                kwargs.pop(k)
+        # Convert the kwargs to the correct units
+        kwargs = convert_dict(
+            d=kwargs, conversion_factors=self.conversion_factors_default, reverse=True)
+        
+        for species in self.species_list:
+            species_title = species.name
+            kwargs[species_title] = copy.deepcopy(convert_dict(species.__dict__, conversion_factors=self.conversion_factors_default, reverse=True))
+            kwargs[species_title].pop('name')        
+        return kwargs
 
-        print_nested_dict(dict_temp, exclude=exclude)
+    def plot_buffers(self, title='', fast=False, data=True, plants=True, density_field=False, n_plots=20, dpi=300, save=False, folder=None):
+        n = sum([density_field, plants])
+        if n == 0:
+            raise ValueError("Simulation.plot(): No plots requested. Set density_field or plants to True.")
+        figs = []
+        axs = []
+        titles = []
+        if data and self.data_buffer is not None:
+            fig, axs_db, title_db = DataBuffer.plot(
+                data=self.data_buffer.get_data(),
+                title=title,
+                dict_to_print=self.get_kwargs()
+                )
+            figs.append(fig)
+            axs.append([ax for ax in axs_db])
+            titles.append(title_db)
+        if plants and self.state_buffer is not None:
+            fig, ax, title_sb = StateBuffer.plot(
+            data=self.state_buffer.get_data(),
+            title=title,
+            n_plots=n_plots,
+            box=self.box,
+            boundary_condition=self.boundary_condition,
+            fast=fast
+            )
+            figs.append(fig)
+            axs.append(ax)
+            titles.append(title_sb)
+        if density_field and self.density_field_buffer is not None:
+            fig, ax, title_fb = FieldBuffer.plot(
+                data=self.density_field_buffer.get_data(),
+                title=title,
+                n_plots=n_plots,
+                box=self.box,
+                boundary_condition=self.boundary_condition,
+                density_scheme=self.density_scheme,
+                )
+            figs.append(fig)
+            axs.append(ax)
+            titles.append(title_fb)   
+            
+        if save:
+            folder = folder or self.folder
+            os.makedirs(folder + '/figures', exist_ok=True)
+            for i, (fig, title) in enumerate(zip(figs, titles)):
+                title = title.replace(' ', '-')
+                fig.savefig(f'{folder}/figures/{title}.png', dpi=dpi)
+        return figs, axs, titles
 
-    def cleanup(self):
-        self.plants = []
-        self.kt = None
-        self.state_buffer = None
-        self.data_buffer = None
-        self.density_field_buffer = None
-        self.density_field = None
+    def plot(self, title='', fast=False, data=False, plants=True, density_field=True, plot_dead=False):
+        state = pd.DataFrame([[p.id, p.x, p.y, p.r, p.species_id, self.t, p.is_dead]
+                             for p in self.plants], columns=['id', 'x', 'y', 'r', 'species', 't', 'is_dead'])
+        
+        n = sum([plants, density_field])
+        m = sum([data])
+        if n == 0:
+            raise ValueError("Simulation.plot(): No plots requested. Set density_field or plants to True.")
+        
+        fig, axs = plt.subplots(1, n, figsize=(16, 6))
+        if plants:
+            StateBuffer.plot_state(size=6, state=state, title=title, box=self.box, 
+               boundary_condition=self.boundary_condition, fast=fast, 
+               plot_dead=plot_dead, ax=axs[0])
+        if density_field:
+            DensityFieldCustom.plot(field=self.density_field.get_values(), ax=axs[1], title=title, fast=fast, box=self.box,
+               boundary_condition=self.boundary_condition, plot_dead=plot_dead, competition_scheme=self.competition_scheme, density_scheme=self.density_scheme, t=self.t)
+        if data:
+            data_fig, data_axs, data_titles = DataBuffer.plot(data=self.data_buffer.get_data(), title=title, dict_to_print=self.get_kwargs())
+            # for data_ax in data_axs:
+            #     fig.add_subplot(data_ax)
 
-    def plot_buffers(self, title=None, convergence=True, n_plots=20, fast=False):
-        db_fig, db_ax = self.data_buffer.plot(title=title)
-        sb_fig, sb_ax = self.state_buffer.plot(title=title, n_plots=n_plots, fast=fast)
-        dfb_fig, dfb_ax = self.density_field_buffer.plot(title=title, n_plots=n_plots)
-        figs = [db_fig, sb_fig, dfb_fig]
-        axs = [db_ax, sb_ax, dfb_ax]
-        return figs, axs
+        for ax in axs[1:]:
+            ax.sharex(axs[0])
+            ax.sharey(axs[0])
+            
 
-    def plot(self):
-        state = pd.DataFrame([[p.id, p.x, p.y, p.r, self.t]
-                             for p in self.plants], columns=['id', 'x', 'y', 'r', 't'])
-        field = self.density_field.values
-
-        sb_fig, sb_ax = StateBuffer.plot_state(size=6, state=state)
-        fb_fig, fb_ax = FieldBuffer.plot_field(size=6, field=field)
-
-        figs = [sb_fig, fb_fig]
-        axs = [sb_ax, fb_ax]
-        return figs, axs
+        return fig, axs, title
+    
+    def plot_plants(self, title='', fast=False, plot_dead=False):
+        fig, ax = plt.subplots(figsize=(12, 6))
+        state = pd.DataFrame([[p.id, p.x, p.y, p.r, p.species_id, self.t, p.is_dead]
+                             for p in self.plants], columns=['id', 'x', 'y', 'r', 'species', 't', 'is_dead'])
+        StateBuffer.plot_state(size=6, state=state, title=title, box=self.box,
+                       boundary_condition=self.boundary_condition, fast=fast, ax=ax, plot_dead=plot_dead)
+        return fig, ax, title

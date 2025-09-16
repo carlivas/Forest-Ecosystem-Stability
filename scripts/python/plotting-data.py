@@ -14,7 +14,7 @@ darkgrey = np.array([30,  30,  30, 255])/255
 grey = np.array([128, 128, 128, 255])/255
 white = np.array([225, 225, 225, 255])/255
 
-path = '../../Data/starting_contenders/partial'
+path = '../../Data/linear_precipitation'
 save_plot = True
 
 if not os.path.exists(path):
@@ -24,7 +24,7 @@ load_folder = os.path.abspath(path)
 print(f'load_folder: {load_folder}')
 
 for root, dirs, files in os.walk(load_folder):
-    aliases = [f.split('_')[-1].split('.')[0] for f in files if 'kwargs' in f]
+    aliases = [f.split('-')[-1].split('.')[0] for f in files if 'kwargs-' in f]
     aliases = [n for n in aliases if 'checkpoint' not in n]
     if not aliases:
         continue
@@ -37,15 +37,20 @@ for root, dirs, files in os.walk(load_folder):
     max_num_plants = 0
     kwargs_list = []
     data_buffer_list = []
+    new_aliases = []
     for i, n in enumerate(aliases):
         kwargs = pd.read_json(
             f'{root}/kwargs_{n}.json', typ='series').to_dict()
         data_buffer = pd.read_csv(f'{root}/data_buffer_{n}.csv')
+        if data_buffer.empty:
+            continue
         data_buffer_list.append(data_buffer)
         kwargs_list.append(kwargs)
         num_plants = data_buffer['Population'].iloc[0]
         max_num_plants = max(max_num_plants, num_plants)
+        new_aliases.append(n)
 
+    aliases = new_aliases
     fig, ax = plt.subplots(2, 1, figsize=(8, 6))
 
     teal = np.array([0, 128, 128, 255])/255
