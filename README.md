@@ -1,13 +1,15 @@
 # 🌳 Forest Ecosystem Stability
-This repo includes the code i wrote in the process of writing my Master's Thesis "Tipping Points and Early Warning Signals in Complex Ecosystem Models". 
+This repository contains the code and analysis for my master's thesis, which investigates critical transitions in forest ecosystems using agent-based models. The project aims to understand how ecosystem tipping points change with increasing complexity of positive feedbacks inherent in local-scale ecosystem models.
 
-This project was about whether the presumption that *tipping points* (TPs) (understood as a single saddle-node bifurcation) and the associated effect of *critical slowing down* occur in physical systems governed by agent-based dynamics, holds. This involved me writing an agent-based forest ecosystem model, modelling trees as agents which can
-1. Grow
-2. Compete
-3. Reproduce
+## 📜 Abstract
+Several large ecosystems face irreversible, abrupt transitions to different states, such as a rainforest transitioning to a savannah. These shifts are driven by positive feedback loops that become dominant at tipping points (TPs). 
 
-The reproducting is facilitated through a positive feedback mechanism, was intentionally designed to have a *global* and a *local* mode, the *global* mode being the globally averaged tree density and the *local* model being a local estimation of the tree density using a kernel density estimation approach.
+"Critical slowing down" (CSD) can be used to predict TPs by monitoring increased variability in observables, acting as early-warning signals (EWS). My research explores how spatial feedback mechanisms affect forest resilience and investigates if classic tipping point theory applies to more complex ecological systems.
 
-The work took a full year to write and resulted in the insight that tipping points do in fact happen in these kinds of systems, and the locality of the positive feedback was found to be of special importance.
+## 💻 Methodology
+- Model Construction: Two individual-based forest ecosystem models were constructed to examine the effects of local vs. non-local positive feedbacks. The individual-based approach ensures that the saddle-node bifurcation is not "baked in" to the model via governing differential equations.
+- Numerical Simulation: The project numerically found different stable vegetation configurations within the models and determined their bifurcations as control parameters, such as mean annual rainfall, varied.
+- Data Analysis: The simulations were used to constrain under which circumstances abrupt, system-wide ecosystem collapse could be expected and to assess whether a collapse could be predicted from real-world observations. I analyzed whether CSD could be detected in a spatially explicit model with local interactions.
 
-More details can be found in the [thesis report](https://github.com/carlivas/Master-Project/blob/main/Tipping%20points%20and%20early%20warning%20signals%20in%20complex%20ecosystem%20models_Carl%20Ivarsen%20Askehave.pdf).
+## 🔬 Results
+The individual-based models were found to exhibit tipping dynamics, including multistability and a form of bifurcation. Localized feedback was found to decrease the window of multistability. While CSD was not explicitly modeled, the main idea of predicting tipping points through a loss of resilience seems to be preserved. However, measuring this loss of resilience via a decrease in variance was found to be ineffective.
